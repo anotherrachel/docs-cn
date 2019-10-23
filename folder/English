@@ -1,204 +1,77 @@
 ---
-title: 系统变量
+title: 执行计划绑定
 category: reference
-aliases:
-  - '/docs-cn/sql/variable/'
 ---
 
-# 系统变量
+# 执行计划绑定
 
-MySQL 系统变量 (System Variables) 是一些系统参数，用于调整数据库运行时的行为，根据变量的作用范围分为全局范围有效（Global Scope）以及会话级别有效（Session Scope）。TiDB 支持 MySQL5.7 的所有系统变量，大部分变量仅仅是为了兼容性而支持，不会影响运行时行为。
+在[优化器 Hints](/v3.0/reference/performance/optimizer-hints.md) 中介绍了可以通过 Hint 的方式选择指定的执行计划，但有的时候需要在不修改 SQL 语句的情况下干预执行计划的选择。执行计划绑定提供了一系列功能使得可以在不修改 SQL 语句的情况下选择指定的执行计划。
 
-## 设置系统变量
+## 语法
 
-通过 [`SET` 语句](/v3.0/reference/sql/statements/set-variable.md) 可以修改系统变量的值。进行修改时，还要考虑变量可修改的范围，不是所有的变量都能在全局/会话范围内进行修改。具体的可修改范围参考 [MySQL 动态变量文档](https://dev.mysql.com/doc/refman/5.7/en/dynamic-system-variables.html)。
+### 创建绑定
 
-### 全局范围值
+{{< copyable "sql" >}}
 
-* 在变量名前加 `GLOBAL` 关键词或者是使用 `@@global.` 作为修饰符:
+```sql
+CREATE [GLOBAL | SESSION] BINDING FOR SelectStmt USING SelectStmt;
+```
 
-    {{< copyable "sql" >}}
+该语句可以在 GLOBAL 或者 SESSION 作用域内为 SQL 绑定执行计划。在不指定作用域时，隐式作用域为 SESSION。被绑定的 SQL 会被参数化后存储到系统表中。在处理 SQL 查询时，只要参数化后的 SQL 和系统表中某个被绑定的 SQL 一致即可使用相应的优化器 Hint。
 
-    ```sql
-    SET GLOBAL autocommit = 1;
-    ```
+`参数化`：把 SQL 中的常量变成变量参数，并对 SQL 中的空格和换行符等做标准化处理。例如：
 
-    {{< copyable "sql" >}}
+```sql
+select * from t where a >    1
+-- 参数化后：
+select * from t where a > ？
+```
 
-    ```sql
-    SET @@global.autocommit = 1;
-    ```
+需要注意的是原始 SQL 和绑定 SQL 在参数化以及去掉 Hint 后文本必须相同，否则创建会失败，例如：
 
-### 会话范围值
+{{< copyable "sql" >}}
 
-* 在变量名前加 `SESSION` 关键词或者是使用 `@@session.` 作为修饰符，或者是不加任何修饰符:
+```sql
+CREATE BINDING FOR SELECT * FROM t WHERE a > 1 USING SELECT * FROM t use index(idx) WHERE a > 2;
+```
 
-    {{< copyable "sql" >}}
+可以创建成功，因为原始 SQL 和绑定 SQL 在参数化以及去掉 Hint 后文本都是 `select * from t where a > ?`，而
 
-    ```sql
-    SET SESSION autocommit = 1;
-    ```
+{{< copyable "sql" >}}
 
-    {{< copyable "sql" >}}
+```sql
+CREATE BINDING FOR SELECT * FROM t WHERE a > 1 USING SELECT * FROM t use index(idx) WHERE b > 2;
+```
 
-    ```sql
-    SET @@session.autocommit = 1;
-    ```
+则不可以创建成功，因为原始 SQL 在经过处理后是 `select * from t where a > ?`，而绑定 SQL 在经过处理后是 `select * from t where b > ?`。
 
-    {{< copyable "sql" >}}
+### 删除绑定
 
-    ```sql
-    SET @@autocommit = 1;
-    ```
+{{< copyable "sql" >}}
 
-* `LOCAL` 以及 `@@local.` 是 `SESSION` 以及 `@@session.` 的同义词
+```sql
+DROP [GLOBAL | SESSION] BINDING FOR SelectStmt;
+```
 
-### 系统变量的作用机制
+该语句可以在 GLOBAL 或者 SESSION 作用域内删除指定的执行计划绑定，在不指定作用域时默认作用域为 SESSION。
 
-* 会话范围的系统变量仅仅会在创建会话时才会根据全局范围系统变量初始化自己的值。更改全局范围的系统变量不会改变已经创建的会话正在使用的系统变量的值。
+### 查看绑定
 
-    {{< copyable "sql" >}}
+{{< copyable "sql" >}}
 
-    ```sql
-    SELECT @@GLOBAL.autocommit;
-    ```
+```sql
+SHOW [GLOBAL | SESSION] BINDINGS [ShowLikeOrWhere];
+```
 
-    ```
-    +---------------------+
-    | @@GLOBAL.autocommit |
-    +---------------------+
-    | ON                  |
-    +---------------------+
-    1 row in set (0.00 sec)
-    ```
+该语句会输出 GLOBAL 或者 SESSION 作用域内的执行计划绑定，在不指定作用域时默认作用域为 SESSION。目前 `SHOW BINDINGS` 会输出 8 列，具体如下：
 
-
-    {{< copyable "sql" >}}
-
-    ```sql
-    SELECT @@SESSION.autocommit;
-    ```
-
-    ```
-    +----------------------+
-    | @@SESSION.autocommit |
-    +----------------------+
-    | ON                   |
-    +----------------------+
-    1 row in set (0.00 sec)
-    ```
-
-
-    {{< copyable "sql" >}}
-
-    ```sql
-    SET GLOBAL autocommit = OFF;
-    ```
-
-    ```
-    Query OK, 0 rows affected (0.01 sec)
-    ```
-
-
-    会话范围的系统变量不会改变，会话中执行的事务依旧是以自动提交的形式来进行：
-    
-    {{< copyable "sql" >}}
-
-    ```sql
-    SELECT @@SESSION.autocommit;
-    ```
-
-    ```
-    +----------------------+
-    | @@SESSION.autocommit |
-    +----------------------+
-    | ON                   |
-    +----------------------+
-    1 row in set (0.00 sec)
-    ```
-
-
-    {{< copyable "sql" >}}
-
-    ```sql
-    SELECT @@GLOBAL.autocommit;
-    ```
-
-    ```
-    +---------------------+
-    | @@GLOBAL.autocommit |
-    +---------------------+
-    | OFF                 |
-    +---------------------+
-    1 row in set (0.00 sec)
-    ```
-
-
-    {{< copyable "sql" >}}
-
-    ```sql
-    exit
-    ```
-
-    ```
-    Bye
-    ```
-
-
-    {{< copyable "shell-regular" >}}
-
-    ```shell
-    mysql -h 127.0.0.1 -P 4000 -u root -D test
-    ```
-
-    ```
-    Welcome to the MySQL monitor.  Commands end with ; or \g.
-    Your MySQL connection id is 3
-    Server version: 5.7.25-TiDB-None MySQL Community Server (Apache License 2.0)
-
-    Copyright (c) 2000, 2019, Oracle and/or its affiliates. All rights reserved.
-
-    Oracle is a registered trademark of Oracle Corporation and/or its
-    affiliates. Other names may be trademarks of their respective
-    owners.
-
-    Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
-
-    mysql>
-    ```
-
-
-    新建的会话会使用新的全局变量：
-
-    ```sql
-    SELECT @@SESSION.autocommit;
-    ```
-
-    ```
-    +----------------------+
-    | @@SESSION.autocommit |
-    +----------------------+
-    | OFF                  |
-    +----------------------+
-    1 row in set (0.00 sec)
-    ```
-
-## TiDB 支持的 MySQL 系统变量
-
-下列系统变量是 TiDB 真正支持并且行为和 MySQL 一致：
-
-| 变量名                      | 作用域       | 说明                             |
-| ------------------------ | --------- | ------------------------------ |
-| autocommit               | GLOBAL \ | SESSION | 是否自动 Commit 事务       |
-| sql_mode                 | GLOBAL \ | SESSION | 支持部分 MySQL SQL mode， |
-| time_zone                | GLOBAL \ | SESSION | 数据库所使用的时区            |
-| tx_isolation             | GLOBAL \ | SESSION | 事务隔离级别               |
-| max\_execution\_time | GLOBAL \ | SESSION | 语句超时时间，单位为毫秒         |
-
-> **注意：**
-> 
-> `max_execution_time` 目前对所有类型的 `statement` 生效，并非只对 `SELECT` 语句生效。实际精度在 100ms 级别，而非更准确的毫秒级别。
-
-## TiDB 特有的系统变量
-
-参见 [TiDB 专用系统变量](/v3.0/reference/configuration/tidb-server/tidb-specific-variables.md)。
+| 列名           | 说明                                          |
+| ------------ | ------------------------------------------- |
+| original_sql | 参数化后的原始 SQL                                 |
+| bind_sql     | 带 Hint 的绑定 SQL                              |
+| default_db   | 默认数据库名                                      |
+| status       | 状态，包括 using（正在使用）、deleted（已删除）和 invalid（无效） |
+| create_time  | 创建时间                                        |
+| update_time  | 更新时间                                        |
+| charset      | 字符集                                         |
+| collation    | 排序规则                                        |
