@@ -1,1103 +1,158 @@
 ---
-title: PD Control 使用说明
+title: Mydumper 使用文档
+summary: 使用 Mydumper 从 TiDB 导出数据。
 category: reference
 ---
 
-# PD Control 使用说明
+# Mydumper 使用文档
 
-PD Control 是 PD 的命令行工具，用于获取集群状态信息和调整集群。
+## Mydumper 简介
 
-## 源码编译
+[Mydumper](https://github.com/pingcap/mydumper) 是一个 fork 项目，针对 TiDB 的特性进行了优化，推荐使用此工具对 TiDB 进行逻辑备份。
 
-1. [Go](https://golang.org/) Version 1.9 以上
-2. 在 PD 项目根目录使用 `make` 命令进行编译，生成 bin/pd-ctl
+Mydumper 包含在 tidb-enterprise-tools 安装包中，可[在此下载](/dev/reference/tools/download.md)。
 
-## 简单例子
+### 相比于普通的 Mydumper，此工具有哪些改进之处？
 
-单命令模式：
++ 对于 TiDB 可以设置 [tidb_snapshot](/dev/how-to/get-started/read-historical-data.md#操作流程) 的值指定备份数据的时间点，从而保证备份的一致性，而不是通过 `FLUSH TABLES WITH READ LOCK` 来保证备份一致性。
 
-{{< copyable "shell-regular" >}}
++ 使用 TiDB 的隐藏列 `_tidb_rowid` 优化了单表内数据的并发导出性能。
 
-```bash
-./pd-ctl store -u http://127.0.0.1:2379
-```
+## Mydumper 使用
 
-交互模式：
-
-{{< copyable "shell-regular" >}}
+### 新添参数
 
 ```bash
-./pd-ctl -i -u http://127.0.0.1:2379
+  -z, --tidb-snapshot: 设置 tidb_snapshot 用于备份
+                       默认值：当前 TSO（SHOW MASTER STATUS 输出的 Position 字段)
+                       此参数可设为 TSO 或有效的 datetime 时间，例如：-z "2016-10-08 16:45:26"
 ```
 
-使用环境变量：
+### 需要的权限
 
-{{< copyable "shell-regular" >}}
+- SELECT
+- RELOAD
+- LOCK TABLES
+- REPLICATION CLIENT
 
-```bash
-export PD_ADDR=http://127.0.0.1:2379 &&
-./pd-ctl
-```
+### 使用举例
 
-使用 TLS 加密：
+命令行参数：
 
 {{< copyable "shell-regular" >}}
 
 ```bash
-./pd-ctl -u https://127.0.0.1:2379 --cacert="path/to/ca" --cert="path/to/cert" --key="path/to/key"
+./bin/mydumper -h 127.0.0.1 -u root -P 4000
 ```
 
-## 命令行参数(flags)
+## FAQ
 
-### \-\-pd,-u
+### 如何判断使用的 Mydumper 是否为 PingCAP 优化的版本？
 
-+ 指定 PD 的地址
-+ 默认地址: `http://127.0.0.1:2379`
-+ 环境变量: PD_ADDR
+运行命令：
 
-### \-\-detach,-d
+{{< copyable "shell-regular" >}}
 
-+ 使用单命令行模式(不进入 readline)
-+ 默认值: true
-
-### --cacert
-
-- 指定 PEM 格式的受信任 CA 的证书文件路径
-- 默认值: ""
-
-### --cert
-
-- 指定 PEM 格式的 SSL 证书文件路径
-- 默认值: ""
-
-### --key
-
-- 指定 PEM 格式的 SSL 证书密钥文件路径，即 `--cert` 所指定的证书的私钥
-- 默认值: ""
-
-### --version,-V
-
-- 打印版本信息并退出
-- 默认值: false
-
-## 命令(command)
-
-### cluster
-
-用于显示集群基本信息。
-
-示例：
-
-{{< copyable "" >}}
-
-```bash
->> cluster
-```
-
-```
-{
-  "id": 6493707687106161130,
-  "max_peer_count": 3
-}
-```
-
-### config [show | set \<option> \<value>]
-
-用于显示或调整配置信息。示例如下。
-
-显示 scheduler 的相关 config 信息：
-
-{{< copyable "" >}}
-
-```bash
->> config show
-```
-
-```
-{
-  "max-snapshot-count": 3,
-  "max-pending-peer-count": 16,
-  "max-merge-region-size": 50,
-  "max-merge-region-keys": 200000,
-  "split-merge-interval": "1h",
-  "patrol-region-interval": "100ms",
-  "max-store-down-time": "1h0m0s",
-  "leader-schedule-limit": 4,
-  "region-schedule-limit": 4,
-  "replica-schedule-limit":8,
-  "merge-schedule-limit": 8,
-  "tolerant-size-ratio": 5,
-  "low-space-ratio": 0.8,
-  "high-space-ratio": 0.6,
-  "disable-raft-learner": "false",
-  "disable-remove-down-replica": "false",
-  "disable-replace-offline-replica": "false",
-  "disable-make-up-replica": "false",
-  "disable-remove-extra-replica": "false",
-  "disable-location-replacement": "false",
-  "disable-namespace-relocation": "false",
-  "schedulers-v2": [
-    {
-      "type": "balance-region",
-      "args": null
-    },
-    {
-      "type": "balance-leader",
-      "args": null
-    },
-    {
-      "type": "hot-region",
-      "args": null
-    }
-  ]
-}
-```
-
-显示所有的 config 信息：
-
-{{< copyable "" >}}
-
-```bash
->> config show all
-```
-
-显示名为 ts1 的 namespace 的相关 config 信息：
-
-{{< copyable "" >}}
-
-```bash
->> config show namespace ts1
-```
-
-```
-{
-  "leader-schedule-limit": 4,
-  "region-schedule-limit": 4,
-  "replica-schedule-limit": 8,
-  "max-replicas": 3,
-}
-```
-
-显示 replication 的相关 config 信息：
-
-{{< copyable "" >}}
-
-```bash
->> config show replication
-```
-
-```
-{
-  "max-replicas": 3,
-  "location-labels": ""
-}
-```
-
-显示目前集群版本，是目前集群 TiKV 节点的最低版本，并不对应 binary 的版本：
-
-{{< copyable "" >}}
-
-```bash
->> config show cluster-version
-```
-
-```
-"2.0.0"
-```
-
-`max-snapshot-count` 控制单个 store 最多同时接收或发送的 snapshot 数量，调度受制于这个配置来防止抢占正常业务的资源。 当需要加快补副本或 balance 速度时可以调大这个值。
-
-设置最大 snapshot 为 16：
-
-{{< copyable "" >}}
-
-```bash
->> config set max-snapshot-count 16
-```
-
-`max-pending-peer-count` 控制单个 store 的 pending peer 上限，调度受制于这个配置来防止在部分节点产生大量日志落后的 Region。需要加快补副本或 balance 速度可以适当调大这个值，设置为 0 则表示不限制。
-
-设置最大 pending peer 数量为 64：
-
-{{< copyable "" >}}
-
-```bash
->> config set max-pending-peer-count 64
-```
-
-`max-merge-region-size` 控制 Region Merge 的 size 上限（单位是 M）。当 Region Size 大于指定值时 PD 不会将其与相邻的 Region 合并。设置为 0 表示不开启 Region Merge 功能。
-
-设置 Region Merge 的 size 上限为 16 M：
-
-{{< copyable "" >}}
-
-```bash
->> config set max-merge-region-size 16
-```
-
-`max-merge-region-keys` 控制 Region Merge 的 keyCount 上限。当 Region KeyCount 大于指定值时 PD 不会将其与相邻的 Region 合并。
-
-设置 Region Merge 的 keyCount 上限为 50000：
-
-{{< copyable "" >}}
-
-```bash
->> config set max-merge-region-keys 50000
-```
-
-`split-merge-interval` 控制对同一个 Region 做 `split` 和 `merge` 操作的间隔，即对于新 `split` 的 Region 一段时间内不会被 `merge`。
-
-设置 `split` 和 `merge` 的间隔为 1 天：
-
-{{< copyable "" >}}
-
-```bash
->> config set split-merge-interval 24h
-```
-
-`patrol-region-interval` 控制 replicaChecker 检查 Region 健康状态的运行频率，越短则运行越快，通常状况不需要调整。
-
-设置 replicaChecker 的运行频率为 10 毫秒：
-
-{{< copyable "" >}}
-
-```bash
->> config set patrol-region-interval 10ms
-```
-
-`max-store-down-time` 为 PD 认为失联 store 无法恢复的时间，当超过指定的时间没有收到 store 的心跳后，PD 会在其他节点补充副本。
-
-设置 store 心跳丢失 30 分钟开始补副本：
-
-{{< copyable "" >}}
-
-```bash
->> config set max-store-down-time 30m
-```
-
-通过调整 `leader-schedule-limit` 可以控制同时进行 leader 调度的任务个数。 这个值主要影响 *leader balance* 的速度，值越大调度得越快，设置为 0 则关闭调度。 Leader 调度的开销较小，需要的时候可以适当调大。
-
-最多同时进行 4 个 leader 调度：
-
-{{< copyable "" >}}
-
-```bash
->> config set leader-schedule-limit 4
-```
-
-通过调整 `region-schedule-limit` 可以控制同时进行 Region 调度的任务个数。 这个值主要影响 *Region balance* 的速度，值越大调度得越快，设置为 0 则关闭调度。 Region 调度的开销较大，所以这个值不宜调得太大。
-
-最多同时进行 2 个 Region 调度：
-
-{{< copyable "" >}}
-
-```bash
->> config set region-schedule-limit 2
-```
-
-通过调整 `replica-schedule-limit` 可以控制同时进行 replica 调度的任务个数。 这个值主要影响节点挂掉或者下线的时候进行调度的速度，值越大调度得越快，设置为 0 则关闭调度。 Replica 调度的开销较大，所以这个值不宜调得太大。
-
-最多同时进行 4 个 replica 调度：
-
-{{< copyable "" >}}
-
-```bash
->> config set replica-schedule-limit 4
-```
-
-`merge-schedule-limit` 控制同时进行的 Region Merge 调度的任务，设置为 0 则关闭 Region Merge。 Merge 调度的开销较大，所以这个值不宜调得过大。
-
-最多同时进行 16 个 merge 调度：
-
-{{< copyable "" >}}
-
-```bash
->> config set merge-schedule-limit 16
-```
-
-以上对配置的修改是全局性的，还可以通过对不同 namespace 的配置，进行细化调整。当 namespace 未设置相应配置时，使用全局配置。注：namespace 的配置只支持对 leader-schedule-limit，region-schedule-limit，replica-schedule-limit，max-replicas 的调整，否则不生效。
-
-设置名为 ts1 的 namespace 最多同时进行 4 个 leader 调度：
-
-{{< copyable "" >}}
-
-```bash
->> config set namespace ts1 leader-schedule-limit 4
-```
-
-设置名为 ts2 的 namespace 最多同时进行 2 个 Region 调度：
-
-{{< copyable "" >}}
-
-```bash
->> config set namespace ts2 region-schedule-limit 2
-```
-
-`tolerant-size-ratio` 控制 balance 缓冲区大小。 当两个 store 的 leader 或 Region 的得分差距小于指定倍数的 Region size 时，PD 会认为此时 balance 达到均衡状态。
-
-设置缓冲区为约 20 倍平均 RegionSize：
-
-{{< copyable "" >}}
-
-```bash
->> config set tolerant-size-ratio 20
-```
-
-`low-space-ratio` 用于设置 store 空间不足的阈值。 当节点的空间占用比例超过指定值时，PD 会尽可能避免往对应节点迁移数据，同时主要针对剩余空间大小进行调度，避免对应节点磁盘空间被耗尽。
-
-设置空间不足阈值为 0.9：
-
-{{< copyable "" >}}
-
-```bash
-config set low-space-ratio 0.9
-```
-
-`high-space-ratio` 用于设置 store 空间充裕的阈值。 当节点的空间占用比例小于指定值时，PD 调度时会忽略剩余空间这个指标，主要针对实际数据量进行均衡。
-
-设置空间充裕阈值为 0.5：
-
-{{< copyable "" >}}
-
-```bash
-config set high-space-ratio 0.5
-```
-
-`disable-raft-learner` 用于关闭 raft learner 功能。 默认配置下 PD 在添加副本时会使用 raft learner 来降低宕机或网络故障带来的不可用风险。
-
-关闭 raft learner 功能：
-
-{{< copyable "" >}}
-
-```bash
-config set disable-raft-learner true
-```
-
-`cluster-version` 集群的版本，用于控制某些 Feature 是否开启，处理兼容性问题。 通常是集群正常运行的所有 TiKV 节点中的最低版本，需要回滚到更低的版本时才进行手动设置。
-
-设置 cluster version 为 1.0.8：
-
-{{< copyable "" >}}
-
-```bash
-config set cluster-version 1.0.8
-```
-
-`disable-remove-down-replica` 用于关闭自动删除 DownReplica 的特性。 当设置为 true 时，PD 不会自动清理宕机状态的副本。
-
-`disable-replace-offline-replica` 用于关闭迁移 OfflineReplica 的特性。 当设置为 true 时，PD 不会迁移下线状态的副本。
-
-`disable-make-up-replica` 用于关闭补充副本的特性。 当设置为 true 时，PD 不会为副本数不足的 Region 补充副本。
-
-`disable-remove-extra-replica` 用于关闭删除多余副本的特性。 当设置为 true 时，PD 不会为副本数过多的 Region 删除多余副本。
-
-`disable-location-replacement` 用于关闭隔离级别检查。 当设置为 true 时，PD 不会通过调度来提升 Region 副本的隔离级别。
-
-`disable-namespace-relocation` 用于关闭 Region 的 namespace 调度。当设置为 true 时，PD 不会把 Region 调度到它所属的 Store 上。
-
-### config delete namespace \<name> [\<option>]
-
-用于删除 namespace 的配置信息。
-
-示例：
-
-在对 namespace 相关配置进行设置后，若想让该 namespace 继续使用全局配置，可删除该 namespace 的配置信息，之后便使用全局配置。
-
-删除名为 ts1 的 namespace 的相关配置：
-
-{{< copyable "" >}}
-
-```bash
->> config delete namespace ts1
-```
-
-若只想让 namespace 中的某项配置使用全局配置而不影响其他配置，则可使用如下命令：
-
-删除名为 ts2 的 namespace 的 region-schedule-limit 配置：
-
-{{< copyable "" >}}
-
-```bash
->> config delete namespace region-schedule-limit ts2
-```
-
-### health
-
-用于显示集群健康信息。示例如下。
-
-显示健康信息：
-
-{{< copyable "" >}}
-
-```bash
->> health
-```
-
-```
-[
-  {
-    "name": "pd",
-    "member_id": 13195394291058371180,
-    "client_urls": [
-      "http://127.0.0.1:2379"
-      ......
-    ],
-    "health": true
-  }
-  ......
-]
-```
-
-### hot [read | write | store]
-
-用于显示集群热点信息。示例如下。
-
-显示读热点信息：
-
-{{< copyable "" >}}
-
-```bash
->> hot read
-```
-
-显示写热点信息：
-
-{{< copyable "" >}}
-
-```bash
->> hot write
-```
-
-显示所有 store 的读写信息：
-
-{{< copyable "" >}}
-
-```bash
->> hot store
-```
-
-### label [store \<name> \<value>]
-
-用于显示集群标签信息。示例如下。
-
-显示所有 label：
-
-{{< copyable "" >}}
-
-```bash
->> label
-```
-
-显示所有包含 label 为 "zone":"cn" 的 store：
-
-{{< copyable "" >}}
-
-```bash
->> label store zone cn
-```
-
-### member [delete | leader_priority | leader [show | resign | transfer <member_name>]]
-
-用于显示 PD 成员信息，删除指定成员，设置成员的 leader 优先级。示例如下。
-
-显示所有成员的信息：
-
-{{< copyable "" >}}
-
-```bash
->> member
-```
-
-```
-{
-  "members": [......],
-  "leader": {......},
-  "etcd_leader": {......},
-}
-```
-
-下线 "pd2"：
-
-{{< copyable "" >}}
-
-```bash
->> member delete name pd2
-```
-
-```
-Success!
-```
-
-使用 id 下线节点：
-
-{{< copyable "" >}}
-
-```bash
->> member delete id 1319539429105371180
-```
-
-```
-Success!
-```
-
-显示 leader 的信息：
-
-{{< copyable "" >}}
-
-```bash
->> member leader show
-```
-
-```
-{
-  "name": "pd",
-  "addr": "http://192.168.199.229:2379",
-  "id": 9724873857558226554
-}
-```
-
-将 leader 从当前成员移走：
-
-{{< copyable "" >}}
-
-```bash
->> member leader resign
-```
-
-```
-......
-```
-
-将 leader 迁移至指定成员：
-
-{{< copyable "" >}}
-
-```bash
->> member leader transfer pd3
-```
-
-```
-......
-```
-
-### operator [show | add | remove]
-
-用于显示和控制调度操作，或者对 Region 进行分裂或合并。
-
-示例：
-
-{{< copyable "" >}}
-
-```bash
->> operator show                                        // 显示所有的 operators
->> operator show admin                                  // 显示所有的 admin operators
->> operator show leader                                 // 显示所有的 leader operators
->> operator show region                                 // 显示所有的 Region operators
->> operator add add-peer 1 2                            // 在 store 2 上新增 Region 1 的一个副本
->> operator add remove-peer 1 2                         // 移除 store 2 上的 Region 1 的一个副本
->> operator add transfer-leader 1 2                     // 把 Region 1 的 leader 调度到 store 2
->> operator add transfer-region 1 2 3 4                 // 把 Region 1 调度到 store 2,3,4
->> operator add transfer-peer 1 2 3                     // 把 Region 1 在 store 2 上的副本调度到 store 3
->> operator add merge-region 1 2                        // 将 Region 1 与 Region 2 合并
->> operator add split-region 1 --policy=approximate     // 将 Region 1 对半拆分成两个 Region，基于粗略估计值
->> operator add split-region 1 --policy=scan            // 将 Region 1 对半拆分成两个 Region，基于精确扫描值
->> operator remove 1                                    // 把 Region 1 的调度操作删掉
-```
-
-其中，Region 的分裂都是尽可能地从靠近中间的位置开始。对这个位置的选择支持两种策略，即 scan 和 approximate。它们之间的区别是，前者通过扫描这个 Region 的方式来确定中间的 key，而后者是通过查看 SST 文件中记录的统计信息，来得到近似的位置。一般来说，前者更加精确，而后者消耗更少的 I/O，可以更快地完成。
-
-### ping
-
-用于显示`ping` PD 所需要花费的时间
-
-示例：
-
-{{< copyable "" >}}
-
-```bash
->> ping
-```
-
-```
-time: 43.12698ms
-```
-
-### region <region_id> [--jq="\<query string>"]
-
-用于显示 Region 信息。使用 jq 格式化输出请参考 [jq-格式化-json-输出示例](#jq-格式化-json-输出示例)。示例如下。
-
-显示所有 Region 信息：
-
-{{< copyable "" >}}
-
-```bash
->> region
-```
-
-```
-{
-  "count": 1,
-  "regions": [......]
-}
-```
-
-显示 Region id 为 2 的信息：
-
-{{< copyable "" >}}
-
-```bash
->> region 2
-```
-
-```
-{
-  "region": {
-      "id": 2,
-      ......
-  }
-  "leader": {
-      ......
-  }
-}
-```
-
-### region key [--format=raw|encode] \<key>
-
-用于查询某个 key 在哪个 Region 上，支持 raw 和 encoding 格式。使用 encoding 格式时，key 需要使用单引号。
-
-Raw 格式（默认）示例：
-
-{{< copyable "" >}}
-
-```bash
->> region key abc
-```
-
-```
-{
-  "region": {
-    "id": 2,
-    ......
-  }
-}
-```
-
-Encoding 格式示例：
-
-{{< copyable "" >}}
-
-```bash
->> region key --format=encode 't\200\000\000\000\000\000\000\377\035_r\200\000\000\000\000\377\017U\320\000\000\000\000\000\372'
-```
-
-```
-{
-  "region": {
-    "id": 2,
-    ......
-  }
-}
-```
-
-### region sibling <region_id>
-
-用于查询某个 Region 相邻的 Region。
-
-示例：
-
-{{< copyable "" >}}
-
-```bash
->> region sibling 2
-```
-
-```
-{
-  "count": 2,
-  "regions": [......],
-}
-```
-
-### `region store <store_id>`
-
-用于查询某个 store 上面所有的 Region。
-
-示例：
-
-{{< copyable "" >}}
-
-```bash
->> region store 2
-```
-
-```
-{
-  "count": 10,
-  "regions": [......],
-}
-```
-
-### `region topread [limit]`
-
-用于查询读流量最大的 Region。limit 的默认值是 16。
-
-示例：
-
-{{< copyable "" >}}
-
-```bash
->> region topread
-```
-
-```
-{
-  "count": 16,
-  "regions": [......],
-}
-```
-
-### `region topwrite [limit]`
-
-用于查询写流量最大的 Region。limit 的默认值是 16。
-
-示例：
-
-{{< copyable "" >}}
-
-```bash
->> region topwrite
-```
-
-```
-{
-  "count": 16,
-  "regions": [......],
-}
-```
-
-### `region topconfver [limit]`
-
-用于查询 conf version 最大的 Region。limit 的默认值是 16。
-
-示例：
-
-{{< copyable "" >}}
-
-```bash
->> region topconfver
-```
-
-```
-{
-  "count": 16,
-  "regions": [......],
-}
-```
-
-### `region topversion [limit]`
-
-用于查询 version 最大的 Region。limit 的默认值是 16。
-
-示例：
-
-{{< copyable "" >}}
-
-```bash
->> region topversion
-```
-
-```
-{
-  "count": 16,
-  "regions": [......],
-}
-```
-
-### `region topsize [limit]`
-
-用于查询 approximate size 最大的 Region。limit 的默认值是 16。
-
-示例：
-
-{{< copyable "" >}}
-
-```bash
->> region topsize
-```
-
-```
-{
-    "count": 16,
-    "regions": [......],
-}
-```
-
-### region check [miss-peer | extra-peer | down-peer | pending-peer | incorrect-ns]
-
-用于查询处于异常状态的 Region，各类型的意义如下
-
-- miss-peer：缺副本的 Region
-- extra-peer：多副本的 Region
-- down-peer：有副本状态为 Down 的 Region
-- pending-peer：有副本状态为 Pending 的 Region
-- incorrect-ns：有副本不符合 namespace 约束的 Region
-
-示例：
-
-{{< copyable "" >}}
-
-```bash
->> region check miss-peer
-```
-
-```
-{
-  "count": 2,
-  "regions": [......],
-}
-```
-
-### scheduler [show | add | remove]
-
-用于显示和控制调度策略。
-
-示例：
-
-{{< copyable "" >}}
-
-```bash
->> scheduler show                             // 显示所有的 schedulers
->> scheduler add grant-leader-scheduler 1     // 把 store 1 上的所有 Region 的 leader 调度到 store 1
->> scheduler add evict-leader-scheduler 1     // 把 store 1 上的所有 Region 的 leader 从 store 1 调度出去
->> scheduler add shuffle-leader-scheduler     // 随机交换不同 store 上的 leader
->> scheduler add shuffle-region-scheduler     // 随机调度不同 store 上的 Region
->> scheduler remove grant-leader-scheduler-1  // 把对应的 scheduler 删掉
-```
-
-### store [delete | label | weight] <store_id>  [--jq="\<query string>"]
-
-用于显示 store 信息或者删除指定 store。使用 jq 格式化输出请参考 [jq-格式化-json-输出示例](#jq-格式化-json-输出示例)。示例如下。
-
-显示所有 store 信息：
-
-{{< copyable "" >}}
-
-```bash
->> store
-```
-
-```
-{
-  "count": 3,
-  "stores": [...]
-}
-```
-
-获取 store id 为 1 的 store：
-
-{{< copyable "" >}}
-
-```bash
->> store 1
-```
-
-```
-  ......
-```
-
-下线 store id 为 1 的 store：
-
-{{< copyable "" >}}
-
 ```bash
->> store delete 1
-```
-
+./bin/mydumper -V
 ```
-  ......
-```
-
-设置 store id 为 1 的 store 的键为 "zone" 的 label 的值为 "cn"：
 
-{{< copyable "" >}}
+输出如下：
 
-```bash
->> store label 1 zone cn
 ```
-
-设置 store id 为 1 的 store 的 leader weight 为 5，Region weight 为 10：
-
-{{< copyable "" >}}
-
-```bash
->> store weight 1 5 10
+mydumper 0.9.5 (d3e6fec8b069daee772d0dbaa47579f67a5947e7), built against MySQL 5.7.24
 ```
-
-### table_ns [create | add | remove | set_store | rm_store | set_meta | rm_meta]
 
-用于显示 table 的 namespace 的相关信息
+包含 githash（示例输出中的 `d3e6fec8b069daee772d0dbaa47579f67a5947e7`）内容的即为 PingCAP 优化的版本。
 
-示例：
+### 使用 Loader 恢复 Mydumper 备份出来的数据时报错 "invalid mydumper files for there are no `-schema-create.sql` files found"，应该如何解决？
 
-{{< copyable "" >}}
+检查使用 Mydumper 备份数据时是否使用了 `-T` 或者 `--tables-list` 配置，如果使用了这些配置 Mydumper 就不会生成包含建库 SQL 的文件。解决方法：在 Mydumper 备份数据目录下创建文件 `{schema-name}-schema-create.sql`，在文件中写入 "CREATE DATABASE `{schema-name}`"，再运行 Loader 即可。
 
-```bash
->> table_ns add ts1 1            // 将 table id 为 1 的 table 添加到名为 ts1 的 namespace
->> table_ns create ts1           // 添加名为 ts1 的 namespace
->> table_ns remove ts1 1         // 将 table id 为 1 的 table 从名为 ts1 的 namespace 中移除
->> table_ns rm_meta ts1          // 将 meta 信息从名为 ts1 的 namespace 中移除
->> table_ns rm_store 1 ts1       // 将 store id 为 1 的 table 从名为 ts1 的 namespace 中移除
->> table_ns set_meta ts1         // 将 meta 信息添加到名为 ts1 的 namespace
->> table_ns set_store 1 ts1      // 将 store id 为 1 的 table 添加到名为 ts1 的 namespace
-```
+### 为什么使用 Mydumper 导出来的时间类型的数据和数据库中的数据不一致？
 
-### tso
+检查一下运行 Mydumper 的服务器的时区与数据库的时区是否一致，Mydumper 会根据运行所在服务器的时区对时间类型数据进行转化，可以给 Mydumper 加上 `--skip-tz-utc` 参数忽略这种转化。
 
-用于解析 TSO 到物理时间和逻辑时间。示例如下。
+### 如何配置 Mydumper 的参数 `-F, --chunk-filesize`?
 
-解析 TSO：
+Mydumper 在备份时会根据这个参数的值把每个表的数据划分成多个 `chunk`，每个 `chunk` 保存到一个文件中，大小约为 `chunk-filesize`。根据这个参数把数据切分到多个文件中，这样就可以利用 Loader/TiDB-Lightning 的并行处理逻辑提高导入速度。 如果后续使用 Loader 对备份文件进行恢复，建议把该参数的值设置为 64（单位 MB）；如果使用 TiDB-Lightning 恢复，则建议设置为 256（单位 MB）。
 
-{{< copyable "" >}}
+### 如何配置 Mydumper 的参数 `-s --statement-size`?
 
-```bash
->> tso 395181938313123110
-```
+Mydumper 使用该参数控制 `Insert Statement` 的大小，默认值为 1M 左右。使用该参数来尽量避免在恢复数据时报以下错误：
 
+```log
+packet for query is too large. Try adjusting the 'max_allowed_packet' variable
 ```
-system:  2017-10-09 05:50:59 +0800 CST
-logic:  120102
-```
-
-## jq 格式化 json 输出示例
-
-### 简化 `store` 的输出
-
-{{< copyable "" >}}
 
-```bash
-» store --jq=".stores[].store | { id, address, state_name}"
-```
+默认值在绝大部分情况下都可以满足需求，但是**如果表为宽表，单行数据的大小可能超过 statement-size 的限制，Mydumper 会报如下的 WARN**：
 
+```log
+Row bigger than statement_size for xxx
 ```
-{"id":1,"address":"127.0.0.1:20161","state_name":"Up"}
-{"id":30,"address":"127.0.0.1:20162","state_name":"Up"}
-...
-```
-
-### 查询节点剩余空间
 
-{{< copyable "" >}}
+这种情况下恢复数据时仍然会报 `packet for query is too large` 的错误日志，这个时候需要修改以下两个配置（以设置为 128M 为例）：
 
-```bash
-» store --jq=".stores[] | {id: .store.id, available: .status.available}"
-```
-
-```
-{"id":1,"available":"10 GiB"}
-{"id":30,"available":"10 GiB"}
-...
-```
+* 在 TiDB Server 执行 `set @@global.max_allowed_packet=134217728`（`134217728 = 128M`）
+* 根据实际情况为 Loader 的配置文件或者 DM task 配置文件中的 db 配置增加类似 `max-allowed-packet=128M`，然后重启进程或者任务
 
-### 查询 Region 副本的分布情况
+### 如何设置 Mydumper 的参数 `-l, --long-query-guard`?
 
-{{< copyable "" >}}
+把该参数设置为预估备份需要消耗的时间，如果 Mydumper 运行时间超过该参数的值，就会报错退出。推荐初次备份设置为 7200（单位秒），之后根据具体备份时间进行调整。
 
-```bash
-» region --jq=".regions[] | {id: .id, peer_stores: [.peers[].store_id]}"
-```
+### 如何设置 Mydumper 的参数 `--tidb-force-priority`?
 
-```
-{"id":2,"peer_stores":[1,30,31]}
-{"id":4,"peer_stores":[1,31,34]}
-...
-```
+仅当备份 TiDB 的数据时才可以设置该参数，值可以为 `LOW_PRIORITY`, `DELAYED` 或者 `HIGH_PRIORITY`。如果不希望数据备份对线上业务造成影响，推荐将该参数设置为 `LOW_PRIORITY`；如果备份的优先级更高，则可以设置为 `HIGH_PRIORITY`。
 
-### 根据副本数过滤 Region
+### Mydumper 备份 TiDB 数据报错 "GC life time is shorter than transaction duration" 应该怎么解决？
 
-例如副本数不为 3 的所有 Region：
+Mydumper 备份 TiDB 数据时为了保证数据的一致性使用了 TiDB 的 snapshot 特性，如果备份过程中 snapshot 对应的历史数据被 TiDB GC 处理了，则会报该错误。建议在备份前使用 MySQL 客户端查询 TiDB 集群的 GC 值并将其调整为合适的值：
 
-{{< copyable "" >}}
+{{< copyable "sql" >}}
 
-```bash
-» region --jq=".regions[] | {id: .id, peer_stores: [.peers[].store_id] | select(length != 3)}"
+```sql
+SELECT * FROM mysql.tidb WHERE VARIABLE_NAME = 'tikv_gc_life_time';
 ```
 
 ```
-{"id":12,"peer_stores":[30,32]}
-{"id":2,"peer_stores":[1,30,31,32]}
++-----------------------+------------------------------------------------------------------------------------------------+
+| VARIABLE_NAME         | VARIABLE_VALUE                                                                                 |
++-----------------------+------------------------------------------------------------------------------------------------+
+| tikv_gc_life_time     | 10m0s                                                                                          |
++-----------------------+------------------------------------------------------------------------------------------------+
+1 rows in set (0.02 sec)
 ```
-
-### 根据副本 store ID 过滤 Region
 
-例如在 store30 上有副本的所有 Region：
+{{< copyable "sql" >}}
 
-{{< copyable "" >}}
-
-```bash
-» region --jq=".regions[] | {id: .id, peer_stores: [.peers[].store_id] | select(any(.==30))}"
-```
-
+```sql
+update mysql.tidb set VARIABLE_VALUE = '720h' where VARIABLE_NAME = 'tikv_gc_life_time';
 ```
-{"id":6,"peer_stores":[1,30,31]}
-{"id":22,"peer_stores":[1,30,32]}
-...
-```
-
-还可以像这样找出在 store30 或 store31 上有副本的所有 Region：
 
-{{< copyable "" >}}
+备份完成后再将 `tikv_gc_life_time` 的值调整为原来的值：
 
-```bash
-» region --jq=".regions[] | {id: .id, peer_stores: [.peers[].store_id] | select(any(.==(30,31)))}"
-```
+{{< copyable "sql" >}}
 
+```sql
+update mysql.tidb set VARIABLE_VALUE = '10m0s' where VARIABLE_NAME = 'tikv_gc_life_time';
 ```
-{"id":16,"peer_stores":[1,30,34]}
-{"id":28,"peer_stores":[1,30,32]}
-{"id":12,"peer_stores":[30,32]}
-...
-```
-
-### 恢复数据时寻找相关 Region
-
-例如当 [store1, store30, store31] 宕机时不可用时，我们可以通过查找所有 Down 副本数量大于正常副本数量的所有 Region：
-
-{{< copyable "" >}}
 
-```bash
-» region --jq=".regions[] | {id: .id, peer_stores: [.peers[].store_id] | select(length as $total | map(if .==(1,30,31) then . else empty end) | length>=$total-length) }"
-```
+### Mydumper 的参数 `--tidb-rowid` 是否需要配置？
 
-```
-{"id":2,"peer_stores":[1,30,31,32]}
-{"id":12,"peer_stores":[30,32]}
-{"id":14,"peer_stores":[1,30,32]}
-...
-```
+如果设置该参数为 true 则导出的数据中会包含 TiDB 的隐藏列的数据，在恢复到 TiDB 的时候使用隐藏列会有数据不一致的风险，目前不推荐使用该参数。
 
-或者在 [store1, store30, store31] 无法启动时，找出 store1 上可以安全手动移除数据的 Region。我们可以这样过滤出所有在 store1 上有副本并且没有其他 DownPeer 的 Region：
+### Mydumper 报错 "Segmentation fault" 怎么解决？
 
-{{< copyable "" >}}
+是 Mydumper 的 bug 导致的，已经修复，可以尝试使用最新版本。
 
-```bash
-» region --jq=".regions[] | {id: .id, peer_stores: [.peers[].store_id] | select(length>1 and any(.==1) and all(.!=(30,31)))}"
-```
+### Mydumper 报错 "Error dumping table ({schema}.{table}) data: line ...... (total length ...)" 怎么解决？
 
-```
-{"id":24,"peer_stores":[1,32,33]}
-```
+Mydumper 解析 SQL 时报错，可以尝试使用最新版本。如果仍然报错，可以提 issue 到 [mydumper/issues](https://github.com/pingcap/mydumper/issues)。
 
-在 [store30, store31] 宕机时，找出能安全地通过创建 `remove-peer` Operator 进行处理的所有 Region，即有且仅有一个 DownPeer 的 Region：
+### Mydumper 报错 "Failed to set tidb_snapshot: parsing time \"20190901-10:15:00 +0800\" as 20190901-10:15:00 +0700 MST\": cannot parse \"\" as \"MST\"" 如何解决？
 
-{{< copyable "" >}}
+检查 TiDB 的版本是否低于 v2.1.11，如果是的话需要升级 TiDB 到 v2.1.11 或以上版本。
 
-```bash
-» region --jq=".regions[] | {id: .id, remove_peer: [.peers[].store_id] | select(length>1) | map(if .==(30,31) then . else empty end) | select(length==1)}"
-```
+### 未来是否计划让 PingCAP 对 Mydumper 的改动合并到上游？
 
-```
-{"id":12,"remove_peer":[30]}
-{"id":4,"remove_peer":[31]}
-{"id":22,"remove_peer":[30]}
-...
-```
+是的，PingCAP 团队计划将对 Mydumper 的改动合并到上游。参见 [PR #155](https://github.com/maxbube/mydumper/pull/155)。
