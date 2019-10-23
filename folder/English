@@ -1,318 +1,451 @@
 ---
-title: 参数解释
+title: TiDB Binary 部署方案详解
 category: deployment
 ---
 
-# 参数解释
+# TiDB Binary 部署指导
+
+## 概述
+
+一个完整的 TiDB 集群包括 PD，TiKV 以及 TiDB。启动顺序依次是 PD，TiKV 以及 TiDB。在关闭数据库服务时，请按照启动的相反顺序进行逐一关闭服务。
+
+阅读本章前，请先确保阅读 [TiDB 整体架构](../overview.md#tidb-整体架构)及[部署建议](recommendation.md)。
+
+本文档描述了三种场景的二进制部署方式：
+
+- 快速了解和试用 TiDB，推荐使用[单节点方式快速部署](#单节点方式快速部署)。
+
+- 功能性测试 TiDB，推荐使用[功能性测试部署](#功能性测试部署)。
+
+- 生产环境使用 TiDB，推荐使用[多节点集群模式部署](#多节点集群模式部署)。
+
+## TiDB 组件及默认端口
+
+### 1. TiDB 数据库组件（必装）
+
+| 组件   | 默认端口  | 协议  | 说明                |
+|:---- |:----- |:--- |:----------------- |
+| ssh  | 22    | TCP | sshd 服务           |
+| TiDB | 4000  | TCP | 应用及 DBA 工具访问通信端口  |
+| TiDB | 10080 | TCP | TiDB 状态信息上报通信端口   |
+| TiKV | 20160 | TCP | TiKV 通信端口         |
+| PD   | 2379  | TCP | 提供 TiDB 和 PD 通信端口 |
+| PD   | 2380  | TCP | PD 集群节点间通信端口      |
+
+### 2. TiDB 数据库组件（选装）
+
+| 组件            | 默认端口 | 协议  | 说明                        |
+|:------------- |:---- |:--- |:------------------------- |
+| Prometheus    | 9090 | TCP | Prometheus 服务通信端口         |
+| Pushgateway   | 9091 | TCP | TiDB, TiKV, PD 监控聚合和上报端口  |
+| Node_exporter | 9100 | TCP | TiDB 集群每个节点的系统信息上报通信端口    |
+| Grafana       | 3000 | TCP | Web 监控服务对外服务和客户端(浏览器)访问端口 |
+| alertmanager  | 9093 | TCP | 告警服务端口                    |
+
+## TiDB 安装前系统配置与检查
+
+### 操作系统检查
+
+| 配置              | 描述                                |
+|:--------------- |:--------------------------------- |
+| 支持平台            | 请查看和了解[系统部署建议](recommendation.md) |
+| 文件系统            | TiDB 部署环境推荐使用 ext4 文件系统           |
+| Swap 空间         | TiDB 部署推荐关闭 Swap 空间               |
+| Disk Block Size | 设置系统磁盘 Block 大小为 4096             |
+
+### 网络与防火墙
 
-## TiDB
+| 配置       | 描述                          |
+|:-------- |:--------------------------- |
+| 防火墙 / 端口 | 请查看 TiDB 所需端口在各个节点之间是否能正常访问 |
 
-### `--binlog-socket`
+### 操作系统参数
 
-+ TiDB 服务使用 unix socket file 方式接受内部连接，如 PUMP 服务
-+ 默认: ""
-+ 譬如我们可以使用 "/tmp/pump.sock" 来接受 PUMP unix socket file 通信
+| 配置                      | 说明                                                                  |
+|:----------------------- |:------------------------------------------------------------------- |
+| Nice Limits             | 系统用户 tidb 的 nice 值设置为缺省值 0                                          |
+| min_free_kbytes       | 在 `sysctl.conf` 中关于 `vm.min_free_kbytes` 的设置需要足够高                   |
+| User Open Files Limit   | 对数据库管理员 tidb 的 open 文件数设置为 `1000000`                                |
+| System Open File Limits | 对系统的 open 文件数设置为 `1000000`                                          |
+| User Process Limits     | 在 `limits.conf` 配置的 tidb 用户的 nproc 为 `4096`                         |
+| Address Space Limits    | 在 `limits.conf` 配置的 tidb 用户空间为 `unlimited`                          |
+| File Size Limits        | 在 `limits.conf` 配置的 tidb 用户 fsize 为 `unlimited`                     |
+| Disk Readahead          | 设置数据磁盘 `readahead` 至少为 `4096`                                       |
+| NTP 服务                  | 为各个节点配置 NTP 时间同步服务                                                  |
+| SELinux                 | 关闭各个节点的 SELinux 服务                                                  |
+| CPU Frequency Scaling   | TiDB 推荐打开 CPU 超频                                                    |
+| Transparent Hugepages   | 针对 Red Hat 7+ 和 CentOS 7+ 系统, Transparent Hugepages 必须被设置为 `always` |
+| I/O Scheduler           | 设置数据磁盘 I/0 Schedule 设置为 `deadline` 模式                               |
+| vm.swappiness           | 设置 `vm.swappiness = 0`                                              |
 
-### `--cross-join`
+> 注意：请联系系统管理员进行操作系统参数调整。
 
-+ 默认: true
-+ 在做 join 的时候，两边表没有任何条件（where 字段），默认可以执行这样的语句。但是设置为 false，则如有这样的 join 语句出现，server 会拒绝执行
+### 数据库运行用户设置
 
-### `--host`
+| 配置        | 说明                     |
+|:--------- |:---------------------- |
+| LANG 环境设定 | 设置 `LANG = en_US.UTF8` |
+| TZ 时区设定   | 确保所有节点的时区 TZ 设置为一样的值   |
 
-+ TiDB 服务监听 host
-+ 默认: "0.0.0.0"
-+ TiDB 服务会监听这个 host
-+ 0.0.0.0 默认会监听所有的网卡 address。如果有多块网卡，可以指定对外提供服务的网卡，譬如192.168.100.113
+## 创建系统数据库运行账户
 
-### `--join-concurrency int`
+在 Linux 环境下，在每台安装节点上创建 tidb 作为数据库系统运行用户并设置集群节点之间的 ssh 互信访问。以下是一个示例，具体创建用户与开通 ssh 互信访问请联系系统管理员进行。
 
-+ join-concurrency 并发执行 join 的 goroutine 数量
-+ 默认: 5
-+ 看数据量和数据分布情况，一般情况下是越多越好，数值越大对 CPU 开销越大
+```bash
+# useradd tidb
+# usermod -a -G tidb tidb
+# su - tidb
+Last login: Tue Aug 22 12:06:23 CST 2017 on pts/2
+-bash-4.2$ ssh-keygen -t rsa
+Generating public/private rsa key pair.
+Enter file in which to save the key (/home/tidb/.ssh/id_rsa):
+Created directory '/home/tidb/.ssh'.
+Enter passphrase (empty for no passphrase):
+Enter same passphrase again:
+Your identification has been saved in /home/tidb/.ssh/id_rsa.
+Your public key has been saved in /home/tidb/.ssh/id_rsa.pub.
+The key fingerprint is:
+5a:00:e6:df:9e:40:25:2c:2d:e2:6e:ee:74:c6:c3:c1 tidb@t001
+The key's randomart image is:
++--[ RSA 2048]----+
+|    oo. .        |
+|  .oo.oo         |
+| . ..oo          |
+|  .. o o         |
+| .  E o S        |
+|  oo . = .       |
+| o. * . o        |
+| ..o .           |
+| ..              |
++-----------------+
 
-### `-L`
+-bash-4.2$ cd .ssh
+-bash-4.2$ cat id_rsa.pub >> authorized_keys
+-bash-4.2$ chmod 644 authorized_keys
+-bash-4.2$ ssh-copy-id -i ~/.ssh/id_rsa.pub 192.168.1.100
+```
 
-+ Log 级别
-+ 默认: "info"
-+ 我们能选择 debug, info, warn, error 或者 fatal
+## 下载官方 Binary
 
-### `--lease`
+TiDB 官方提供了支持 Linux 版本的二进制安装包，官方推荐使用 Redhat 7+、CentOS 7+ 以上版本的操作系统，不推荐在 Redhat 6、CentOS 6 上部署 TiDB 集群。
 
-+ Schema 的租约时间，单位：秒
-+ 默认: "10"
-+ Schema 的 lease 主要用在 online schema changes 上面。这个值会影响到实际的 DDL 语句的执行时间。千万不要随便改动这个值，除非你能知道相关的内部机制
+### 操作系统：Linux ( Redhat 7+，CentOS 7+ )
 
-### `--log-file`
+执行步骤：
 
-+ Log 文件
-+ 默认: ""
-+ 如果没设置这个参数，log 会默认输出到 "stderr"，如果设置了，log 就会输出到对应的文件里面，在每天凌晨，log 会自动轮转使用一个新的文件，并且将以前的文件改名备份
+```
+# 下载压缩包
 
-### `--metrics-addr`
+wget http://download.pingcap.org/tidb-latest-linux-amd64.tar.gz
+wget http://download.pingcap.org/tidb-latest-linux-amd64.sha256
 
-+ Prometheus Push Gateway 地址
-+ 默认: ""
-+ 如果为空，TiDB 不会将统计信息推送给 Push Gateway,参数格式 如 `--metrics-addr=192.168.100.115:9091`
+# 检查文件完整性，返回 ok 则正确
+sha256sum -c tidb-latest-linux-amd64.sha256
 
-### `--metrics-intervel`
+# 解开压缩包
+tar -xzf tidb-latest-linux-amd64.tar.gz
+cd tidb-latest-linux-amd64
+```
 
-+ 推送统计信息到 Prometheus Push Gateway 的时间间隔
-+ 默认: 15s
-+ 设置为 0 表明不推送统计信息给 Push Gateway,如: `--metrics-interval=2` 是每两秒推送到 Push Gataway
+## 单节点方式快速部署
 
-### `-P`
+在获取 TiDB 二进制文件包后，我们可以在单机上面，运行和测试 TiDB 集群，请按如下步骤依次启动 PD，TiKV，TiDB。
 
-+ TiDB 服务监听端口
-+ 默认: "4000"
-+ TiDB 服务将会使用这个端口接受 MySQL 客户端发过来的请求
+> 注意：以下启动各个应用程序组件实例的时候，请选择后台启动，避免前台失效后程序自动退出。
 
-### `--path`
+步骤一. 启动 PD：
 
-+ 对于本地存储引擎 "goleveldb", "BoltDB" 来说，path 指定的是实际的数据存放路径
-+ 对于 "memory" 存储引擎来说，path 不用设置
-+ 对于 "TiKV" 存储引擎来说，path 指定的是实际的 PD 地址。假设我们在 192.168.100.113:2379, 192.168.100.114:2379 和 192.168.100.115:2379 上面部署了 PD，那么 path 为 "192.168.100.113:2379, 192.168.100.114:2379, 192.168.100.115:2379"
-+ 默认: "/tmp/tidb"
+```
+./bin/pd-server --data-dir=pd \
+                --log-file=pd.log
+```
 
-### `--perfschema`
+步骤二. 启动 TiKV：
 
-+ 使用 true/false 来打开或者关闭性能 schema
-+ 默认: false
-+ 值可以是 (true) or (false)。性能 Schema 可以帮助我们在运行时检测内部的执行情况。可以通过 [performance schema](http://dev.mysql.com/doc/refman/5.7/en/performance-schema.html) 获取更多信息。但需要注意，开启性能 Schema，会影响 TiDB 的性能
+```
+./bin/tikv-server --pd="127.0.0.1:2379" \
+                  --data-dir=tikv \
+                  --log-file=tikv.log
+```
 
-### `--privilege`
+步骤三. 启动 TiDB：
 
-+ 使用 true/false 来打开或者关闭权限功能(用于开发调试)
-+ 默认: true
-+ 值可以是(true) or (false)。当前版本的权限控制还在完善中，将来会去掉此选项
+```
+./bin/tidb-server --store=tikv \
+                  --path="127.0.0.1:2379" \
+                  --log-file=tidb.log
+```
 
-### `--query-log-max-len int`
+步骤四. 使用 MySQL 客户端连接 TiDB:
 
-+ 日志中记录最大 sql 语句长度
-+ 默认: 2048
-+ 过长的请求输出到 log 时会被截断
+```
+mysql -h 127.0.0.1 -P 4000 -u root -D test
+```
 
-### `--report-status`
+## 功能性测试部署
 
-+ 打开 (true) 或者关闭 (false) 服务状态监听端口
-+ 默认: true
-+ 值可以为 (true) 或者 (false). (true) 表明我们开启状态监听端口。 (false) 表明关闭
+如果只是对 TiDB 进行测试，并且机器数量有限，我们可以只启动一台 PD 测试整个集群。
+
+这里我们使用四个节点，部署一个 PD，三个 TiKV，以及一个 TiDB，各个节点以及所运行服务信息如下：
+
+| Name  | Host IP         | Services  |
+|:----- |:--------------- |:--------- |
+| node1 | 192.168.199.113 | PD1, TiDB |
+| node2 | 192.168.199.114 | TiKV1     |
+| node3 | 192.168.199.115 | TiKV2     |
+| node4 | 192.168.199.116 | TiKV3     |
+
+请按如下步骤依次启动 PD 集群，TiKV 集群以及 TiDB：
+
+> 注意：以下启动各个应用程序组件实例的时候，请选择后台启动，避免前台失效后程序自动退出。
+
+步骤一. 在 node1 启动 PD：
+
+```
+./bin/pd-server --name=pd1 \
+                --data-dir=pd1 \
+                --client-urls="http://192.168.199.113:2379" \
+                --peer-urls="http://192.168.199.113:2380" \
+                --initial-cluster="pd1=http://192.168.199.113:2380" \
+                --log-file=pd.log
+```
+
+步骤二. 在 node2，node3，node4 启动 TiKV：
+
+```
+./bin/tikv-server --pd="192.168.199.113:2379" \
+                  --addr="192.168.199.114:20160" \
+                  --data-dir=tikv1 \
+                  --log-file=tikv.log
+
+./bin/tikv-server --pd="192.168.199.113:2379" \
+                  --addr="192.168.199.115:20160" \
+                  --data-dir=tikv2 \
+                  --log-file=tikv.log
+
+./bin/tikv-server --pd="192.168.199.113:2379" \
+                  --addr="192.168.199.116:20160" \
+                  --data-dir=tikv3 \
+                  --log-file=tikv.log
+```
 
-### `--retry-limit int`
+步骤三. 在 node1 启动 TiDB：
 
-+ 事务遇见冲突时，提交事物最大重试次数
-+ 默认: 10
-+ 设置较大的重试次数会影响 TiDB 集群性能
+```
+./bin/tidb-server --store=tikv \
+                  --path="192.168.199.113:2379" \
+                  --log-file=tidb.log
+```
 
-### `--run-ddl`
+步骤四. 使用 MySQL 客户端连接 TiDB：
 
-+ tidb-server 是否运行 DDL 语句，集群内大于两台以上 tidb-server 时设置
-+ 默认: true
-+ 值可以为 (true) 或者 (false). (true) 表明自身会运行 DDL. (false) 表明自身不会运行 DDL
+```
+mysql -h 192.168.199.113 -P 4000 -u root -D test
+```
 
-### `--proxy-protocol-networks`
+## 多节点集群模式部署
 
-+ PROXY Protocol 允许的代理服务器地址列表，如果需要配置多个地址用`,`分隔。
-+ 默认: ""
-+ 如果为空，TiDB 会禁用 PROXY Protocol 功能。地址可以使用 IP 地址（192.168.1.50）或者 CIDR （192.168.1.0/24），`*` 代表所有地址。
+在生产环境中，我们推荐多节点部署 TiDB 集群，首先请参考部署建议。
 
-### `--proxy-protocol-header-timeout`
+这里我们使用六个节点，部署三个 PD，三个 TiKV，以及一个 TiDB，各个节点以及所运行服务信息如下：
 
-+ PROXY Protocol 请求头读取超时时间。
-+ 默认: 5
-+ 单位为秒。注意：请不要配置成0，除非特殊情况，一般使用默认值即可。
+| Name  | Host IP         | Services  |
+|:----- |:--------------- |:--------- |
+| node1 | 192.168.199.113 | PD1, TiDB |
+| node2 | 192.168.199.114 | PD2       |
+| node3 | 192.168.199.115 | PD3       |
+| node4 | 192.168.199.116 | TiKV1     |
+| node5 | 192.168.199.117 | TiKV2     |
+| node6 | 192.168.199.118 | TiKV3     |
 
-### `--skip-grant-table`
+请按如下步骤依次启动 PD 集群，TiKV 集群以及 TiDB：
 
-+ 允许任何人不带密码连接，并且所有的操作不检查权限
-+ 默认: false
-+ 值可以是(true) or (false)。启用此选项需要有本机的root权限，一般用于忘记密码时重置
+步骤一 . 在 node1，node2，node3 依次启动 PD：
 
-### `--slow-threshold int`
+```
+./bin/pd-server --name=pd1 \
+                --data-dir=pd1 \
+                --client-urls="http://192.168.199.113:2379" \
+                --peer-urls="http://192.168.199.113:2380" \
+                --initial-cluster="pd1=http://192.168.199.113:2380,pd2=http://192.168.199.114:2380,pd3=http://192.168.199.115:2380" \
+                -L "info" \
+                --log-file=pd.log
 
-+ 大于这个值得 sql 语句将被记录
-+ 默认: 300
-+ 值只能是一个整数 (int) ，单位是毫秒
+./bin/pd-server --name=pd2 \
+                --data-dir=pd2 \
+                --client-urls="http://192.168.199.114:2379" \
+                --peer-urls="http://192.168.199.114:2380" \
+                --initial-cluster="pd1=http://192.168.199.113:2380,pd2=http://192.168.199.114:2380,pd3=http://192.168.199.115:2380" \
+                --join="http://192.168.199.113:2379" \
+                -L "info" \
+                --log-file=pd.log
 
-### `--socket string`
+./bin/pd-server --name=pd3 \
+                --data-dir=pd3 \
+                --client-urls="http://192.168.199.115:2379" \
+                --peer-urls="http://192.168.199.115:2380" \
+                --initial-cluster="pd1=http://192.168.199.113:2380,pd2=http://192.168.199.114:2380,pd3=http://192.168.199.115:2380" \
+                --join="http://192.168.199.113:2379" \
+                -L "info" \
+                --log-file=pd.log
+```
 
-+ TiDB 服务使用 unix socket file 方式接受外部连接
-+ 默认: ""
-+ 譬如我们可以使用 "/tmp/tidb.sock" 来打开 unix socket file
+步骤二. 在 node4，node5，node6 启动 TiKV：
 
-### `--ssl-ca`
+```
+./bin/tikv-server --pd="192.168.199.113:2379,192.168.199.114:2379,192.168.199.115:2379" \
+                  --addr="192.168.199.116:20160" \
+                  --data-dir=tikv1 \
+                  --log-file=tikv.log
 
-+ PEM 格式的受信任 CA 的证书文件路径
-+ 默认: ""
-+ 当同时设置了该选项和 `--ssl-cert`、`--ssl-key` 选项时，TiDB 将在客户端出示证书的情况下根据该选项指定的受信任的 CA 列表验证客户端证书。若验证失败，则连接会被终止。
-+ 即使设置了该选项，若客户端没有出示证书，则安全连接仍然继续，不会进行客户端证书验证。
+./bin/tikv-server --pd="192.168.199.113:2379,192.168.199.114:2379,192.168.199.115:2379" \
+                  --addr="192.168.199.117:20160" \
+                  --data-dir=tikv2 \
+                  --log-file=tikv.log
 
-### `--ssl-cert`
+./bin/tikv-server --pd="192.168.199.113:2379,192.168.199.114:2379,192.168.199.115:2379" \
+                  --addr="192.168.199.118:20160" \
+                  --data-dir=tikv3 \
+                  --log-file=tikv.log
+```
 
-+ PEM 格式的 SSL 证书文件路径
-+ 默认: ""
-+ 当同时设置了该选项和 `--ssl-key` 选项时，TiDB 将接受（但不强制）客户端使用 TLS 安全地连接到 TiDB。
-+ 若指定的证书或私钥无效，则 TiDB 会照常启动，但无法接受安全连接。
+步骤三. 在 node1 启动 TiDB：
 
-### `--ssl-key`
+```
+./bin/tidb-server --store=tikv \
+                  --path="192.168.199.113:2379,192.168.199.114:2379,192.168.199.115:2379" \
+                  --log-file=tidb.log
 
-+ PEM 格式的 SSL 证书密钥文件路径，即 `--ssl-cert` 所指定的证书的私钥
-+ 默认: ""
-+ 目前 TiDB 不支持加载由密码保护的私钥。
+```
+
+步骤四. 使用 MySQL 客户端连接 TiDB：
+
+```
+mysql -h 192.168.199.113 -P 4000 -u root -D test
+```
+
+> 注意：在生产环境中启动 TiKV 时，建议使用 `--config` 参数指定配置文件路径，如果不设置这个参数，TiKV 不会读取配置文件。同样，在生产环境中部署 PD 时，也建议使用 `--config` 参数指定配置文件路径。
+
+TiKV 调优参见：[TiKV 性能参数调优](https://github.com/pingcap/docs-cn/blob/master/op-guide/tune-tikv.md)。
+
+> 注意：如果使用 nohup 在生产环境中启动集群，需要将启动命令放到一个脚本文件里面执行，否则会出现因为 Shell 退出导致 nohup 启动的进程也收到异常信号退出的问题，具体参考进程异常退出。
+
+## TiDB 监控和告警环境安装
+
+安装部署监控和告警环境的系统信息如下：
+
+| Name  | Host IP         | Services                                      |
+|:----- |:--------------- |:--------------------------------------------- |
+| node1 | 192.168.199.113 | node_export, pushgateway, Prometheus, Grafana |
+| node2 | 192.168.199.114 | node_export                                   |
+| node3 | 192.168.199.115 | node_export                                   |
+| node4 | 192.168.199.116 | node_export                                   |
 
-### `--status`
+### 获取二进制包
 
-+ TiDB 服务状态监听端口
-+ 默认: "10080"
-+ 这个端口是为了展示 TiDB 内部数据用的。包括 [prometheus 统计](https://prometheus.io/) 以及 [pprof](https://golang.org/pkg/net/http/pprof/)
-+ Prometheus 统计可以通过 "http://host:status_port/metrics" 访问
-+ Pprof 数据可以通过 "http://host:status_port/debug/pprof" 访问
+```
+# 下载压缩包
+wget https://github.com/prometheus/prometheus/releases/download/v1.5.2/prometheus-1.5.2.linux-amd64.tar.gz
+wget https://github.com/prometheus/node_exporter/releases/download/v0.14.0-rc.2/node_exporter-0.14.0-rc.2.linux-amd64.tar.gz
+wget https://grafanarel.s3.amazonaws.com/builds/grafana-4.1.2-1486989747.linux-x64.tar.gz
+wget https://github.com/prometheus/pushgateway/releases/download/v0.3.1/pushgateway-0.3.1.linux-amd64.tar.gz
 
-### `--statsLease string`
+# 解开压缩包
+tar -xzf prometheus-1.5.2.linux-amd64.tar.gz
+tar -xzf node_exporter-0.14.0-rc.1.linux-amd64.tar.gz
+tar -xzf grafana-4.1.2-1486989747.linux-x64.tar.gz
+tar -xzf pushgateway-0.3.1.linux-amd64.tar.gz
+```
 
-+ 增量扫描全表并分析表的数据量 索引等一些信息
-+ 默认: 3s
-+ 使用此参数需要先手动执行 analyze table name; 自动更新统计信息,持久化存储到tikv，会耗费一些内存开销,
+### 启动监控服务
 
-### `--store`
+### 在 node1，node2，node3，node4 启动 `node_exporter`
 
-+ 用来指定 TiDB 底层使用的存储引擎
-+ 默认: "goleveldb"
-+ 你可以选择 "memory", "goleveldb", "BoltDB" 或者 "TiKV"。（前面三个是本地存储引擎，而 TiKV 是一个分布式存储引擎）
-+ 例如，如果我们可以通过 `tidb-server --store=memory` 来启动一个纯内存引擎的 TiDB
+```
+$cd node_exporter-0.14.0-rc.1.linux-amd64
 
-### `--tcp-keep-alive`
+#启动 node_exporter 服务
+./node_exporter --web.listen-address=":9100" \
+    --log.level="info"
+```
 
-+ TiDB 在 tcp 层开启 keepalive
-+ 默认: false
+### 在 node1 启动 pushgateway
 
-## Placement Driver (PD)
+```
+$cd pushgateway-0.3.1.linux-amd64
 
-### `--advertise-client-urls`
+#启动 pushgateway 服务
+./pushgateway \
+    --log.level="info" \
+    --web.listen-address=":9091"
+```
 
-+ 对外客户端访问 URL 列表
-+ 默认: ${client-urls}
-+ 在某些情况下，譬如 docker，或者 NAT 网络环境，客户端并不能通过 PD 自己监听的 client URLs 来访问到 PD，这时候，你就可以设置 advertise urls 来让客户端访问
-+ 例如，docker 内部 IP 地址为 172.17.0.1，而宿主机的 IP 地址为 192.168.100.113 并且设置了端口映射 -p 2379:2379，那么可以设置为 \-\-advertise-client-urls="http://192.168.100.113:2379"，客户端可以通过 http://192.168.100.113:2379 来找到这个服务
+### 在 node1 启动 Prometheus
 
-### `--advertise-peer-urls`
+```
+$cd prometheus-1.5.2.linux-amd64
 
-+ 对外其他 PD 节点访问 URL 列表。
-+ 默认: ${peer-urls}
-+ 在某些情况下，譬如 docker，或者 NAT 网络环境，其他节点并不能通过 PD 自己监听的 peer URLs 来访问到 PD，这时候，你就可以设置 advertise urls 来让其他节点访问
-+ 例如，docker 内部 IP 地址为 172.17.0.1，而宿主机的 IP 地址为 192.168.100.113 并且设置了端口映射 -p 2380:2380，那么可以设置为 \-\-advertise-peer-urls="http://192.168.100.113:2380"，其他 PD 节点可以通过 http://192.168.100.113:2380 来找到这个服务
+# 修改配置文件
 
-### `--client-urls`
+vi prometheus.yml
 
-+ 处理客户端请求监听 URL 列表
-+ 默认: "http://127.0.0.1:2379"
-+ 如果部署一个集群，\-\-client-urls 必须指定当前主机的 IP 地址，例如 "http://192.168.100.113:2379"，如果是运行在 docker 则需要指定为 "http://0.0.0.0:2379"
+...
+global:
+  scrape_interval:     15s # By default, scrape targets every 15 seconds.
+  evaluation_interval: 15s # By default, scrape targets every 15 seconds.
+  # scrape_timeout is set to the global default (10s).
+  labels:
+    cluster: 'test-cluster'
+    monitor: "prometheus"
 
-### `--config`
+scrape_configs:
+  - job_name: 'overwritten-cluster'
+    scrape_interval: 3s
+    honor_labels: true # don't overwrite job & instance labels
+    static_configs:
+      - targets: ['192.168.199.113:9091']
 
-+ 配置文件
-+ 默认: ""
-+ 如果你指定了配置文件，PD 会首先读取配置文件的配置。然后如果对应的配置在命令行参数里面也存在，PD 就会使用命令行参数的配置来覆盖配置文件里面的
+  - job_name: "overwritten-nodes"
+    honor_labels: true # don't overwrite job & instance labels
+    static_configs:
+    - targets:
+      - '192.168.199.113:9100'
+      - '192.168.199.114:9100'
+      - '192.168.199.115:9100'
+      - '192.168.199.116:9100'
+...
 
-### `--data-dir`
+# 启动 Prometheus:
+./prometheus \
+    --config.file="/data1/tidb/deploy/conf/prometheus.yml" \
+    --web.listen-address=":9090" \
+    --web.external-url="http://192.168.199.113:9090/" \
+    --log.level="info" \
+    --storage.local.path="/data1/tidb/deploy/data.metrics" \
+    --storage.local.retention="360h0m0s"
+```
 
-+ PD 存储数据路径
-+ 默认: "default.${name}"
+### 在 node1 启动 Grafana
 
-### `--initial-cluster`
+```
+cd grafana-4.1.2-1486989747.linux-x64
 
-+ 初始化 PD 集群配置。
-+ 默认: "{name}=http://{advertise-peer-url}"
-+ 例如，如果 name 是 "pd", 并且 `advertise-peer-urls` 是 "http://192.168.100.113:2380", 那么 `initial-cluster` 就是 pd=http://192.168.100.113:2380
-+ 如果你需要启动三台 PD，那么 `initial-cluster` 可能就是 `pd1=http://192.168.100.113:2380, pd2=http://192.168.100.114:2380, pd3=192.168.100.115:2380`
+#编辑配置文件
 
-### `--join`
+vi grafana.ini
 
-+ 动态加入 PD 集群
-+ 默认: ""
-+ 如果你想动态将一台 PD 加入集群，你可以使用 `--join="${advertise-client-urls}"`， `advertise-client-url` 是当前集群里面任意 PD 的 `advertise-client-url`，你也可以使用多个 PD 的，需要用逗号分隔
+...
 
-### `-L`
+# The http port  to use
+http_port = 3000
 
-+ Log 级别
-+ 默认: "info"
-+ 我们能选择 debug, info, warn, error 或者 fatal
+# The public facing domain name used to access grafana from a browser
+domain = 192.168.199.113
 
-### `--log-file`
+...
 
-+ Log 文件
-+ 默认: ""
-+ 如果没设置这个参数，log 会默认输出到 "stderr"，如果设置了，log 就会输出到对应的文件里面，在每天凌晨，log 会自动轮转使用一个新的文件，并且将以前的文件改名备份
-
-### `--log-rotate`
-
-+ 是否开启日志切割
-+ 默认：true
-+ 当值为 true 时,按照 PD 配置文件中 `[log.file]` 信息执行。
-
-### `--name`
-
-+ 当前 PD 的名字
-+ 默认: "pd"
-+ 如果你需要启动多个 PD，一定要给 PD 使用不同的名字
-
-### `--peer-urls`
-
-+ 处理其他 PD 节点请求监听 URL 列表。
-+ default: "http://127.0.0.1:2380"
-+ 如果部署一个集群，\-\-peer-urls 必须指定当前主机的 IP 地址，例如 "http://192.168.100.113:2380"，如果是运行在 docker 则需要指定为 "http://0.0.0.0:2380"
-
-## TiKV
-
-TiKV 在命令行参数上面支持一些可读性好的单位转换。
-
-+ 文件大小（以 bytes 为单位）: KB, MB, GB, TB, PB（也可以全小写）
-+ 时间（以毫秒为单位）: ms, s, m, h
-
-### `-A, --addr`
-
-+ TiKV 监听地址
-+ 默认: "127.0.0.1:20160"
-+ 如果部署一个集群，\-\-addr 必须指定当前主机的 IP 地址，例如 "192.168.100.113:20160"，如果是运行在 docker 则需要指定为 "0.0.0.0:20160"
-
-### `--advertise-addr`
-
-+ TiKV 对外访问地址。
-+ 默认: ${addr}
-+ 在某些情况下，譬如 docker，或者 NAT 网络环境，客户端并不能通过  TiKV 自己监听的地址来访问到 TiKV，这时候，你就可以设置 advertise addr 来让 客户端访问
-+ 例如，docker 内部 IP 地址为 172.17.0.1，而宿主机的 IP 地址为 192.168.100.113 并且设置了端口映射 -p 20160:20160，那么可以设置为 \-\-advertise-addr="192.168.100.113:20160"，客户端可以通过 192.168.100.113:20160 来找到这个服务
-
-### `-C, --config`
-
-+ 配置文件
-+ 默认: ""
-+ 如果你指定了配置文件，TiKV 会首先读取配置文件的配置。然后如果对应的配置在命令行参数里面也存在，TiKV 就会使用命令行参数的配置来覆盖配置文件里面的
-
-### `--capacity`
-
-+ TiKV 存储数据的容量
-+ 默认: 0 (无限)
-+ PD 需要使用这个值来对整个集群做 balance 操作。（提示：你可以使用 10GB 来替代 10737418240，从而简化参数的传递）
-
-### `--data-dir`
-
-+ TiKV 数据存储路径
-+ 默认: "/tmp/tikv/store"
-
-### `-L, --log`
-
-+ Log 级别
-+ 默认: "info"
-+ 我们能选择 trace, debug, info, warn, error, 或者 off
-
-### `--log-file`
-
-+ Log 文件
-+ 默认: ""
-+ 如果没设置这个参数，log 会默认输出到 "stderr"，如果设置了，log 就会输出到对应的文件里面，在每天凌晨，log 会自动轮转使用一个新的文件，并且将以前的文件改名备份
-
-### `--pd`
-
-+ PD 地址列表。
-+ 默认: ""
-+ TiKV 必须使用这个值连接 PD，才能正常工作。使用逗号来分隔多个 PD 地址，例如： 192.168.100.113:2379, 192.168.100.114:2379, 192.168.100.115:2379
+#启动 Grafana 服务
+./grafana-server \
+    --homepath="/data1/tidb/deploy/opt/grafana" \
+    --config="/data1/tidb/deploy/opt/grafana/conf/grafana.ini"
+```
