@@ -1,20 +1,38 @@
 ---
-title: TiDB 2.0.11 Release Notes
+title: TiDB 2.1.2 Release Notes
 category: Releases
 ---
 
-# TiDB 2.0.11 Release Notes
+# TiDB 2.1.2 Release Notes
 
-2019 年 1 月 3 日，TiDB 发布 2.0.11 版，TiDB-Ansible 相应发布 2.0.11 版本。该版本在 2.0.10 版的基础上，对系统兼容性、稳定性做出了改进。
+2018 年 12 月 22 日，TiDB 发布 2.1.2 版，TiDB-Ansible 相应发布 2.1.2 版本。该版本在 2.1.1 版的基础上，对系统兼容性、稳定性做出了改进。
 
 ## TiDB
 
-- 修复 PD 发生异常的情况下，Error 没有被正确处理的问题 [#8764](https://github.com/pingcap/tidb/pull/8764)
-- 修复 Rename 相同表的行为，跟 MySQL 保持一致 [#8809](https://github.com/pingcap/tidb/pull/8809)
-- 修复 `ADMIN CHECK TABLE` 在 `ADD INDEX` 过程中误报的问题 [#8750](https://github.com/pingcap/tidb/pull/8750)
-- 修复前缀索引在某些情况下，开闭范围区间错误的问题 [#8877](https://github.com/pingcap/tidb/pull/8877)
-- 修复在某些添加列的情况下，`UPDATE` 语句 panic 的问题 [#8904](https://github.com/pingcap/tidb/pull/8904)
+- 兼容 Kafka 版本的 TiDB-Binlog [#8747](https://github.com/pingcap/tidb/pull/8747)
+- 完善滚动升级下 TiDB 的退出机制 [#8707](https://github.com/pingcap/tidb/pull/8707)
+- 修复在某些情况下为 generated column 增加索引 panic 的问题 [#8676](https://github.com/pingcap/tidb/pull/8676)
+- 修复在某些情况下语句有 `TIDB_SMJ Hint` 的时候优化器无法找到正确执行计划的问题 [#8729](https://github.com/pingcap/tidb/pull/8729)
+- 修复在某些情况下 `AntiSemiJoin` 返回错误结果的问题 [#8730](https://github.com/pingcap/tidb/pull/8730)
+- 增强 `utf8` 字符集的有效字符检查 [#8754](https://github.com/pingcap/tidb/pull/8754)
+- 修复事务中先写后读的情况下时间类型字段可能返回错误结果的问题 [#8746](https://github.com/pingcap/tidb/pull/8746)
+
+## PD
+
+- 修复 Region Merge 相关的 Region 信息更新问题 [#1377](https://github.com/pingcap/pd/pull/1377)
 
 ## TiKV
 
-- 修复了两个 Region merge 相关的问题 [#4003](https://github.com/tikv/tikv/pull/4003)，[#4004](https://github.com/tikv/tikv/pull/4004)
+- 支持以日 (`d`) 为时间单位的配置格式，并解决配置兼容性问题 [#3931](https://github.com/tikv/tikv/pull/3931)
+- 修复 Approximate Size Split 可能会 panic 的问题 [#3942](https://github.com/tikv/tikv/pull/3942)
+- 修复两个 Region merge 相关问题 [#3822](https://github.com/tikv/tikv/pull/3822)，[#3873](https://github.com/tikv/tikv/pull/3873)
+
+## Tools
+
++ TiDB-Lightning
+    - 支持最小 TiDB 集群版本为 2.1.0
+    - 修复解析包含 JSON 类型数据的文件内容出错 [#144](https://github.com/pingcap/tidb-tools/issues/144)
+    - 修复使用 checkpoint 重启后 `Too many open engines` 错误
++ TiDB-Binlog
+    - 消除了 Drainer 往 Kafka 写数据的一些瓶颈点
+    - TiDB 支持写 [Kafka 版本的 TiDB-Binlog](https://github.com/pingcap/docs-cn/blob/master/tools/tidb-binlog-kafka.md)
