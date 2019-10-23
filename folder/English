@@ -1,79 +1,45 @@
 ---
-title: CREATE DATABASE
-summary: TiDB 数据库中 CREATE DATABASE 的使用概况。
+title: COMMIT
+summary: TiDB 数据库中 COMMIT 的使用概况。
 category: reference
 ---
 
-# CREATE DATABASE
+# COMMIT
 
-`CREATE DATABASE` 语句用于在 TiDB 上创建新数据库。按照 SQL 标准，“数据库” 一词在 MySQL 术语中最接近 “schema”。
+`COMMIT` 语句用于在 TiDB 服务器内部提交事务。
+
+在不使用 `BEGIN` 或 `START TRANSACTION` 语句的情况下，TiDB 中每一个查询语句本身也会默认作为事务处理，自动提交，确保了与 MySQL 的兼容。
 
 ## 语法图
 
-**CreateDatabaseStmt:**
+**CommitStmt:**
 
-![CreateDatabaseStmt](/media/sqlgram/CreateDatabaseStmt.png)
-
-**DatabaseSym:**
-
-![DatabaseSym](/media/sqlgram/DatabaseSym.png)
-
-**IfNotExists:**
-
-![IfNotExists](/media/sqlgram/IfNotExists.png)
-
-**DBName:**
-
-![DBName](/media/sqlgram/DBName.png)
-
-**DatabaseOptionListOpt:**
-
-![DatabaseOptionListOpt](/media/sqlgram/DatabaseOptionListOpt.png)
-
-## 语法说明
-
-`CREATE DATABASE` 用于创建数据库，并可以指定数据库的默认属性（如数据库默认字符集、校验规则。`CREATE SCHEMA` 跟 `CREATE DATABASE` 操作效果一样。
-
-```sql
-CREATE {DATABASE | SCHEMA} [IF NOT EXISTS] db_name
-    [create_specification] ...
-
-create_specification:
-    [DEFAULT] CHARACTER SET [=] charset_name
-  | [DEFAULT] COLLATE [=] collation_name
-```
-
-当创建已存在的数据库且不指定使用 `IF NOT EXISTS` 时会报错。
-
-`create_specification` 选项用于指定数据库具体的 `CHARACTER SET` 和 `COLLATE`。目前这个选项只是语法支持。
+![CommitStmt](/media/sqlgram/CommitStmt.png)
 
 ## 示例
 
 ```sql
-mysql> CREATE DATABASE mynewdatabase;
-Query OK, 0 rows affected (0.09 sec)
+mysql> CREATE TABLE t1 (a int NOT NULL PRIMARY KEY);
+Query OK, 0 rows affected (0.12 sec)
 
-mysql> USE mynewdatabase;
-Database changed
-mysql> CREATE TABLE t1 (a int);
-Query OK, 0 rows affected (0.11 sec)
+mysql> START TRANSACTION;
+Query OK, 0 rows affected (0.00 sec)
 
-mysql> SHOW TABLES;
-+-------------------------+
-| Tables_in_mynewdatabase |
-+-------------------------+
-| t1                      |
-+-------------------------+
-1 row in set (0.00 sec)
+mysql> INSERT INTO t1 VALUES (1);
+Query OK, 1 row affected (0.00 sec)
+
+mysql> COMMIT;
+Query OK, 0 rows affected (0.01 sec)
 ```
 
 ## MySQL 兼容性
 
-`CREATE DATABASE` 语句与 MySQL 完全兼容。如有任何兼容性差异，请在 GitHub 上提交 [issue](/v2.1/report-issue.md)。
+* 在 MySQL 中，除了有多个 primary 的群组复制以外，`COMMIT` 语句通常不会导致错误。相比之下，TiDB 使用乐观并发控制，冲突可能导致 `COMMIT` 返回错误。
+* 默认情况下，`UNIQUE` 和 `PRIMARY KEY` 约束检查将延迟直至语句提交。可通过设置 `tidb_constraint_check_in_place=TRUE` 来改变该行为。
 
 ## 另请参阅
 
-* [USE](/v2.1/reference/sql/statements/use.md)
-* [ALTER DATABASE](/v2.1/reference/sql/statements/alter-database.md)
-* [DROP DATABASE](/v2.1/reference/sql/statements/drop-database.md)
-* [SHOW DATABASES](/v2.1/reference/sql/statements/show-databases.md)
+* [START TRANSACTION](/v2.1/reference/sql/statements/start-transaction.md)
+* [ROLLBACK](/v2.1/reference/sql/statements/rollback.md)
+* [BEGIN](/v2.1/reference/sql/statements/begin.md)
+* [事务的惰性检查](/v2.1/reference/transactions/overview.md#事务的惰性检查)
