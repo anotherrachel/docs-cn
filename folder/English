@@ -1,128 +1,77 @@
 ---
-title: 在 Kubernetes 上部署 TiDB Operator
-summary: 了解如何在 Kubernetes 上部署 TiDB Operator
-category: how-to
+title: TiDB Operator 简介
+category: reference
 ---
 
-# 在 Kubernetes 上部署 TiDB Operator
+# TiDB Operator 简介
 
-本文介绍如何在 Kubernetes 上部署 TiDB Operator。
-
-## 准备环境
-
-TiDB Operator 部署前，请确认以下软件需求：
-
-* Kubernetes v1.12 或者更高版本
-* [DNS 插件](https://kubernetes.io/docs/tasks/access-application-cluster/configure-dns-cluster/)
-* [PersistentVolume](https://kubernetes.io/docs/concepts/storage/persistent-volumes/)
-* [RBAC](https://kubernetes.io/docs/admin/authorization/rbac) 启用（可选）
-* [Helm](https://helm.sh) 版本 >= v2.8.2 && < v3.0.0
+TiDB Operator 是 Kubernetes 上的 TiDB 集群自动运维系统，提供包括部署、升级、扩缩容、备份恢复、配置变更的 TiDB 全生命周期管理。借助 TiDB Operator，TiDB 可以无缝运行在公有云或私有部署的 Kubernetes 集群上。
 
 > **注意：**
 > 
-> - 尽管 TiDB Operator 可以使用网络卷持久化 TiDB 数据，TiDB 数据自身会存多副本，再走额外的网络卷性能会受到很大影响。强烈建议搭建[本地卷](https://kubernetes.io/docs/concepts/storage/volumes/#local)以提高性能。
-> - 跨多可用区的网络卷需要 Kubernetes v1.12 或者更高版本。在 `tidb-backup` chart 配置中，建议使用网络卷存储备份数据。
+> 每个 Kubernetes 集群中只能部署一个 TiDB Operator。
 
-## 部署 Kubernetes 集群
+## TiDB Operator 整体架构
 
-TiDB Operator 运行在 Kubernetes 集群，你可以使用[这里](https://kubernetes.io/docs/setup/)列出的任何一种方法搭建一套 Kubernetes 集群。只要保证 Kubernetes 版本大于等于 v1.12。如果你使用 AWS、GKE 或者本机，下面是快速上手教程：
+![TiDB Operator Overview](/media/tidb-operator-overview.png)
 
-* [Local DinD 教程](/dev/tidb-in-kubernetes/get-started/deploy-tidb-from-kubernetes-dind.md)
-* [Google GKE 教程](/dev/tidb-in-kubernetes/get-started/deploy-tidb-from-kubernetes-gke.md)
-* [AWS EKS 教程](/dev/tidb-in-kubernetes/deploy/aws-eks.md)
+其中，`TidbCluster` 是由 CRD（`CustomResourceDefinition`）定义的自定义资源，用于描述用户期望的 TiDB 集群状态。TiDB 集群的编排和调度逻辑则由下列组件负责：
 
-如果你要使用不同环境，必须在 Kubernetes 集群中安装 DNS 插件。可以根据[官方文档](https://kubernetes.io/docs/tasks/access-application-cluster/configure-dns-cluster/)搭建 DNS 插件。
+* `tidb-controller-manager` 是一组 Kubernetes 上的自定义控制器。这些控制器会不断对比 `TidbCluster` 对象中记录的期望状态与 TiDB 集群的实际状态，并调整 Kubernetes 中的资源以驱动 TiDB 集群满足期望状态；
+* `tidb-scheduler` 是一个 Kubernetes 调度器扩展，它为 Kubernetes 调度器注入 TiDB 集群特有的调度逻辑；
 
-TiDB Operator 使用[持久化卷](https://kubernetes.io/docs/concepts/storage/persistent-volumes/)持久化存储 TiDB 集群数据（包括数据库，监控和备份数据），所以 Kubernetes 集群必须提供至少一种持久化卷。为提高性能，建议使用本地 SSD 盘作为持久化卷。可以根据[这一步](#配置本地持久化卷)自动配置本地持久化卷。
+此外，TiDB Operator 还提供了命令行接口 `tkctl` 用于运维集群和诊断集群问题。
 
-Kubernetes 集群建议启用 [RBAC](https://kubernetes.io/docs/admin/authorization/rbac)。否则，需要在 `tidb-operator` 和 `tidb-cluster` chart 的 `values.yaml` 中设置 `rbac.create` 为 `false`。
+![TiDB Operator Control Flow](/media/tidb-operator-control-flow.png)
 
-TiDB 默认会使用很多文件描述符，工作节点和上面的 Docker 进程的 `ulimit` 必须设置大于等于 `1048576`：
+上图是 TiDB Operator 的控制流程解析。由于 TiDB 集群还需要监控、初始化、定时备份、Binlog 等组件，TiDB Operator 中使用 Helm Chart 封装了 TiDB 集群定义。整体的控制流程如下：
 
-* 设置工作节点的 `ulimit` 值，详情可以参考[如何设置 ulimit](https://access.redhat.com/solutions/61334)
+1. 用户通过 Helm 创建 `TidbCluster` 对象和相应的一系列 Kubernetes 原生对象，比如执行定时备份的 `CronJob`；
+2. TiDB Operator 会 watch `TidbCluster` 以及其它相关对象，基于集群的实际状态不断调整 PD、TiKV、TiDB 的 `StatefulSet` 和 `Service` 对象；
+3. Kubernetes 的原生控制器根据 `StatefulSet`、`Deployment`、`CronJob` 等对象创建更新或删除对应的 `Pod`；
+4. PD、TiKV、TiDB 的 `Pod` 声明中会指定使用 `tidb-scheduler` 调度器，`tidb-scheduler` 会在调度对应 `Pod` 时应用 TiDB 的特定调度逻辑。
 
-    {{< copyable "shell-regular" >}}
+基于上述的声明式控制流程，TiDB Operator 能够自动进行集群节点健康检查和故障恢复。部署、升级、扩缩容等操作也可以通过修改 `TidbCluster` 对象声明“一键”完成。
 
-    ```shell
-    sudo vim /etc/security/limits.conf
-    ```
+## 使用 TiDB Operator 管理 TiDB 集群
 
-    设置 root 账号的 `soft` 和 `hard` 的 `nofile` 大于等于 `1048576`
+TiDB Operator 提供了多种方式来部署 Kubernetes 上的 TiDB 集群：
 
-* 设置 Docker 服务的 `ulimit`
++ 测试环境：
+    - [kind](/dev/tidb-in-kubernetes/get-started/deploy-tidb-from-kubernetes-kind.md)：采用 [kind](https://kind.sigs.k8s.io/) 方式在本地 Kubernetes 集群上部署 TiDB 集群；
+    - [DinD](/dev/tidb-in-kubernetes/get-started/deploy-tidb-from-kubernetes-dind.md)：使用 TiDB Operator 在本地 DinD 环境部署 TiDB 集群；
+    - [Minikube](/dev/tidb-in-kubernetes/get-started/deploy-tidb-from-kubernetes-minikube.md)：使用 TiDB Operator 在本地 Minikube 环境部署 TiDB 集群；
+    - [GKE](/dev/tidb-in-kubernetes/get-started/deploy-tidb-from-kubernetes-gke.md)：使用 TiDB Operator 在 GKE 上部署 TiDB 集群。
 
-    {{< copyable "shell-regular" >}}
++ 生产环境：
 
-    ```shell
-    sudo vim /etc/systemd/system/docker.service
-    ```
+    - 公有云：参考 [AWS 部署文档](/dev/tidb-in-kubernetes/deploy/aws-eks.md)，[GKE 部署文档 (beta)](/dev/tidb-in-kubernetes/deploy/gcp-gke.md)，或[阿里云部署文档](/dev/tidb-in-kubernetes/deploy/alibaba-cloud.md)在对应的公有云上一键部署生产可用的 TiDB 集群并进行后续的运维管理；
 
-    设置 `LimitNOFILE` 大于等于 `1048576`。
+    - 现有 Kubernetes 集群：首先按照[部署 TiDB Operator](/dev/tidb-in-kubernetes/deploy/tidb-operator.md)在集群中安装 TiDB Operator，再根据[在标准 Kubernetes 集群上部署 TiDB 集群](/dev/tidb-in-kubernetes/deploy/general-kubernetes.md)来部署你的 TiDB 集群。对于生产级 TiDB 集群，你还需要参考 [TiDB 集群环境要求](/dev/tidb-in-kubernetes/deploy/prerequisites.md)调整 Kubernetes 集群配置并根据[本地 PV 配置](/dev/tidb-in-kubernetes/reference/configuration/storage-class.md#本地-pv-配置)为你的 Kubernetes 集群配置本地 PV，以满足 TiKV 的低延迟本地存储需求。
 
-## 安装 Helm
+在任何环境上部署前，都可以参考 [TiDB 集群配置](/dev/tidb-in-kubernetes/reference/configuration/tidb-cluster.md)来自定义 TiDB 配置。
 
-参考 [使用 Helm](/dev/tidb-in-kubernetes/reference/tools/in-kubernetes.md#使用-helm) 安装 Helm 并配置 PingCAP 官方 chart 仓库。
+部署完成后，你可以参考下面的文档进行 Kubernetes 上 TiDB 集群的使用和运维：
 
-## 配置本地持久化卷
++ [部署 TiDB 集群](/dev/tidb-in-kubernetes/deploy/general-kubernetes.md)
++ [访问 TiDB 集群](/dev/tidb-in-kubernetes/deploy/access-tidb.md)
++ [TiDB 集群扩缩容](/dev/tidb-in-kubernetes/scale-in-kubernetes.md)
++ [TiDB 集群升级](/dev/tidb-in-kubernetes/upgrade/tidb-cluster.md#升级-tidb-版本)
++ [TiDB 集群配置变更](/dev/tidb-in-kubernetes/upgrade/tidb-cluster.md#更新-tidb-集群配置)
++ [TiDB 集群备份恢复](/dev/tidb-in-kubernetes/maintain/backup-and-restore.md)
++ [配置 TiDB 集群故障自动转移](/dev/tidb-in-kubernetes/maintain/auto-failover.md)
++ [监控 TiDB 集群](/dev/tidb-in-kubernetes/monitor/tidb-in-kubernetes.md)
++ [TiDB 集群日志收集](/dev/tidb-in-kubernetes/maintain/log-collecting.md)
++ [维护 TiDB 所在的 Kubernetes 节点](/dev/tidb-in-kubernetes/maintain/kubernetes-node.md)
 
-### 准备本地卷
+当集群出现问题需要进行诊断时，你可以：
 
-参考[本地 PV 配置](/dev/tidb-in-kubernetes/reference/configuration/storage-class.md#本地-pv-配置)在你的 Kubernetes 集群中配置本地持久化卷。
++ 查阅 [Kubernetes 上的 TiDB FAQ](/dev/tidb-in-kubernetes/faq.md) 寻找是否存在现成的解决办法；
++ 参考 [Kubernetes 上的 TiDB 故障诊断](/dev/tidb-in-kubernetes/troubleshoot.md)解决故障。
 
-## 安装 TiDB Operator
+Kubernetes 上的 TiDB 提供了专用的命令行工具 `tkctl` 用于集群管理和辅助诊断，同时，在 Kubernetes 上，TiDB 的部分生态工具的使用方法也有所不同，你可以：
 
-TiDB Operator 使用 [CRD (Custom Resource Definition)](https://kubernetes.io/docs/tasks/access-kubernetes-api/custom-resources/custom-resource-definitions/) 扩展 Kubernetes，所以要使用 TiDB Operator，必须先创建 `TidbCluster` 自定义资源类型。只需要在你的 Kubernetes 集群上创建一次即可：
++ 参考 [`tkctl` 使用指南](/dev/tidb-in-kubernetes/reference/tools/tkctl.md) 来使用 `tkctl`；
++ 参考 [Kubernetes 上的 TiDB 相关工具使用指南](/dev/tidb-in-kubernetes/reference/tools/in-kubernetes.md)来了解 TiDB 生态工具在 Kubernetes 上的使用方法。
 
-{{< copyable "shell-regular" >}}
-
-```shell
-kubectl apply -f https://raw.githubusercontent.com/pingcap/tidb-operator/master/manifests/crd.yaml && \
-kubectl get crd tidbclusters.pingcap.com
-```
-
-创建 `TidbCluster` 自定义资源类型后，接下来在 Kubernetes 集群上安装 TiDB Operator。
-
-1. 获取你要安装的 `tidb-operator` chart 中的 `values.yaml` 文件：
-
-    {{< copyable "shell-regular" >}}
-
-    ```shell
-    mkdir -p /home/tidb/tidb-operator && \
-    helm inspect values pingcap/tidb-operator --version=<chart-version> > /home/tidb/tidb-operator/values-tidb-operator.yaml
-    ```
-
-    > **注意：**
-    > 
-    > `<chart-version>` 在后续文档中代表 chart 版本，例如 `v1.0.0`，可以通过 `helm search -l tidb-operator` 查看当前支持的版本。
-
-2. 配置 TiDB Operator
-
-    TiDB Operator 里面会用到 `k8s.gcr.io/kube-scheduler` 镜像，如果下载不了该镜像，可以修改 `/home/tidb/tidb-operator/values-tidb-operator.yaml` 文件中的 `scheduler.kubeSchedulerImage` 为 `registry.cn-hangzhou.aliyuncs.com/google_containers/kube-scheduler`。
-
-3. 安装 TiDB Operator
-
-    {{< copyable "shell-regular" >}}
-
-    ```shell
-    helm install pingcap/tidb-operator --name=tidb-operator --namespace=tidb-admin --version=<chart-version> -f /home/tidb/tidb-operator/values-tidb-operator.yaml && \
-    kubectl get po -n tidb-admin -l app.kubernetes.io/name=tidb-operator
-    ```
-
-## 自定义 TiDB Operator
-
-通过修改 `/home/tidb/tidb-operator/values-tidb-operator.yaml` 中的配置自定义 TiDB Operator。后续文档使用 `values.yaml` 指代 `/home/tidb/tidb-operator/values-tidb-operator.yaml`。
-
-TiDB Operator 有两个组件：
-
-* tidb-controller-manager
-* tidb-scheduler
-
-这两个组件是无状态的，通过 `Deployment` 部署。你可以在 `values.yaml` 中自定义资源 `limit`、`request` 和 `replicas`。
-
-修改为 `values.yaml` 后，执行下面命令使配置生效：
-
-{{< copyable "shell-regular" >}}
-
-```shell
-helm upgrade tidb-operator pingcap/tidb-operator --version=<chart-version> -f /home/tidb/tidb-operator/values-tidb-operator.yaml
-```
+最后，当 TiDB Operator 发布新版本时，你可以参考[升级 TiDB Operator](/dev/tidb-in-kubernetes/upgrade/tidb-operator.md) 进行版本更新。
