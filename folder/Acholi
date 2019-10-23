@@ -1,85 +1,100 @@
 ---
-title: crwdns100174:0crwdne100174:0
-category: crwdns100176:0crwdne100176:0
+title: crwdns101270:0crwdne101270:0
+category: crwdns101272:0crwdne101272:0
 ---
 
-# crwdns100178:0crwdne100178:0
+# crwdns101274:0crwdne101274:0
 
-crwdns100180:0crwdne100180:0
+crwdns101276:0crwdne101276:0
 
-## crwdns100182:0crwdne100182:0
+## crwdns101278:0crwdne101278:0
+-   crwdns101280:0crwdne101280:0
+-   crwdns101282:0crwdne101282:0
 
-crwdns100184:0crwdne100184:0
+    crwdns101284:0crwdne101284:0
 
-- crwdns100186:0crwdne100186:0
-- crwdns100188:0crwdne100188:0
-- crwdns100190:0[options]crwdne100190:0
+-   crwdns101286:0crwdne101286:0
 
-crwdns100192:0crwdne100192:0
+    crwdns101288:0crwdne101288:0
 
-## <span id="explain-output-format">crwdns100194:0crwdne100194:0</span>
+## crwdns101290:0crwdne101290:0
+### crwdns101292:0crwdne101292:0
 
-crwdns100196:0crwdne100196:0
+crwdns101294:0crwdne101294:0
 
-| crwdns100198:0crwdne100198:0 | crwdns100200:0crwdne100200:0 |
-|:---------------------------- |:---------------------------- |
-| crwdns100202:0crwdne100202:0 | crwdns100204:0crwdne100204:0 |
-| crwdns100206:0crwdne100206:0 | crwdns100208:0crwdne100208:0 |
-| crwdns100210:0crwdne100210:0 | crwdns100212:0crwdne100212:0 |
-| crwdns100214:0crwdne100214:0 | crwdns100216:0crwdne100216:0 |
-| crwdns100218:0crwdne100218:0 | crwdns100220:0crwdne100220:0 |
-| crwdns100222:0crwdne100222:0 | crwdns100224:0crwdne100224:0 |
+crwdns101296:0crwdne101296:0
 
-## crwdns100226:0crwdne100226:0
+```bashrc
+crwdns101298:0$JAVA_HOMEcrwdnd101298:0$PATHcrwdne101298:0
+```
 
-### crwdns100228:0crwdne100228:0
+crwdns101300:0crwdne101300:0
 
-crwdns100230:0crwdne100230:0
+```
+crwdns101302:0crwdne101302:0
+```
 
-crwdns100232:0crwdne100232:0
+### crwdns101304:0crwdne101304:0
 
-### crwdns100234:0crwdne100234:0
+crwdns101306:0crwdne101306:0
 
-crwdns100236:0crwdne100236:0
+```
+crwdns101308:0crwdne101308:0
+```
 
-crwdns100238:0crwdne100238:0
+crwdns101310:0crwdne101310:0
 
-### crwdns100240:0crwdne100240:0
+```
+crwdns101312:0crwdne101312:0
+```
 
-crwdns100242:0crwdne100242:0
+crwdns101314:0crwdne101314:0
 
-## crwdns100244:0crwdne100244:0
+```
+crwdns101316:0crwdne101316:0
+```
 
-### crwdns100246:0crwdne100246:0
+> crwdns101318:0crwdne101318:0
 
-crwdns100248:0crwdne100248:0
+crwdns101320:0crwdne101320:0
 
-### crwdns100250:0crwdne100250:0
+```
+crwdns101322:0[TPCH_001]crwdne101322:0
+```
 
-crwdns100252:0crwdne100252:0
+## crwdns101324:0crwdne101324:0
 
-crwdns100254:0crwdne100254:0
+crwdns101326:0crwdne101326:0
 
-### crwdns100256:0crwdne100256:0
+```
+crwdns101328:0crwdne101328:0
+```
 
-crwdns100258:0crwdne100258:0
+```scala
+crwdns101330:0crwdne101330:0
+```
 
-### crwdns100260:0crwdne100260:0
+crwdns101332:0crwdne101332:0
 
-crwdns100262:0crwdne100262:0
+```scala
+crwdns101334:0crwdne101334:0
+```
 
-### crwdns100264:0crwdne100264:0
+crwdns101336:0crwdne101336:0
 
-crwdns100266:0crwdne100266:0
+```
+crwdns101338:0crwdne101338:0
+```
 
-### crwdns100268:0crwdne100268:0
+crwdns101340:0crwdne101340:0
 
-crwdns100270:0crwdne100270:0
+```scala
+crwdns101342:0crwdne101342:0
+```
 
-crwdns100272:0crwdne100272:0
+crwdns101344:0crwdne101344:0
 
-### crwdns100274:0crwdne100274:0
-
-crwdns100276:0crwdne100276:0
-
-crwdns100278:0crwdne100278:0
+```
+crwdns101346:0crwdne101346:0
+```
+crwdns101348:0crwdne101348:0
