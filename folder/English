@@ -1,94 +1,99 @@
 ---
-title: 实用工具语句
+title: TiDB 用户文档
 category: user guide
 ---
 
-## `DESCRIBE` 语句
+# TiDB 用户文档
 
-`DESCRIBE` 和 `EXPLAIN` 是同义词，另外还可以缩写为 `DESC`。请参考 `EXPLAIN` 语句的用法。
+TiDB 支持 SQL92 标准并兼容 MySQL 语法，为了帮您更好地使用 TiDB, 该文档沿用了 MySQL 大部分的文档结构， 同时针对 TiDB 特有的功能作了详细的描述。
 
-## `EXPLAIN` 语句
+## TiDB 数据库管理
 
-```sql
-{EXPLAIN | DESCRIBE | DESC}
-    tbl_name [col_name]
+- [TiDB 服务](tidb-server.md)
+- [TiDB 进程启动参数](server-command-option.md)
+- [TiDB 数据目录](tidb-server.md#tidb-数据目录)
+- [TiDB 系统数据库](system-database.md)
+- [TiDB 系统变量](variable.md)
+- [TiDB 专用系统变量和语法](tidb-specific.md)
+- [TiDB 服务器日志文件](tidb-server.md#tidb-服务器日志文件)
+- [TiDB 访问权限管理](privilege.md)
+- [TiDB 用户账户管理](user-account-management.md)
+- [使用加密连接](encrypted-connections.md)
 
-{EXPLAIN | DESCRIBE | DESC}
-    [explain_type]
-    explainable_stmt
+## SQL 优化
 
-explain_type:
-    FORMAT = format_name
+- [理解 TiDB 执行计划](understanding-the-query-execution-plan.md)
+- [统计信息](statistics.md)
 
-format_name:
-    "DOT"
+## 语言结构
 
-explainable_stmt: {
-    SELECT statement
-  | DELETE statement
-  | INSERT statement
-  | REPLACE statement
-  | UPDATE statement
-}
-```
++ 字面值
+    - [字符串字面值](literal-value-string-literals.md)
+    - [数字字面值](literal-value-numeric-literals.md)
+    - [NULL 值](literal-value-null-values.md)
+    - [十六进制字面值](literal-value-hex-decimal.md)
+    - [date 和 time 字面值](literal-value-date-and-time-literals.md)
+    - [布尔值](literal-value-boolean.md)
+    - [bit-val 字面值](literal-value-bit-value.md)
+- [数据库、表、索引、列和别名](schema-object-names.md)
+- [关键字和保留字](keywords-and-reserved-words.md)
+- [用户变量](user-defined-variables.md)
+- [表达式语法](expression-syntax.md)
+- [注释语法](comment-syntax.md)
 
-`EXPLAIN` 语句详细信息参考[理解 TiDB 执行计划](understanding-the-query-execution-plan.md)章节。
+## 字符集和时区
 
-除了 MySQL 标准的结果格式之外，TiDB 还支持输出 DotGraph 结果，这时需要指定 `FORMAT = "dot"`，示例如下：
+- [字符集支持](character-set-support.md)
+- [字符集配置](character-set-configuration.md)
+- [时区](time-zone.md)
 
-```sql
-create table t(a bigint, b bigint);
-desc format = "dot" select A.a, B.b from t A join t B on A.a > B.b where A.a < 10;
+## 数据类型
 
-TiDB > desc format = "dot" select A.a, B.b from t A join t B on A.a > B.b where A.a < 10;desc format = "dot" select A.a, B.b from t A join t B on A.a > B.b where A.a < 10;
-+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| dot contents                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-|
-digraph HashRightJoin_7 {
-subgraph cluster7{
-node [style=filled, color=lightgrey]
-color=black
-label = "root"
-"HashRightJoin_7" -> "TableReader_10"
-"HashRightJoin_7" -> "TableReader_12"
-}
-subgraph cluster9{
-node [style=filled, color=lightgrey]
-color=black
-label = "cop"
-"Selection_9" -> "TableScan_8"
-}
-subgraph cluster11{
-node [style=filled, color=lightgrey]
-color=black
-label = "cop"
-"TableScan_11"
-}
-"TableReader_10" -> "Selection_9"
-"TableReader_12" -> "TableScan_11"
-}
- |
-+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-1 row in set (0.00 sec)
-```
+- [数值类型](datatype.md#数值类型)
+- [日期和时间类型](date-and-time-types.md)
+- [字符串类型](datatype.md#字符串类型)
+- [JSON 数据类型](datatype.md#json-类型)
+- [数据类型默认值](datatype.md#数据类型的默认值)
 
-如果电脑上安装了 `dot` 程序 (包含在 graphviz 软件包中)，可以通过如下方式生成 PNG 文件：
+## 函数和操作符
 
-```bash
-dot xx.dot -T png -O
+- [函数和操作符概述](functions-and-operators-reference.md)
+- [表达式求值的类型转换](type-conversion-in-expression-evaluation.md)
+- [操作符](operators.md)
+- [控制流程函数](control-flow-functions.md)
+- [字符串函数](string-functions.md)
+- [数值函数与操作符](numeric-functions-and-operators.md)
+- [日期和时间函数](date-and-time-functions.md)
+- [位函数和操作符](bit-functions-and-operators.md)
+- [Cast 函数和操作符](cast-functions-and-operators.md)
+- [加密和压缩函数](encryption-and-compression-functions.md)
+- [信息函数](information-functions.md)
+- [JSON 函数](json-functions.md)
+- [信息函数](information-functions.md)
+- 全局事务 ID 函数 [TBD]
+- [GROUP BY 聚合函数](aggregate-group-by-functions.md)
+- [其他函数](miscellaneous-functions.md)
+- [精度数学](precision-math.md)
 
-这里的 xx.dot 是上面的语句返回结果。
-```
+## SQL 语句语法
 
-如果没有安装 `dot`，可以将结果拷贝到[这个网站](http://www.webgraphviz.com/)，可以得到一个树状图：
+- [数据定义语句(DDL)](ddl.md)
+- [数据操作语句(DML)](dml.md)
+- [事务语句](transaction.md)
+- [数据库管理语句](admin.md)
+- [Prepared SQL 语句语法](prepare.md)
+- [实用工具语句](util.md)
+- [TiDB SQL 语法图](https://pingcap.github.io/sqlgram/)
 
-![Explain Dot](../media/explain_dot.png)
+## JSON 支持
+- [JSON 支持](json-functions-generated-column.md)
 
-## `USE` 语句
+## Connectors 和 API
+- [Connectors 和 API](connection-and-APIs.md)
 
-```sql
-USE db_name
-```
+## 错误码与故障诊断
+- [错误码与故障诊断](error.md)
 
-切换需要使用的 Database 的时候，如果 SQL 语句中的表没有显式指定的 Database，即默认使用当前选定的 Database。
+## 与 MySQL 兼容性对比
+- [与 MySQL 兼容性对比](mysql-compatibility.md)
+
