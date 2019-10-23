@@ -1,220 +1,188 @@
 ---
-title: DM Portal 简介
+title: 使用 DM 同步数据
 category: reference
+aliases:
+  - '/docs-cn/tools/dm/practice/'
 ---
 
-# DM Portal 简介
+# 使用 DM 同步数据
+
+本文介绍如何使用 DM (Data Migration) 同步数据。
 
-当前版本的 DM 提供了丰富多样的功能特性，包括 [Table routing](/v3.0/reference/tools/data-migration/features/overview.md#table-routing)，[Black & white table lists](/v3.0/reference/tools/data-migration/features/overview.md#black--white-table-lists)，[Binlog event filter](/v3.0/reference/tools/data-migration/features/overview.md#binlog-event-filter) 等。但这些功能特性同时也增加了用户使用 DM 的复杂度，尤其在编写 [DM 任务配置](/v3.0/reference/tools/data-migration/configure/task-configuration-file.md)的时候。
+## 第 1 步：部署 DM 集群
 
-针对这个问题，DM 提供了一个精简的网页程序 DM Portal，能够帮助用户以可视化的方式去配置需要的同步任务，并且生成可以直接让 DM 直接执行的 `task.yaml` 文件。
+目前推荐使用 DM-Ansible 部署 DM 集群，具体部署方法参照 [使用 DM-Ansible 部署 DM 集群](/v3.0/how-to/deploy/data-migration-with-ansible.md)；也可以使用 binary 部署 DM 集群用于体验或者测试，具体部署方法参照[使用 DM binary 部署 DM 集群](/v3.0/how-to/deploy/data-migration-with-binary.md)。
 
-## 功能描述
+> **注意：**
+> 
+> - 在 DM 所有的配置文件中，数据库的密码要使用 dmctl 加密后的密文。如果数据库密码为空，则不需要加密。关于如何使用 dmctl 加密明文密码，参考[使用 dmctl 加密上游 MySQL 用户密码](/v3.0/how-to/deploy/data-migration-with-ansible.md#使用-dmctl-加密上游-mysql-用户密码)。
+> - 上下游数据库用户必须拥有相应的读写权限。
 
-### 同步模式配置
+## 第 2 步：检查集群信息
 
-支持 DM 的三种同步模式：
+使用 DM-Ansible 部署 DM 集群后，相关配置信息如下：
 
-- 全量同步
-- 增量同步
-- All（全量+增量）
+- DM 集群相关组件配置信息
 
-### 实例信息配置
+    | 组件         | 主机           | 端口   |
+    |:---------- |:------------ |:---- |
+    | dm_worker1 | 172.16.10.72 | 8262 |
+    | dm_worker2 | 172.16.10.73 | 8262 |
+    | dm_master  | 172.16.10.71 | 8261 |
 
-支持配置库表同步路由方式，能够支持 DM 中分库分表合并的配置方式。
+- 上下游数据库实例相关信息
 
-### binlog 过滤配置
+    | 数据库实例      | 主机           | 端口   | 用户名  | 加密密码                             |
+    |:---------- |:------------ |:---- |:---- |:-------------------------------- |
+    | 上游 MySQL-1 | 172.16.10.81 | 3306 | root | VjX8cEeTX+qcvZ3bPaO4h0C80pe/1aU= |
+    | 上游 MySQL-2 | 172.16.10.82 | 3306 | root | VjX8cEeTX+qcvZ3bPaO4h0C80pe/1aU= |
+    | 下游 TiDB    | 172.16.10.83 | 4000 | root |                                  |
 
-支持对数据库、数据表配置 binlog event 过滤。
+- dm-master 进程配置文件 `{ansible deploy}/conf/dm-master.toml` 中的配置
 
-### 配置文件生成
+    ```toml
+    # Master 配置
 
-支持配置文件创建，能够将配置文件下载到本地并且同时会在 dm-portal 服务器的 `/tmp/` 目录下自动创建。
+    [[deploy]]
+    source-id = "mysql-replica-01"
+    dm-worker = "172.16.10.72:8262"
 
-### 使用限制
+    [[deploy]]
+    source-id = "mysql-replica-02"
+    dm-worker = "172.16.10.73:8262"
+    ```
+
+    > **注意：**
+    > 
+    > `{ansible deploy}/conf/dm-master.toml` 中的 `{ansible deploy}` 表示使用 DM-Ansible 部署 DM 时通过 `deploy_dir` 参数指定的目录。
 
-当前的 DM 配置可视化生成页面能够覆盖绝大部分的 DM 配置场景，但也有一定的使用限制：
+## 第 3 步：配置任务
 
-- 不支持 [Binlog event filter](/v3.0/reference/tools/data-migration/features/overview.md#binlog-event-filter) 的 SQL pattern 方式
-- 编辑功能不支持解析用户之前写的 `task.yaml` 文件，页面只能编辑由页面生成的 `task.yaml` 文件
-- 编辑功能不支持修改实例配置信息，如果用户需要调整实例配置，需要重新生成 `task.yaml` 文件
-- 页面的上游实例配置仅用于获取上游库表结构，DM-worker 里依旧需要配置对应的上游实例信息
-- 生成的 `task.yaml` 中，默认 mydumper-path 为 `./bin/mydumper`，如果实际使用其他路径，需要在生成的配置文件中进行手动修改。
+假设需要将 MySQL-1 和 MySQL-2 实例的 `test_db` 库的 `test_table` 表以**全量+增量**的模式同步到下游 TiDB 的 `test_db` 库的 `test_table` 表。
 
-## 部署使用
+复制并编辑 `{ansible deploy}/conf/task.yaml.example`，生成如下任务配置文件 `task.yaml`：
 
-### Binary 部署
+```yaml
+# 任务名，多个同时运行的任务不能重名。
+name: "test"
+# 全量+增量 (all) 同步模式。
+task-mode: "all"
+# 下游 TiDB 配置信息。
+target-database:
+  host: "172.16.10.83"
+  port: 4000
+  user: "root"
+  password: ""
 
-DM Portal 可以在 [dm-portal-latest-linux-amd64.tar.gz](https://download.pingcap.org/dm-portal-latest-linux-amd64.tar.gz) 下载，通过 `./dm-portal` 的命令即可直接启动。
+# 当前数据同步任务需要的全部上游 MySQL 实例配置。
+mysql-instances:
+-
+  # 上游实例或者复制组 ID，参考 `inventory.ini` 的 `source_id` 或者 `dm-master.toml` 的 `source-id 配置`。
+  source-id: "mysql-replica-01"
+  # 需要同步的库名或表名的黑白名单的配置项名称，用于引用全局的黑白名单配置，全局配置见下面的 `black-white-list` 的配置。
+  black-white-list: "global"
+  # Mydumper 的配置项名称，用于引用全局的 Mydumper 配置。
+  mydumper-config-name: "global"
 
-* 如果在本地启动，浏览器访问 `127.0.0.1:8280` 即可使用。
-* 如果在服务器上启动，需要为服务器上配置访问代理。
+-
+  source-id: "mysql-replica-02"
+  black-white-list: "global"
+  mydumper-config-name: "global"
 
-### DM Ansible 部署
+# 黑白名单全局配置，各实例通过配置项名引用。
+black-white-list:
+  global:
+    do-tables:                        # 需要同步的上游表的白名单。
+    - db-name: "test_db"              # 需要同步的表的库名。
+      tbl-name: "test_table"          # 需要同步的表的名称。
 
-可以使用 DM Ansible 部署 DM Portal，具体部署方法参照[使用 DM Ansible 部署 DM 集群](/v3.0/how-to/deploy/data-migration-with-ansible.md)。
+# Mydumper 全局配置，各实例通过配置项名引用。
+mydumpers:
+  global:
+    mydumper-path: "./bin/mydumper"   # Mydumper 二进制文件的路径。
+    extra-args: "-B test_db -T test_table"  # 只导出 `test_db` 库中的 `test_table` 表，可设置 Mydumper 的任何参数。
+```
 
-## 使用说明
+## 第 4 步：启动任务
 
-### 新建规则
+为了提前发现数据同步任务的一些配置错误，DM 中增加了[前置检查](/v3.0/reference/tools/data-migration/precheck.md)功能：
 
-#### 功能描述
+- 启动数据同步任务时，DM 自动检查相应的权限和配置。
+- 也可使用 `check-task` 命令手动前置检查上游的 MySQL 实例配置是否符合 DM 的配置要求。
 
-用于新建一个 `task.yaml` 文件，需要选择同步模式、配置上下游实例、配置库表路由，配置 binlog 过滤。
+> **注意：**
+> 
+> 第一次启动数据同步任务时，必须确保上游数据库已配置。否则，启动任务时会报错。
 
-#### 操作步骤
+1. 进入 dmctl 目录 `/home/tidb/dm-ansible/resources/bin/`。
 
-登录 dm-portal 页面，点击**新建任务规则**。
+2. 执行以下命令启动 dmctl。
 
-### 基础信息配置
+    {{< copyable "shell-regular" >}}
 
-#### 功能描述
+    ```bash
+    ./dmctl --master-addr 172.16.10.71:8261
+    ```
 
-用于填写任务名称，以及选择任务类型。
+3. 执行以下命令启动数据同步任务。其中，`task.yaml` 是之前编辑的配置文件。
 
-#### 前置条件
+    {{< copyable "" >}}
 
-已选择**新建同步规则**。
+    ```bash
+    » start-task ./task.yaml
+    ```
 
-#### 操作步骤
+    - 如果执行该命令后返回的结果如下，则表明任务已成功启动。
 
-1. 填写任务名称。
-2. 选择任务类型。
+        ```json
+        {
+            "result": true,
+            "msg": "",
+            "workers": [
+                {
+                    "result": true,
+                    "worker": "172.16.10.72:8262",
+                    "msg": ""
+                },
+                {
+                    "result": true,
+                    "worker": "172.16.10.73:8262",
+                    "msg": ""
+                }
+            ]
+        }
+        ```
 
-![DM Portal BasicConfig](/media/dm-portal-basicconfig.png)
+    - 如果任务启动失败，可根据返回结果的提示进行配置变更后执行 `start-task task.yaml` 命令重新启动任务。
 
-### 实例信息配置
+## 第 5 步：查询任务
 
-#### 功能描述
+如需了解 DM 集群中是否存在正在运行的同步任务及任务状态等信息，可在 dmctl 内使用以下命令进行查询：
 
-用于配置上下游实例信息，包括 Host、Port、Username、Password。
+{{< copyable "" >}}
 
-#### 前置条件
+```bash
+» query-status
+```
 
-已填写任务名称和选择任务类型。
+## 第 6 步：停止任务
 
-#### 注意事项
+如果不再需要进行数据同步，可以在 dmctl 内使用以下命令停止同步任务：
 
-如果任务类型选择**增量**或者 **All**，在配置上游实例信息时候，还需要配置 binlog-file 和 binlog-pos。
+{{< copyable "" >}}
 
-#### 操作步骤
+```bash
+» stop-task test
+```
 
-1. 填写上游实例信息。
-2. 填写下游实例信息。
-3. 点击**下一步**。
+其中的 `test` 是 `task.yaml` 配置文件中 `name` 配置项设置的任务名。
 
-![DM Portal InstanceConfig](/media/dm-portal-instanceconfig.png)
+## 第 7 步：监控任务与查看日志
 
-### binlog 过滤配置
+如果使用 DM-Ansible 部署 DM 集群时，正确部署了 Prometheus 与 Grafana，且 Grafana 的地址为 `172.16.10.71`，可在浏览器中打开 <http://172.16.10.71:3000> 进入 Grafana，选择 DM 的 dashboard 即可查看 DM 相关监控项。
 
-#### 功能描述
+DM 在运行过程中，DM-worker, DM-master 及 dmctl 都会通过日志输出相关信息。各组件的日志目录如下：
 
-用于配置上游的 binlog 过滤，可以选择需要过滤的 DDL/DML，并且在数据库上配置的 filter 后会自动给其下的数据表继承。
-
-#### 前置条件
-
-已经配置好上下游实例信息并且连接验证没问题。
-
-#### 注意事项
-
-* binlog 过滤配置只能在上游实例处进行修改编辑，一旦数据库或者数据表被移动到下游实例后，就不可以进行修改编辑。
-* 在数据库上配置的 binlog 过滤会自动被其下的数据表继承。
-
-#### 操作步骤
-
-1. 点击需要配置的数据库或者数据表。
-2. 点击编辑按钮，选择需要过滤的 binlog 类型。
-
-![DM Portal InstanceShow](/media/dm-portal-instanceshow.png)
-
-![DM Portal BinlogFilter 1](/media/dm-portal-binlogfilter-1.png)
-
-![DM Portal BinlogFilter 2](/media/dm-portal-binlogfilter-2.png)
-
-### 库表路由配置
-
-#### 功能描述
-
-可以选择需要同步的数据库和数据表，并且进行修改名称、合并库、合并表等操作。可以对上一步操作进行撤销，可以对库表路由配置进行全部重置。在完成任务配置后，DM Portal 会帮忙生成对应的 `task.yaml` 文件。
-
-#### 前置条件
-
-* 已经配置好需要的 binlog 过滤规则。
-
-#### 注意事项
-
-* 在合并库表操作的时候，不允许批量操作，只能逐一拖动。
-* 在合表库表操作的时候，只能对数据表进行拖动操作，不能对数据库进行数据库进行拖动操作。
-
-#### 操作步骤
-
-1. 在**上游实例**处，选择需要同步的数据库和数据表。
-2. 点击移动按钮，将需要同步的库表移动至**下游实例**处。
-3. 点击右键按钮，可以对库表进行改名操作。
-4. 选中需要操作的数据表，可以拖动至别的数据表图标上创建出合并表；可以拖动到数据库图标上移动至该库下；可以拖动到 target-instance 图标上移动到一个新的数据库下。
-5. 点击**完成**，自动下载 `task.yaml` 到本地，并且在 DM Portal 服务器上的 `/tmp/` 目录下自动创建一份 `task.yaml` 配置文件。
-
-##### 移动同步库表
-
-![DM Portal TableRoute 1](/media/dm-portal-tableroute-1.png)
-
-![DM Portal TableRoute 2](/media/dm-portal-tableroute-2.png)
-
-##### 右键修改库表名称
-
-![DM Portal ChangeTableName](/media/dm-portal-changetablename.png)
-
-##### 合并数据表操作
-
-![DM Portal MergeTable 1](/media/dm-portal-mergetable-1.png)
-
-![DM Portal MergeTable 2](/media/dm-portal-mergetable-2.png)
-
-##### 移动数据表至其他数据库
-
-![DM Portal MoveToDB 1](/media/dm-portal-movetodb-1.png)
-
-![DM Portal MoveToDB 2](/media/dm-portal-movetodb-2.png)
-
-##### 移动数据表至新建默认数据库
-
-![DM Portal MoveToNewDB 1](/media/dm-portal-movetonewdb-1.png)
-
-![DM Portal MoveToNewDB 2](/media/dm-portal-movetonewdb-2.png)
-
-##### 撤销本次操作
-
-![DM Portal Revert](/media/dm-portal-revert.png)
-
-##### 清空下游实例
-
-![DM Portal Reset](/media/dm-portal-reset.png)
-
-##### 完成并下载
-
-![DM Portal GenerateConfig](/media/dm-portal-generateconfig.png)
-
-### 编辑规则
-
-#### 功能描述
-
-可以将之前创建的 `task.yaml` 上传后，解析出来之前的填写的配置信息，对部分配置进行修改。
-
-#### 前置条件
-
-* 已经创建出 `task.yaml` 文件。
-* 非 DM Portal 创建出来的 `task.yaml` 文件不可使用。
-
-#### 注意事项
-
-* 不允许修改实例配置信息
-
-#### 操作步骤
-
-1. 在首页，点击**编辑同步规则**。
-2. 选择上传 `task.yaml` 文件。
-3. 解析成功后，页面会自动跳转。
-
-![DM Portal EditConfig](/media/dm-portal-editconfig.png)
-
-![DM Portal UploadConfig](/media/dm-portal-uploadconfig.png)
+- DM-master 日志目录：通过 DM-master 进程参数 `--log-file` 设置。如果使用 DM-Ansible 部署 DM，则日志目录位于 DM-master 节点的 `{ansible deploy}/log/dm-master.log`。
+- DM-worker 日志目录：通过 DM-worker 进程参数 `--log-file` 设置。如果使用 DM-Ansible 部署 DM，则日志目录位于 DM-worker 节点的 `{ansible deploy}/log/dm-worker.log`。
+- dmctl 日志目录：与其二进制文件目录相同。
