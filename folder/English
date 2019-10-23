@@ -1,59 +1,61 @@
 ---
-title: TiDB 2.0 RC3 Release Notes
+title: TiDB 2.1 RC5 Release Notes
 category: Releases
 ---
 
-# TiDB 2.0 RC3 Release Notes
+# TiDB 2.1 RC5 Release Notes
 
-2018 年 3 月 23 日，TiDB 发布 2.0 RC3 版。该版本在 2.0 RC2 版的基础上，对 MySQL 兼容性、系统稳定性和优化器做了很多改进。
+2018 年 11 月 12 日，TiDB 发布 2.1 RC5 版。相比 2.1 RC4 版本，该版本对系统稳定性、优化器、统计信息以及执行引擎做了很多改进。
 
 ## TiDB
 
-- 修复部分场景下 `MAX/MIN` 结果不正确的问题
-- 修复部分场景下 `Sort Merge Join` 结果未按照 Join Key 有序的问题
-- 修复边界条件下 `uint` 和 `int` 比较的错误
-- 完善浮点数类型的长度和精度检查，提升 MySQL 兼容性
-- 完善时间类型解析报错日志，添加更多错误信息
-- 完善内存控制，新增对 `IndexLookupExecutor` 的内存统计
-- 优化 `ADD INDEX` 的执行速度，部分场景下速度大幅度提升
-- `GROUP BY` 子句为空时使用 Stream Aggregation 算子，提升速度
-- 支持通过 `STRAIGHT_JOIN` 来关闭优化器的 `Join Reorder` 优化
-- `ADMIN SHOW DDL JOBS` 输出更详细的 DDL 任务状态信息
-- 支持 `ADMIN SHOW DDL JOB QUERIES` 查询当前正在运行的 DDL 任务的原始语句
-- 支持 `ADMIN RECOVER INDEX` 命令，用于灾难恢复情况下修复索引数据
-- `ADD INDEX` 操作变更为低优先级，降低对线上业务影响
-- 支持参数为 JSON 类型的 `SUM/AVG` 等聚合函数
-- 支持配置文件修改 `lower_case_table_names` 系统变量，用于支持 OGG 数据同步工具
-- 提升对 Navicat 管理工具的兼容性
-- 支持在 CRUD 操作中使用隐式的行 ID
++ SQL 优化器
+    - 修复 `IndexReader` 在某些情况下读取的 handle 不正确的问题 [#8132](https://github.com/pingcap/tidb/pull/8132)
+    - 修复 `IndexScan Prepared` 语句在使用 `Plan Cache` 的时候的问题 [#8055](https://github.com/pingcap/tidb/pull/8055)
+    - 修复 `Union` 语句结果不稳定的问题 [#8165](https://github.com/pingcap/tidb/pull/8165)
++ 执行器
+    - 提升 TiDB 插入和更新宽表的性能 [#8024](https://github.com/pingcap/tidb/pull/8024)
+    - 内建函数 `Truncate` 支持 unsigned `int` 参数 [#8068](https://github.com/pingcap/tidb/pull/8068)
+    - 修复转换 JSON 数据到 decimal 类型出错的问题 [#8109](https://github.com/pingcap/tidb/pull/8109)
+    - 修复 float 类型在 `Update` 时出错的问题 [#8170](https://github.com/pingcap/tidb/pull/8170)
++ 统计信息
+    - 修复点查在某些情况下，统计信息出现错误的问题 [#8035](https://github.com/pingcap/tidb/pull/8035)
+    - 修复统计信息某些情况下在 primary key 的选择率的问题 [#8149](https://github.com/pingcap/tidb/pull/8149)
+    - 修复被删除的表的统计信息长时间没有清理的问题 [#8182](https://github.com/pingcap/tidb/pull/8182)
++ Server
+    + 提升日志的可读性，完善日志信息
+        - [#8063](https://github.com/pingcap/tidb/pull/8063)
+        - [#8053](https://github.com/pingcap/tidb/pull/8053)
+        - [#8224](https://github.com/pingcap/tidb/pull/8224)
+    - 修复获取 `infoschema.profiling` 表数据出错的问题 [#8096](https://github.com/pingcap/tidb/pull/8096)
+    - 替换 unix socket，使用 pumps client 来写 binlog [#8098](https://github.com/pingcap/tidb/pull/8098)
+    - 增加环境变量 `tidb_slow_log_threshold` 动态设置 slow log 的阈值 [#8094](https://github.com/pingcap/tidb/pull/8094)
+    - 增加环境变量 `tidb_query_log_max_len` 动态设置日志中被截断的原始 SQL 语句的长度 [#8200](https://github.com/pingcap/tidb/pull/8200)
+    - 增加环境变量 `tidb_opt_write_row_id` 来控制是否允许写入 `_tidb_rowid` [#8218](https://github.com/pingcap/tidb/pull/8218)
+    - ticlient `Scan` 命令增加边界，解决数据扫出边界的问题 [#8081](https://github.com/pingcap/tidb/pull/8081)，[#8247](https://github.com/pingcap/tidb/pull/8247)
++ DDL
+    - 修复在事务中某些情况下执行 DDL 语句出错的问题 [#8056](https://github.com/pingcap/tidb/pull/8056)
+    - 修复 partition 分区表执行 `truncate table` 没有生效的问题 [#8103](https://github.com/pingcap/tidb/pull/8103)
+    - 修复某些情况下 DDL 操作在被 cancel 之后没有正确回滚的问题 [#8057](https://github.com/pingcap/tidb/pull/8057)
+    - 增加命令 `admin show next_row_id`，返回下一个可用的行 ID [#8268](https://github.com/pingcap/tidb/pull/8268)
 
 ## PD
 
-- 支持 Region Merge，合并数据删除后产生的空 Region 或小 Region
-- 添加副本时忽略有大量 pending peer 的节点，提升恢复副本及下线的速度
-- 优化有大量空 Region 时产生的频繁调度问题
-- 优化不同 label 中资源不均衡的场景中 leader balance 调度的速度
-- 添加更多异常 Region 的统计
++ 修复 `pd-ctl` 读取 Region key 的相关问题
+    - [#1298](https://github.com/pingcap/pd/pull/1298)
+    - [#1299](https://github.com/pingcap/pd/pull/1299)
+    - [#1308](https://github.com/pingcap/pd/pull/1308)
++ 修复 `regions/check` API 输出错误的问题 [#1311](https://github.com/pingcap/pd/pull/1311)
++ 修复 PD join 失败后无法重新 join 的问题 [#1279](https://github.com/pingcap/pd/pull/1279)
++ 修复某些情况下 watch leader 会丢失事件的问题 [#1317](https://github.com/pingcap/pd/pull/1317)
 
 ## TiKV
 
-- 支持 Region Merge
-- Raft snapshot 流程完成之后立刻通知 PD，加速调度
-- 增加 Raw DeleteRange API
-- 增加 GetMetric API
-- 减缓 RocksDB sync 文件造成的 I/O 波动
-- 优化了对 delete 掉数据的空间回收机制
-- 完善数据恢复工具 `tikv-ctl`
-- 解决了由于 snapshot 导致下线节点慢的问题
-- Coprocessor 支持 streaming
-- 支持 Readpool，`raw_get/get/batch_get` 性能提升 30%
-- 支持配置 Coprocessor 请求超时时间
-- Coprocessor 支持 streaming aggregation
-- 上报 Region heartbeat 时携带时间信息
-- 限制 snapshot 文件的空间使用，防止占用过多磁盘空间
-- 对长时间不能选出 leader 的 Region 进行记录上报
-- 加速启动阶段的垃圾清理工作
-- 根据 compaction 事件及时更新对应 Region 的 size 信息
-- 对 `scan lock` 的大小进行限制，防止请求超时
-- 使用 `DeleteRange` 加速 Region 删除
-- 支持在线修改 RocksDB 的参数
+- 优化 `WriteConflict` 报错信息 [#3750](https://github.com/tikv/tikv/pull/3750)
+- 增加 panic 标记文件 [#3746](https://github.com/tikv/tikv/pull/3746)
+- 降级 grpcio，避免新版本 gRPC 导致的 segment fault 问题 [#3650](https://github.com/tikv/tikv/pull/3650)
+- 增加 `kv_scan` 接口扫描上界的限制 [#3749](https://github.com/tikv/tikv/pull/3749)
+
+## Tools
+
+- TiDB 支持 TiDB-Binlog cluster，不兼容旧版本 TiDB-Binlog [#8093](https://github.com/pingcap/tidb/pull/8093)，[使用文档](https://github.com/pingcap/docs-cn/blob/master/tools/tidb-binlog-cluster.md)
