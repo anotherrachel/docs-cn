@@ -1,155 +1,249 @@
 ---
-title: crwdns177620:0crwdne177620:0
-category: crwdns177622:0crwdne177622:0
+title: crwdns177108:0crwdne177108:0
+category: crwdns177110:0crwdne177110:0
+aliases:
+  - 'crwdns177112:0crwdne177112:0'
 ---
 
-# crwdns177624:0crwdne177624:0
+# crwdns177114:0crwdne177114:0
 
-crwdns177626:0crwdne177626:0
+crwdns177116:0crwdne177116:0
 
-## crwdns177628:0crwdne177628:0
+## crwdns177118:0crwdne177118:0
 
-crwdns177630:0crwdne177630:0
+- [crwdns177122:0crwdne177122:0](crwdns177120:0crwdne177120:0)
 
-* crwdns177632:0crwdne177632:0
-* crwdns177634:0crwdne177634:0
-* crwdns177636:0crwdne177636:0
-* crwdns177638:0crwdne177638:0
-* crwdns177640:0crwdne177640:0
+- crwdns177124:0crwdne177124:0
 
-crwdns177642:0crwdne177642:0
+crwdns177126:0crwdne177126:0
 
-* crwdns177644:0crwdne177644:0
-* crwdns177646:0crwdne177646:0
-* crwdns177648:0crwdne177648:0
-* crwdns177650:0crwdne177650:0
-* crwdns177652:0crwdne177652:0
+| crwdns177128:0crwdne177128:0 | crwdns177130:0crwdne177130:0 |
+|:---------------------------- |:---------------------------- |
+| crwdns177132:0crwdne177132:0 | crwdns177134:0crwdne177134:0 |
+| crwdns177136:0crwdne177136:0 | crwdns177138:0crwdne177138:0 |
+| crwdns177140:0crwdne177140:0 | crwdns177142:0crwdne177142:0 |
+| crwdns177144:0crwdne177144:0 | crwdns177146:0crwdne177146:0 |
+| crwdns177148:0crwdne177148:0 | crwdns177150:0crwdne177150:0 |
 
-crwdns177654:0crwdne177654:0
+## crwdns177152:0crwdne177152:0
 
-crwdns177656:0crwdne177656:0
+### crwdns177154:0crwdne177154:0
 
-crwdns177658:0crwdne177658:0
+| crwdns177156:0crwdne177156:0 | crwdns177158:0crwdne177158:0 |
+|:---------------------------- |:---------------------------- |
+| crwdns177160:0crwdne177160:0 | crwdns177162:0crwdne177162:0 |
+| crwdns177164:0crwdne177164:0 | crwdns177166:0crwdne177166:0 |
+| crwdns177168:0crwdne177168:0 | crwdns177170:0crwdne177170:0 |
 
-crwdns177660:0crwdne177660:0
+### crwdns177172:0crwdne177172:0
 
-```shell
-crwdns177662:0crwdne177662:0
-```
+| crwdns177174:0crwdne177174:0 | crwdns177176:0crwdne177176:0 |
+|:---------------------------- |:---------------------------- |
+| crwdns177178:0crwdne177178:0 | crwdns177180:0crwdne177180:0 |
+| crwdns177182:0crwdne177182:0 | crwdns177184:0crwdne177184:0 |
+| crwdns177186:0crwdne177186:0 | crwdns177188:0crwdne177188:0 |
+| crwdns177190:0crwdne177190:0 | crwdns177192:0crwdne177192:0 |
 
-crwdns177664:0crwdne177664:0
+### crwdns177194:0crwdne177194:0
 
-crwdns177666:0crwdne177666:0
-
-```shell
-crwdns177668:0crwdne177668:0
-```
-
-crwdns177670:0crwdne177670:0
-
-crwdns177672:0crwdne177672:0
-
-```shell
-crwdns177674:0crwdne177674:0
-```
-
-## crwdns177676:0crwdne177676:0
-
-crwdns177678:0crwdne177678:0
-
-crwdns177680:0crwdne177680:0
-
-crwdns177682:0crwdne177682:0
-
-| crwdns177684:0crwdne177684:0 | crwdns177686:0crwdne177686:0 |
-|:----------------------------:|:----------------------------:|
-| crwdns177688:0crwdne177688:0 | crwdns177690:0crwdne177690:0 |
-| crwdns177692:0crwdne177692:0 | crwdns177694:0crwdne177694:0 |
-| crwdns177696:0crwdne177696:0 | crwdns177698:0crwdne177698:0 |
-| crwdns177700:0crwdne177700:0 | crwdns177702:0crwdne177702:0 |
-
-crwdns177704:0crwdne177704:0
-
-```text
-crwdns177706:0crwdne177706:0
-```
-
-crwdns177708:0crwdne177708:0
-
-crwdns177710:0crwdne177710:0
-
-```shell
-crwdns177712:0crwdne177712:0
-```
-
-crwdns177714:0crwdne177714:0
-
-## crwdns177716:0crwdne177716:0
-
-### crwdns177718:0crwdne177718:0
+crwdns177196:0crwdne177196:0
 
 ```toml
-crwdns177720:0[log]crwdnd177720:0[performance]crwdnd177720:0[prepared_plan_cache]crwdne177720:0
+crwdns177198:0[log]crwdnd177198:0[prepared-plan-cache]crwdne177198:0
 ```
 
-### crwdns177722:0crwdne177722:0
+### crwdns177200:0crwdne177200:0
 
-crwdns177724:0crwdne177724:0
+crwdns177202:0crwdne177202:0
 
-### crwdns177726:0crwdne177726:0
+crwdns177204:0crwdne177204:0
 
-crwdns177728:0crwdne177728:0
+crwdns177206:0crwdne177206:0
 
-```text
-crwdns177730:0{HAPROXY-HOST}crwdnd177730:0{HAPROXY-PORT}crwdne177730:0
+crwdns177208:0crwdne177208:0
+
+crwdns177210:0crwdne177210:0
+
+```toml
+crwdns177212:0[raftstore]crwdnd177212:0[rocksdb.defaultcf]crwdnd177212:0[rocksdb.writecf]crwdne177212:0
 ```
 
-## crwdns177732:0crwdne177732:0
+crwdns177214:0crwdne177214:0
 
-crwdns177734:0crwdne177734:0
+```toml
+crwdns177216:0[raftstore]crwdnd177216:0[storage.block-cache]crwdne177216:0
+```
 
-crwdns177736:0crwdne177736:0
+crwdns177218:0crwdne177218:0
+
+## crwdns177220:0crwdne177220:0
+
+> **crwdns177222:0crwdne177222:0**
+> 
+> crwdns177224:0crwdne177224:0
+
+### crwdns177226:0crwdne177226:0
+
+crwdns177228:0crwdne177228:0
+
+```txt
+crwdns177230:0{TIDB_HOST}crwdne177230:0
+```
+
+crwdns177232:0crwdne177232:0
+
+crwdns177234:0crwdne177234:0
+
+```txt
+crwdns177236:0crwdne177236:0
+```
+
+### crwdns177238:0crwdne177238:0
+
+crwdns177240:0crwdne177240:0
+
+crwdns177242:0crwdne177242:0
 
 ```sql
-crwdns177738:0crwdne177738:0
+crwdns177244:0crwdne177244:0
 ```
 
-crwdns177740:0crwdne177740:0
+crwdns177246:0crwdne177246:0
 
-crwdns177742:0crwdne177742:0
+crwdns177248:0crwdne177248:0
 
-```shell
-crwdns177744:0crwdne177744:0
+crwdns177250:0crwdne177250:0
+
+```sql
+crwdns177252:0crwdne177252:0
 ```
 
-crwdns177746:0crwdne177746:0
+crwdns177254:0crwdne177254:0
 
-crwdns177748:0crwdne177748:0
+crwdns177256:0crwdne177256:0
 
-```shell
-crwdns177750:0crwdne177750:0
+1. crwdns177258:0crwdne177258:0
+2. crwdns177260:0crwdne177260:0
+
+> **crwdns177262:0crwdne177262:0**
+> 
+> crwdns177264:0crwdne177264:0
+
+crwdns177266:0crwdne177266:0
+
+crwdns177268:0crwdne177268:0
+
+```bash
+crwdns177270:0crwdne177270:0
 ```
 
-crwdns177752:0crwdne177752:0
+### crwdns177272:0crwdne177272:0
 
-crwdns177754:0crwdne177754:0
+crwdns177274:0crwdne177274:0
 
-## crwdns177756:0crwdne177756:0
+crwdns177276:0crwdne177276:0
 
-crwdns177758:0crwdne177758:0
+crwdns177278:0crwdne177278:0
 
-crwdns177760:0crwdne177760:0
+crwdns177280:0crwdne177280:0
 
-```shell
-crwdns177762:0crwdne177762:0
+```sql
+crwdns177282:0crwdne177282:0
 ```
 
-crwdns177764:0crwdne177764:0
+crwdns177284:0crwdne177284:0
 
-```text
-crwdns177766:0[Thread-351]crwdnd177766:0[Thread-351]crwdnd177766:0[Thread-351]crwdnd177766:0[Thread-351]crwdnd177766:0[Thread-351]crwdne177766:0
+crwdns177286:0crwdne177286:0
+
+```sql
+crwdns177288:0crwdne177288:0
 ```
 
-crwdns177768:0crwdne177768:0
+### crwdns177290:0crwdne177290:0
 
-crwdns177770:0crwdne177770:0
+crwdns177292:0crwdne177292:0
+
+```bash
+crwdns177294:0crwdne177294:0
+```
+
+### crwdns177296:0crwdne177296:0
+
+crwdns177298:0crwdne177298:0
+
+```bash
+crwdns177300:0crwdne177300:0
+```
+
+### crwdns177302:0crwdne177302:0
+
+crwdns177304:0crwdne177304:0
+
+```bash
+crwdns177306:0crwdne177306:0
+```
+
+## crwdns177308:0crwdne177308:0
+
+crwdns177310:0crwdne177310:0
+
+crwdns177312:0crwdne177312:0
+
+### crwdns177314:0crwdne177314:0
+
+| crwdns177316:0crwdne177316:0 | crwdns177318:0crwdne177318:0 | crwdns177320:0crwdne177320:0 | crwdns177322:0crwdne177322:0 | crwdns177324:0crwdne177324:0 | crwdns177326:0crwdne177326:0 | crwdns177328:0crwdne177328:0 |
+|:---------------------------- |:---------------------------- |:---------------------------- |:---------------------------- |:---------------------------- |:---------------------------- |:---------------------------- |
+| crwdns177330:0crwdne177330:0 | crwdns177332:0crwdne177332:0 | crwdns177334:0crwdne177334:0 | crwdns177336:0crwdne177336:0 | crwdns177338:0crwdne177338:0 | crwdns177340:0crwdne177340:0 | crwdns177342:0crwdne177342:0 |
+| crwdns177344:0crwdne177344:0 | crwdns177346:0crwdne177346:0 | crwdns177348:0crwdne177348:0 | crwdns177350:0crwdne177350:0 | crwdns177352:0crwdne177352:0 | crwdns177354:0crwdne177354:0 | crwdns177356:0crwdne177356:0 |
+| crwdns177358:0crwdne177358:0 | crwdns177360:0crwdne177360:0 | crwdns177362:0crwdne177362:0 | crwdns177364:0crwdne177364:0 | crwdns177366:0crwdne177366:0 | crwdns177368:0crwdne177368:0 | crwdns177370:0crwdne177370:0 |
+| crwdns177372:0crwdne177372:0 | crwdns177374:0crwdne177374:0 | crwdns177376:0crwdne177376:0 | crwdns177378:0crwdne177378:0 | crwdns177380:0crwdne177380:0 | crwdns177382:0crwdne177382:0 | crwdns177384:0crwdne177384:0 |
+| crwdns177386:0crwdne177386:0 | crwdns177388:0crwdne177388:0 | crwdns177390:0crwdne177390:0 | crwdns177392:0crwdne177392:0 | crwdns177394:0crwdne177394:0 | crwdns177396:0crwdne177396:0 | crwdns177398:0crwdne177398:0 |
+
+![crwdns177402:0crwdne177402:0](crwdns177400:0crwdne177400:0)
+
+### crwdns177404:0crwdne177404:0
+
+| crwdns177406:0crwdne177406:0 | crwdns177408:0crwdne177408:0 | crwdns177410:0crwdne177410:0 | crwdns177412:0crwdne177412:0 | crwdns177414:0crwdne177414:0 | crwdns177416:0crwdne177416:0 | crwdns177418:0crwdne177418:0 |
+|:---------------------------- |:---------------------------- |:---------------------------- |:---------------------------- |:---------------------------- |:---------------------------- |:---------------------------- |
+| crwdns177420:0crwdne177420:0 | crwdns177422:0crwdne177422:0 | crwdns177424:0crwdne177424:0 | crwdns177426:0crwdne177426:0 | crwdns177428:0crwdne177428:0 | crwdns177430:0crwdne177430:0 | crwdns177432:0crwdne177432:0 |
+| crwdns177434:0crwdne177434:0 | crwdns177436:0crwdne177436:0 | crwdns177438:0crwdne177438:0 | crwdns177440:0crwdne177440:0 | crwdns177442:0crwdne177442:0 | crwdns177444:0crwdne177444:0 | crwdns177446:0crwdne177446:0 |
+| crwdns177448:0crwdne177448:0 | crwdns177450:0crwdne177450:0 | crwdns177452:0crwdne177452:0 | crwdns177454:0crwdne177454:0 | crwdns177456:0crwdne177456:0 | crwdns177458:0crwdne177458:0 | crwdns177460:0crwdne177460:0 |
+| crwdns177462:0crwdne177462:0 | crwdns177464:0crwdne177464:0 | crwdns177466:0crwdne177466:0 | crwdns177468:0crwdne177468:0 | crwdns177470:0crwdne177470:0 | crwdns177472:0crwdne177472:0 | crwdns177474:0crwdne177474:0 |
+| crwdns177476:0crwdne177476:0 | crwdns177478:0crwdne177478:0 | crwdns177480:0crwdne177480:0 | crwdns177482:0crwdne177482:0 | crwdns177484:0crwdne177484:0 | crwdns177486:0crwdne177486:0 | crwdns177488:0crwdne177488:0 |
+| crwdns177490:0crwdne177490:0 | crwdns177492:0crwdne177492:0 | crwdns177494:0crwdne177494:0 | crwdns177496:0crwdne177496:0 | crwdns177498:0crwdne177498:0 | crwdns177500:0crwdne177500:0 | crwdns177502:0crwdne177502:0 |
+
+![crwdns177506:0crwdne177506:0](crwdns177504:0crwdne177504:0)
+
+### crwdns177508:0crwdne177508:0
+
+| crwdns177510:0crwdne177510:0 | crwdns177512:0crwdne177512:0 | crwdns177514:0crwdne177514:0 | crwdns177516:0crwdne177516:0 | crwdns177518:0crwdne177518:0 | crwdns177520:0crwdne177520:0 | crwdns177522:0crwdne177522:0 |
+|:---------------------------- |:---------------------------- |:---------------------------- |:---------------------------- |:---------------------------- |:---------------------------- |:---------------------------- |
+| crwdns177524:0crwdne177524:0 | crwdns177526:0crwdne177526:0 | crwdns177528:0crwdne177528:0 | crwdns177530:0crwdne177530:0 | crwdns177532:0crwdne177532:0 | crwdns177534:0crwdne177534:0 | crwdns177536:0crwdne177536:0 |
+| crwdns177538:0crwdne177538:0 | crwdns177540:0crwdne177540:0 | crwdns177542:0crwdne177542:0 | crwdns177544:0crwdne177544:0 | crwdns177546:0crwdne177546:0 | crwdns177548:0crwdne177548:0 | crwdns177550:0crwdne177550:0 |
+| crwdns177552:0crwdne177552:0 | crwdns177554:0crwdne177554:0 | crwdns177556:0crwdne177556:0 | crwdns177558:0crwdne177558:0 | crwdns177560:0crwdne177560:0 | crwdns177562:0crwdne177562:0 | crwdns177564:0crwdne177564:0 |
+| crwdns177566:0crwdne177566:0 | crwdns177568:0crwdne177568:0 | crwdns177570:0crwdne177570:0 | crwdns177572:0crwdne177572:0 | crwdns177574:0crwdne177574:0 | crwdns177576:0crwdne177576:0 | crwdns177578:0crwdne177578:0 |
+| crwdns177580:0crwdne177580:0 | crwdns177582:0crwdne177582:0 | crwdns177584:0crwdne177584:0 | crwdns177586:0crwdne177586:0 | crwdns177588:0crwdne177588:0 | crwdns177590:0crwdne177590:0 | crwdns177592:0crwdne177592:0 |
+
+![crwdns177596:0crwdne177596:0](crwdns177594:0crwdne177594:0)
+
+## crwdns177598:0crwdne177598:0
+
+### crwdns177600:0crwdne177600:0
+
+crwdns177602:0crwdne177602:0
+
+crwdns177604:0crwdne177604:0
+
+### crwdns177606:0crwdne177606:0
+
+crwdns177608:0crwdne177608:0
+
+crwdns177610:0crwdne177610:0
+
+crwdns177612:0crwdne177612:0
+
+### crwdns177614:0crwdne177614:0
+
+crwdns177616:0crwdne177616:0
+
+crwdns177618:0crwdne177618:0
