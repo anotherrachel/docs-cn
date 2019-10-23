@@ -1,451 +1,283 @@
 ---
-title: TiDB Binary 部署方案详解
-category: deployment
+title: 数据迁移
+category: advanced
 ---
 
-# TiDB Binary 部署指导
+# 数据迁移
 
-## 概述
+## 使用 `mydumper`/`loader` 全量导入数据
 
-一个完整的 TiDB 集群包括 PD，TiKV 以及 TiDB。启动顺序依次是 PD，TiKV 以及 TiDB。在关闭数据库服务时，请按照启动的相反顺序进行逐一关闭服务。
+`mydumper` 是一个更强大的数据迁移工具，具体可以参考 [https://github.com/maxbube/mydumper](https://github.com/maxbube/mydumper)。
 
-阅读本章前，请先确保阅读 [TiDB 整体架构](../overview.md#tidb-整体架构)及[部署建议](recommendation.md)。
+我们使用 `mydumper` 从 MySQL 导出数据，然后用 `loader` 将其导入到 TiDB 里面。
 
-本文档描述了三种场景的二进制部署方式：
+> 注意：虽然 TiDB 也支持使用 MySQL 官方的 `mysqldump` 工具来进行数据的迁移工作，但相比于 `mydumper` / `loader`，性能会慢很多，大量数据的迁移会花费很多时间，这里我们并不推荐。
 
-- 快速了解和试用 TiDB，推荐使用[单节点方式快速部署](#单节点方式快速部署)。
+### `mydumper`/`loader` 全量导入数据最佳实践
 
-- 功能性测试 TiDB，推荐使用[功能性测试部署](#功能性测试部署)。
+为了快速的迁移数据 (特别是数据量巨大的库), 可以参考下面建议
 
-- 生产环境使用 TiDB，推荐使用[多节点集群模式部署](#多节点集群模式部署)。
+* mydumper 导出数据至少要拥有 `SELECT` , `RELOAD` , `LOCK TABLES` 权限
+* 使用 mydumper 导出来的数据文件尽可能的小, 最好不要超过 64M, 可以设置参数 -F 64
+* loader的 -t 参数可以根据 tikv 的实例个数以及负载进行评估调整，例如 3个 tikv 的场景， 此值可以设为 3 *（1 ～ n)；当 tikv 负载过高，loader 以及 tidb 日志中出现大量 `backoffer.maxSleep 15000ms is exceeded` 可以适当调小该值，当 tikv 负载不是太高的时候，可以适当调大该值。
 
-## TiDB 组件及默认端口
+#### 某次导入示例，以及相关的配置
 
-### 1. TiDB 数据库组件（必装）
+- mydumper 导出后总数据量 214G，单表 8 列，20 亿行数据
+- 集群拓扑
+    - TIKV * 12
+    - TIDB * 4
+    - PD * 3
+- mydumper -F 设置为 16, loader -t 参数 64
 
-| 组件   | 默认端口  | 协议  | 说明                |
-|:---- |:----- |:--- |:----------------- |
-| ssh  | 22    | TCP | sshd 服务           |
-| TiDB | 4000  | TCP | 应用及 DBA 工具访问通信端口  |
-| TiDB | 10080 | TCP | TiDB 状态信息上报通信端口   |
-| TiKV | 20160 | TCP | TiKV 通信端口         |
-| PD   | 2379  | TCP | 提供 TiDB 和 PD 通信端口 |
-| PD   | 2380  | TCP | PD 集群节点间通信端口      |
+结果：导入时间 11 小时左右，19.4 G/小时
 
-### 2. TiDB 数据库组件（选装）
+### 从 MySQL 导出数据
 
-| 组件            | 默认端口 | 协议  | 说明                        |
-|:------------- |:---- |:--- |:------------------------- |
-| Prometheus    | 9090 | TCP | Prometheus 服务通信端口         |
-| Pushgateway   | 9091 | TCP | TiDB, TiKV, PD 监控聚合和上报端口  |
-| Node_exporter | 9100 | TCP | TiDB 集群每个节点的系统信息上报通信端口    |
-| Grafana       | 3000 | TCP | Web 监控服务对外服务和客户端(浏览器)访问端口 |
-| alertmanager  | 9093 | TCP | 告警服务端口                    |
-
-## TiDB 安装前系统配置与检查
-
-### 操作系统检查
-
-| 配置              | 描述                                |
-|:--------------- |:--------------------------------- |
-| 支持平台            | 请查看和了解[系统部署建议](recommendation.md) |
-| 文件系统            | TiDB 部署环境推荐使用 ext4 文件系统           |
-| Swap 空间         | TiDB 部署推荐关闭 Swap 空间               |
-| Disk Block Size | 设置系统磁盘 Block 大小为 4096             |
-
-### 网络与防火墙
-
-| 配置       | 描述                          |
-|:-------- |:--------------------------- |
-| 防火墙 / 端口 | 请查看 TiDB 所需端口在各个节点之间是否能正常访问 |
-
-### 操作系统参数
-
-| 配置                      | 说明                                                                  |
-|:----------------------- |:------------------------------------------------------------------- |
-| Nice Limits             | 系统用户 tidb 的 nice 值设置为缺省值 0                                          |
-| min_free_kbytes       | 在 `sysctl.conf` 中关于 `vm.min_free_kbytes` 的设置需要足够高                   |
-| User Open Files Limit   | 对数据库管理员 tidb 的 open 文件数设置为 `1000000`                                |
-| System Open File Limits | 对系统的 open 文件数设置为 `1000000`                                          |
-| User Process Limits     | 在 `limits.conf` 配置的 tidb 用户的 nproc 为 `4096`                         |
-| Address Space Limits    | 在 `limits.conf` 配置的 tidb 用户空间为 `unlimited`                          |
-| File Size Limits        | 在 `limits.conf` 配置的 tidb 用户 fsize 为 `unlimited`                     |
-| Disk Readahead          | 设置数据磁盘 `readahead` 至少为 `4096`                                       |
-| NTP 服务                  | 为各个节点配置 NTP 时间同步服务                                                  |
-| SELinux                 | 关闭各个节点的 SELinux 服务                                                  |
-| CPU Frequency Scaling   | TiDB 推荐打开 CPU 超频                                                    |
-| Transparent Hugepages   | 针对 Red Hat 7+ 和 CentOS 7+ 系统, Transparent Hugepages 必须被设置为 `always` |
-| I/O Scheduler           | 设置数据磁盘 I/0 Schedule 设置为 `deadline` 模式                               |
-| vm.swappiness           | 设置 `vm.swappiness = 0`                                              |
-
-> 注意：请联系系统管理员进行操作系统参数调整。
-
-### 数据库运行用户设置
-
-| 配置        | 说明                     |
-|:--------- |:---------------------- |
-| LANG 环境设定 | 设置 `LANG = en_US.UTF8` |
-| TZ 时区设定   | 确保所有节点的时区 TZ 设置为一样的值   |
-
-## 创建系统数据库运行账户
-
-在 Linux 环境下，在每台安装节点上创建 tidb 作为数据库系统运行用户并设置集群节点之间的 ssh 互信访问。以下是一个示例，具体创建用户与开通 ssh 互信访问请联系系统管理员进行。
+我们使用 `mydumper` 从 MySQL 导出数据，如下:
 
 ```bash
-# useradd tidb
-# usermod -a -G tidb tidb
-# su - tidb
-Last login: Tue Aug 22 12:06:23 CST 2017 on pts/2
--bash-4.2$ ssh-keygen -t rsa
-Generating public/private rsa key pair.
-Enter file in which to save the key (/home/tidb/.ssh/id_rsa):
-Created directory '/home/tidb/.ssh'.
-Enter passphrase (empty for no passphrase):
-Enter same passphrase again:
-Your identification has been saved in /home/tidb/.ssh/id_rsa.
-Your public key has been saved in /home/tidb/.ssh/id_rsa.pub.
-The key fingerprint is:
-5a:00:e6:df:9e:40:25:2c:2d:e2:6e:ee:74:c6:c3:c1 tidb@t001
-The key's randomart image is:
-+--[ RSA 2048]----+
-|    oo. .        |
-|  .oo.oo         |
-| . ..oo          |
-|  .. o o         |
-| .  E o S        |
-|  oo . = .       |
-| o. * . o        |
-| ..o .           |
-| ..              |
-+-----------------+
-
--bash-4.2$ cd .ssh
--bash-4.2$ cat id_rsa.pub >> authorized_keys
--bash-4.2$ chmod 644 authorized_keys
--bash-4.2$ ssh-copy-id -i ~/.ssh/id_rsa.pub 192.168.1.100
+./bin/mydumper -h 127.0.0.1 -P 3306 -u root -t 16 -F 64 -B test -T t1,t2 --skip-tz-utc -o ./var/test
 ```
 
-## 下载官方 Binary
+上面，我们使用 `-B test` 表明是对 `test` 这个 database 操作，然后用 `-T t1,t2` 表明只导出 `t1`，`t2` 两张表。
 
-TiDB 官方提供了支持 Linux 版本的二进制安装包，官方推荐使用 Redhat 7+、CentOS 7+ 以上版本的操作系统，不推荐在 Redhat 6、CentOS 6 上部署 TiDB 集群。
+`-t 16` 表明使用 16 个线程去导出数据。`-F 64` 是将实际的 table 切分成多大的 chunk，这里就是 64MB 一个 chunk。
 
-### 操作系统：Linux ( Redhat 7+，CentOS 7+ )
+`--skip-tz-utc` 添加这个参数忽略掉 MySQL 与导数据的机器之间时区设置不一致的情况，禁止自动转换。
 
-执行步骤：
+> 注意：在阿里云等一些需要 `super privilege` 的云上面，`mydumper` 需要加上 `--no-locks` 参数，否则会提示没有权限操作。
 
+### 向 TiDB 导入数据
+
+> 注意：目前 TiDB 支持 UTF8mb4 [字符编码](../sql/character-set-support.md)，假设 mydumper 导出数据为 latin1 字符编码，请使用 `iconv -f latin1 -t utf-8 $file -o /data/imdbload/$basename` 命令转换，$file 为已有文件，$basename 为转换后文件。
+
+> 注意：如果 mydumper 使用 -m 参数，会导出不带表结构的数据，这时 loader 无法导入数据。
+
+我们使用 `loader` 将之前导出的数据导入到 TiDB。Loader 的下载和具体的使用方法见 [Loader 使用文档](../tools/loader.md)
+
+```bash
+./bin/loader -h 127.0.0.1 -u root -P 4000 -t 32 -d ./var/test
 ```
-# 下载压缩包
 
-wget http://download.pingcap.org/tidb-latest-linux-amd64.tar.gz
-wget http://download.pingcap.org/tidb-latest-linux-amd64.sha256
+导入成功之后，我们可以用 MySQL 官方客户端进入 TiDB，查看:
+
+```sql
+mysql -h127.0.0.1 -P4000 -uroot
+
+mysql> show tables;
++----------------+
+| Tables_in_test |
++----------------+
+| t1             |
+| t2             |
++----------------+
+
+mysql> select * from t1;
++----+------+
+| id | age  |
++----+------+
+|  1 |    1 |
+|  2 |    2 |
+|  3 |    3 |
++----+------+
+
+mysql> select * from t2;
++----+------+
+| id | name |
++----+------+
+|  1 | a    |
+|  2 | b    |
+|  3 | c    |
++----+------+
+```
+
+## 使用 `syncer` 增量导入数据
+
+上面我们介绍了如何使用 `mydumper`/`loader` 将 MySQL 的数据全量导入到 TiDB，但如果后续 MySQL 的数据有更新，我们仍然希望快速导入，使用全量的方式就不合适了。
+
+TiDB 提供 `syncer` 工具能方便的将 MySQL 的数据增量的导入到 TiDB 里面。
+
+`syncer` 属于 TiDB 企业版工具集，如何获取可以参考 [下载 TiDB 企业版工具集](#下载-tidb-企业版工具集-linux)。
+
+### 下载 TiDB 企业版工具集 (Linux)
+
+```bash
+# 下载 tool 压缩包
+wget http://download.pingcap.org/tidb-enterprise-tools-latest-linux-amd64.tar.gz
+wget http://download.pingcap.org/tidb-enterprise-tools-latest-linux-amd64.sha256
 
 # 检查文件完整性，返回 ok 则正确
-sha256sum -c tidb-latest-linux-amd64.sha256
-
+sha256sum -c tidb-enterprise-tools-latest-linux-amd64.sha256
 # 解开压缩包
-tar -xzf tidb-latest-linux-amd64.tar.gz
-cd tidb-latest-linux-amd64
+tar -xzf tidb-enterprise-tools-latest-linux-amd64.tar.gz
+cd tidb-enterprise-tools-latest-linux-amd64
 ```
 
-## 单节点方式快速部署
+假设我们之前已经使用 `mydumper`/`loader` 导入了 `t1` 和 `t2` 两张表的一些数据，现在我们希望这两张表的任何更新，都是实时的同步到 TiDB 上面。
 
-在获取 TiDB 二进制文件包后，我们可以在单机上面，运行和测试 TiDB 集群，请按如下步骤依次启动 PD，TiKV，TiDB。
+### 获取同步 position
 
-> 注意：以下启动各个应用程序组件实例的时候，请选择后台启动，避免前台失效后程序自动退出。
+如上文所提，mydumper 导出的数据目录里面有一个 `metadata` 文件，里面就包含了我们所需的 position 信息。
 
-步骤一. 启动 PD：
-
-```
-./bin/pd-server --data-dir=pd \
-                --log-file=pd.log
-```
-
-步骤二. 启动 TiKV：
+medadata 文件信息内容举例：
 
 ```
-./bin/tikv-server --pd="127.0.0.1:2379" \
-                  --data-dir=tikv \
-                  --log-file=tikv.log
+Started dump at: 2017-04-28 10:48:10
+SHOW MASTER STATUS:
+    Log: mysql-bin.000003
+    Pos: 930143241
+    GTID:
+
+Finished dump at: 2017-04-28 10:48:11
 ```
 
-步骤三. 启动 TiDB：
+我们将 position 相关的信息保存到一个 `syncer.meta` 文件里面，用于 `syncer` 的同步:
 
-```
-./bin/tidb-server --store=tikv \
-                  --path="127.0.0.1:2379" \
-                  --log-file=tidb.log
-```
-
-步骤四. 使用 MySQL 客户端连接 TiDB:
-
-```
-mysql -h 127.0.0.1 -P 4000 -u root -D test
+```bash
+# cat syncer.meta
+binlog-name = "mysql-bin.000003"
+binlog-pos = 930143241
+binlog-gtid = "2bfabd22-fff7-11e6-97f7-f02fa73bcb01:1-23,61ccbb5d-c82d-11e6-ac2e-487b6bd31bf7:1-4"
 ```
 
-## 功能性测试部署
++ 注意：`syncer.meta` 只需要第一次使用的时候配置，后续 `syncer` 同步新的 binlog 之后会自动将其更新到最新的 position。
 
-如果只是对 TiDB 进行测试，并且机器数量有限，我们可以只启动一台 PD 测试整个集群。
++ 注意： 如果使用 binlog position 同步则只需要配置 binlog-name binlog-pos; 使用 gtid 同步则需要设置 gtid，且启动 syncer 时带有 `--enable-gtid`
 
-这里我们使用四个节点，部署一个 PD，三个 TiKV，以及一个 TiDB，各个节点以及所运行服务信息如下：
+### 启动 `syncer`
 
-| Name  | Host IP         | Services  |
-|:----- |:--------------- |:--------- |
-| node1 | 192.168.199.113 | PD1, TiDB |
-| node2 | 192.168.199.114 | TiKV1     |
-| node3 | 192.168.199.115 | TiKV2     |
-| node4 | 192.168.199.116 | TiKV3     |
+启动 syncer 服务之前请详细阅读 [Syncer 增量导入](../tools/syncer.md)
 
-请按如下步骤依次启动 PD 集群，TiKV 集群以及 TiDB：
+`syncer` 的配置文件 `config.toml`:
 
-> 注意：以下启动各个应用程序组件实例的时候，请选择后台启动，避免前台失效后程序自动退出。
+```toml
+log-level = "info"
 
-步骤一. 在 node1 启动 PD：
+server-id = 101
 
-```
-./bin/pd-server --name=pd1 \
-                --data-dir=pd1 \
-                --client-urls="http://192.168.199.113:2379" \
-                --peer-urls="http://192.168.199.113:2380" \
-                --initial-cluster="pd1=http://192.168.199.113:2380" \
-                --log-file=pd.log
-```
+## meta 文件地址
+meta = "./syncer.meta"
 
-步骤二. 在 node2，node3，node4 启动 TiKV：
+worker-count = 16
+batch = 10
 
-```
-./bin/tikv-server --pd="192.168.199.113:2379" \
-                  --addr="192.168.199.114:20160" \
-                  --data-dir=tikv1 \
-                  --log-file=tikv.log
+## pprof 调试地址, Prometheus 也可以通过该地址拉取 syncer metrics
+## 将 127.0.0.1 修改为相应主机 IP 地址
+status-addr = "127.0.0.1:10086"
 
-./bin/tikv-server --pd="192.168.199.113:2379" \
-                  --addr="192.168.199.115:20160" \
-                  --data-dir=tikv2 \
-                  --log-file=tikv.log
+## 跳过 DDL 或者其他语句，格式为 **前缀完全匹配**，如: `DROP TABLE ABC`,则至少需要填入`DROP TABLE`.
+# skip-sqls = ["ALTER USER", "CREATE USER"]
 
-./bin/tikv-server --pd="192.168.199.113:2379" \
-                  --addr="192.168.199.116:20160" \
-                  --data-dir=tikv3 \
-                  --log-file=tikv.log
-```
+## 在使用 route-rules 功能后，
+## replicate-do-db & replicate-ignore-db 匹配合表之后(target-schema & target-table )数值
+## 优先级关系: replicate-do-db --> replicate-do-table --> replicate-ignore-db --> replicate-ignore-table
+## 指定要同步数据库名；支持正则匹配，表达式语句必须以 `~` 开始
+#replicate-do-db = ["~^b.*","s1"]
 
-步骤三. 在 node1 启动 TiDB：
+## 指定要同步的 db.table 表
+## db-name 与 tbl-name 不支持 `db-name ="dbname，dbname2"` 格式
+#[[replicate-do-table]]
+#db-name ="dbname"
+#tbl-name = "table-name"
 
-```
-./bin/tidb-server --store=tikv \
-                  --path="192.168.199.113:2379" \
-                  --log-file=tidb.log
-```
+#[[replicate-do-table]]
+#db-name ="dbname1"
+#tbl-name = "table-name1"
 
-步骤四. 使用 MySQL 客户端连接 TiDB：
+## 指定要同步的 db.table 表；支持正则匹配，表达式语句必须以 `~` 开始
+#[[replicate-do-table]]
+#db-name ="test"
+#tbl-name = "~^a.*"
 
-```
-mysql -h 192.168.199.113 -P 4000 -u root -D test
-```
+## 指定**忽略**同步数据库；支持正则匹配，表达式语句必须以 `~` 开始
+#replicate-ignore-db = ["~^b.*","s1"]
 
-## 多节点集群模式部署
+## 指定**忽略**同步数据库
+## db-name & tbl-name 不支持 `db-name ="dbname，dbname2"` 语句格式
+#[[replicate-ignore-table]]
+#db-name = "your_db"
+#tbl-name = "your_table"
 
-在生产环境中，我们推荐多节点部署 TiDB 集群，首先请参考部署建议。
+## 指定要**忽略**同步数据库名；支持正则匹配，表达式语句必须以 `~` 开始
+#[[replicate-ignore-table]]
+#db-name ="test"
+#tbl-name = "~^a.*"
 
-这里我们使用六个节点，部署三个 PD，三个 TiKV，以及一个 TiDB，各个节点以及所运行服务信息如下：
+# sharding 同步规则，采用 wildcharacter
+# 1. 星号字符 (*) 可以匹配零个或者多个字符,
+#    例子, doc* 匹配 doc 和 document, 但是和 dodo 不匹配;
+#    星号只能放在 pattern 结尾，并且一个 pattern 中只能有一个
+# 2. 问号字符 (?) 匹配任一一个字符
 
-| Name  | Host IP         | Services  |
-|:----- |:--------------- |:--------- |
-| node1 | 192.168.199.113 | PD1, TiDB |
-| node2 | 192.168.199.114 | PD2       |
-| node3 | 192.168.199.115 | PD3       |
-| node4 | 192.168.199.116 | TiKV1     |
-| node5 | 192.168.199.117 | TiKV2     |
-| node6 | 192.168.199.118 | TiKV3     |
+#[[route-rules]]
+#pattern-schema = "route_*"
+#pattern-table = "abc_*"
+#target-schema = "route"
+#target-table = "abc"
 
-请按如下步骤依次启动 PD 集群，TiKV 集群以及 TiDB：
+#[[route-rules]]
+#pattern-schema = "route_*"
+#pattern-table = "xyz_*"
+#target-schema = "route"
+#target-table = "xyz"
 
-步骤一 . 在 node1，node2，node3 依次启动 PD：
+[from]
+host = "127.0.0.1"
+user = "root"
+password = ""
+port = 3306
 
-```
-./bin/pd-server --name=pd1 \
-                --data-dir=pd1 \
-                --client-urls="http://192.168.199.113:2379" \
-                --peer-urls="http://192.168.199.113:2380" \
-                --initial-cluster="pd1=http://192.168.199.113:2380,pd2=http://192.168.199.114:2380,pd3=http://192.168.199.115:2380" \
-                -L "info" \
-                --log-file=pd.log
-
-./bin/pd-server --name=pd2 \
-                --data-dir=pd2 \
-                --client-urls="http://192.168.199.114:2379" \
-                --peer-urls="http://192.168.199.114:2380" \
-                --initial-cluster="pd1=http://192.168.199.113:2380,pd2=http://192.168.199.114:2380,pd3=http://192.168.199.115:2380" \
-                --join="http://192.168.199.113:2379" \
-                -L "info" \
-                --log-file=pd.log
-
-./bin/pd-server --name=pd3 \
-                --data-dir=pd3 \
-                --client-urls="http://192.168.199.115:2379" \
-                --peer-urls="http://192.168.199.115:2380" \
-                --initial-cluster="pd1=http://192.168.199.113:2380,pd2=http://192.168.199.114:2380,pd3=http://192.168.199.115:2380" \
-                --join="http://192.168.199.113:2379" \
-                -L "info" \
-                --log-file=pd.log
-```
-
-步骤二. 在 node4，node5，node6 启动 TiKV：
-
-```
-./bin/tikv-server --pd="192.168.199.113:2379,192.168.199.114:2379,192.168.199.115:2379" \
-                  --addr="192.168.199.116:20160" \
-                  --data-dir=tikv1 \
-                  --log-file=tikv.log
-
-./bin/tikv-server --pd="192.168.199.113:2379,192.168.199.114:2379,192.168.199.115:2379" \
-                  --addr="192.168.199.117:20160" \
-                  --data-dir=tikv2 \
-                  --log-file=tikv.log
-
-./bin/tikv-server --pd="192.168.199.113:2379,192.168.199.114:2379,192.168.199.115:2379" \
-                  --addr="192.168.199.118:20160" \
-                  --data-dir=tikv3 \
-                  --log-file=tikv.log
-```
-
-步骤三. 在 node1 启动 TiDB：
-
-```
-./bin/tidb-server --store=tikv \
-                  --path="192.168.199.113:2379,192.168.199.114:2379,192.168.199.115:2379" \
-                  --log-file=tidb.log
+[to]
+host = "127.0.0.1"
+user = "root"
+password = ""
+port = 4000
 
 ```
 
-步骤四. 使用 MySQL 客户端连接 TiDB：
+启动 `syncer`:
 
-```
-mysql -h 192.168.199.113 -P 4000 -u root -D test
-```
+```bash
+./bin/syncer -config config.toml
 
-> 注意：在生产环境中启动 TiKV 时，建议使用 `--config` 参数指定配置文件路径，如果不设置这个参数，TiKV 不会读取配置文件。同样，在生产环境中部署 PD 时，也建议使用 `--config` 参数指定配置文件路径。
-
-TiKV 调优参见：[TiKV 性能参数调优](https://github.com/pingcap/docs-cn/blob/master/op-guide/tune-tikv.md)。
-
-> 注意：如果使用 nohup 在生产环境中启动集群，需要将启动命令放到一个脚本文件里面执行，否则会出现因为 Shell 退出导致 nohup 启动的进程也收到异常信号退出的问题，具体参考进程异常退出。
-
-## TiDB 监控和告警环境安装
-
-安装部署监控和告警环境的系统信息如下：
-
-| Name  | Host IP         | Services                                      |
-|:----- |:--------------- |:--------------------------------------------- |
-| node1 | 192.168.199.113 | node_export, pushgateway, Prometheus, Grafana |
-| node2 | 192.168.199.114 | node_export                                   |
-| node3 | 192.168.199.115 | node_export                                   |
-| node4 | 192.168.199.116 | node_export                                   |
-
-### 获取二进制包
-
-```
-# 下载压缩包
-wget https://github.com/prometheus/prometheus/releases/download/v1.5.2/prometheus-1.5.2.linux-amd64.tar.gz
-wget https://github.com/prometheus/node_exporter/releases/download/v0.14.0-rc.2/node_exporter-0.14.0-rc.2.linux-amd64.tar.gz
-wget https://grafanarel.s3.amazonaws.com/builds/grafana-4.1.2-1486989747.linux-x64.tar.gz
-wget https://github.com/prometheus/pushgateway/releases/download/v0.3.1/pushgateway-0.3.1.linux-amd64.tar.gz
-
-# 解开压缩包
-tar -xzf prometheus-1.5.2.linux-amd64.tar.gz
-tar -xzf node_exporter-0.14.0-rc.1.linux-amd64.tar.gz
-tar -xzf grafana-4.1.2-1486989747.linux-x64.tar.gz
-tar -xzf pushgateway-0.3.1.linux-amd64.tar.gz
+2016/10/27 15:22:01 binlogsyncer.go:226: [info] begin to sync binlog from position (mysql-bin.000003, 1280)
+2016/10/27 15:22:01 binlogsyncer.go:130: [info] register slave for master server 127.0.0.1:3306
+2016/10/27 15:22:01 binlogsyncer.go:552: [info] rotate to (mysql-bin.000003, 1280)
+2016/10/27 15:22:01 syncer.go:549: [info] rotate binlog to (mysql-bin.000003, 1280)
 ```
 
-### 启动监控服务
+### 在 MySQL 插入新的数据
 
-### 在 node1，node2，node3，node4 启动 `node_exporter`
-
-```
-$cd node_exporter-0.14.0-rc.1.linux-amd64
-
-#启动 node_exporter 服务
-./node_exporter --web.listen-address=":9100" \
-    --log.level="info"
+```sql
+INSERT INTO t1 VALUES (4, 4), (5, 5);
 ```
 
-### 在 node1 启动 pushgateway
+登录到 TiDB 查看：
 
-```
-$cd pushgateway-0.3.1.linux-amd64
-
-#启动 pushgateway 服务
-./pushgateway \
-    --log.level="info" \
-    --web.listen-address=":9091"
-```
-
-### 在 node1 启动 Prometheus
-
-```
-$cd prometheus-1.5.2.linux-amd64
-
-# 修改配置文件
-
-vi prometheus.yml
-
-...
-global:
-  scrape_interval:     15s # By default, scrape targets every 15 seconds.
-  evaluation_interval: 15s # By default, scrape targets every 15 seconds.
-  # scrape_timeout is set to the global default (10s).
-  labels:
-    cluster: 'test-cluster'
-    monitor: "prometheus"
-
-scrape_configs:
-  - job_name: 'overwritten-cluster'
-    scrape_interval: 3s
-    honor_labels: true # don't overwrite job & instance labels
-    static_configs:
-      - targets: ['192.168.199.113:9091']
-
-  - job_name: "overwritten-nodes"
-    honor_labels: true # don't overwrite job & instance labels
-    static_configs:
-    - targets:
-      - '192.168.199.113:9100'
-      - '192.168.199.114:9100'
-      - '192.168.199.115:9100'
-      - '192.168.199.116:9100'
-...
-
-# 启动 Prometheus:
-./prometheus \
-    --config.file="/data1/tidb/deploy/conf/prometheus.yml" \
-    --web.listen-address=":9090" \
-    --web.external-url="http://192.168.199.113:9090/" \
-    --log.level="info" \
-    --storage.local.path="/data1/tidb/deploy/data.metrics" \
-    --storage.local.retention="360h0m0s"
+```sql
+mysql -h127.0.0.1 -P4000 -uroot -p
+mysql> select * from t1;
++----+------+
+| id | age  |
++----+------+
+|  1 |    1 |
+|  2 |    2 |
+|  3 |    3 |
+|  4 |    4 |
+|  5 |    5 |
++----+------+
 ```
 
-### 在 node1 启动 Grafana
+`syncer` 每隔 30s 会输出当前的同步统计，如下
 
+```bash
+2017/06/08 01:18:51 syncer.go:934: [info] [syncer]total events = 15, total tps = 130, recent tps = 4,
+master-binlog = (ON.000001, 11992), master-binlog-gtid=53ea0ed1-9bf8-11e6-8bea-64006a897c73:1-74,
+syncer-binlog = (ON.000001, 2504), syncer-binlog-gtid = 53ea0ed1-9bf8-11e6-8bea-64006a897c73:1-17
+2017/06/08 01:19:21 syncer.go:934: [info] [syncer]total events = 15, total tps = 191, recent tps = 2,
+master-binlog = (ON.000001, 11992), master-binlog-gtid=53ea0ed1-9bf8-11e6-8bea-64006a897c73:1-74,
+syncer-binlog = (ON.000001, 2504), syncer-binlog-gtid = 53ea0ed1-9bf8-11e6-8bea-64006a897c73:1-35
 ```
-cd grafana-4.1.2-1486989747.linux-x64
 
-#编辑配置文件
-
-vi grafana.ini
-
-...
-
-# The http port  to use
-http_port = 3000
-
-# The public facing domain name used to access grafana from a browser
-domain = 192.168.199.113
-
-...
-
-#启动 Grafana 服务
-./grafana-server \
-    --homepath="/data1/tidb/deploy/opt/grafana" \
-    --config="/data1/tidb/deploy/opt/grafana/conf/grafana.ini"
-```
+可以看到，使用 `syncer`，我们就能自动的将 MySQL 的更新同步到 TiDB。
