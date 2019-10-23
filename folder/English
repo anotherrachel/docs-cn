@@ -1,135 +1,48 @@
 ---
-title: TiDB Lightning 常见问题
+title: Data Migration 常见问题
 category: FAQ
-aliases:
-  - '/docs-cn/tools/lightning/faq/'
-  - '/docs-cn/faq/tidb-lightning/'
 ---
 
-# TiDB Lightning 常见问题
+# Data Migration 常见问题
 
-## TiDB Lightning 对 TiDB/TiKV/PD 的最低版本要求是多少？
+## 同步任务中断并包含 `invalid connection` 错误应该怎么处理？
 
-最低版本要求是 2.0.9。
+发生 `invalid connection` 错误时，通常表示 DM 到下游 TiDB 的数据库连接出现了异常（如网络故障、TiDB 重启、TiKV busy 等）且当前请求已有部分数据发送到了 TiDB。
 
-## TiDB Lightning 支持导入多个库吗？
+由于 DM 中存在同步任务并发向下游复制数据的特性，因此在任务中断时可能同时包含多个错误（可通过 `query-status` 或 `query-error` 查询当前错误）。
 
-支持。
+- 如果错误中仅包含 `invalid connection` 类型的错误且当前处于增量复制阶段，则 DM 会自动进行重试。
+- 如果 DM 由于版本问题等未自动进行重试或自动重试未能成功，则可尝试先使用 `stop-task` 停止任务，然后再使用 `start-task` 重启任务。
 
-## TiDB Lightning 对下游数据库的账号权限要求是怎样的？
+## 同步任务中断并包含 `driver: bad connection` 错误应该怎么处理？
 
-TiDB Lightning 需要以下权限：
+发生 `driver: bad connection` 错误时，通常表示 DM 到下游 TiDB 的数据库连接出现了异常（如网络故障、TiDB 重启等）且当前请求的数据暂时未能发送到 TiDB。
 
-* SELECT
-* UPDATE
-* ALTER
-* CREATE
-* DROP
+当前版本 DM 发生该类型错误时，需要先使用 `stop-task` 停止任务后再使用 `start-task` 重启任务。后续 DM 会完善对此错误类型的自动重试机制。
 
-存储断点的数据库额外需要以下权限：
+## relay 处理单元报错 `event from * in * diff from passed-in event *` 或同步任务中断并包含 `get binlog error ERROR 1236 (HY000)`、`binlog checksum mismatch, data may be corrupted` 等 binlog 获取或解析失败错误
 
-* INSERT
-* DELETE
+在 DM 进行 relay log 拉取与增量同步过程中，如果遇到了上游超过 4GB 的 binlog 文件，就可能出现这两个错误。
 
-如果 TiDB Lightning 配置项 `checksum = true`，则 TiDB Lightning 需要有下游 TiDB admin 用户权限。
+原因是 DM 在写 relay log 时需要依据 binlog position 及文件大小对 event 进行验证，且需要保存同步的 binlog position 信息作为 checkpoint。但是 MySQL binlog position 官方定义使用 uint32 存储，所以超过 4G 部分的 binlog position 的 offset 值会溢出，进而出现上面的错误。
 
-## TiDB Lightning 在导数据过程中某个表报错了，会影响其他表吗？进程会马上退出吗？
+对于 relay 处理单元，可通过以下步骤手动恢复：
 
-如果只是个别表报错，不会影响整体。报错的那个表会停止处理，继续处理其他的表。
+1. 在上游确认出错时对应的 binlog 文件的大小超出了 4GB。
+2. 停止 DM-worker。
+3. 将上游对应的 binlog 文件复制到 relay log 目录作为 relay log 文件。
+4. 更新 relay log 目录内对应的 `relay.meta` 文件以从下一个 binlog 开始拉取。
 
-## 如何校验导入的数据的正确性？
+    例如：报错时有 `binlog-name = "mysql-bin.004451"` 与`binlog-pos = 2453`，则将其分别更新为 `binlog-name = "mysql-bin.004452"` 与`binlog-pos = 4`。
+5. 重启 DM-worker。
 
-TiDB Lightning 默认会对导入数据计算校验和 (checksum)，如果校验和不一致就会停止导入该表。可以在日志看到相关的信息。
+对于 binlog replication 处理单元，可通过以下步骤手动恢复：
 
-TiDB 也支持从 MySQL 命令行运行 `ADMIN CHECKSUM TABLE` 指令来计算校验和。
+1. 在上游确认出错时对应的 binlog 文件的大小超出了 4GB。
+2. 通过 `stop-task` 停止同步任务。
+3. 将下游 `dm_meta` 数据库中 global checkpoint 与每个 table 的 checkpoint 中的 `binlog_name` 更新为出错的 binlog 文件，将 `binlog_pos` 更新为已同步过的一个合法的 position 值，比如 4。
 
-{{< copyable "sql" >}}
-
-```sql
-ADMIN CHECKSUM TABLE `schema`.`table`;
-```
-
-```
-+---------+------------+---------------------+-----------+-------------+
-| Db_name | Table_name | Checksum_crc64_xor  | Total_kvs | Total_bytes |
-+---------+------------+---------------------+-----------+-------------+
-| schema  | table      | 5505282386844578743 |         3 |          96 |
-+---------+------------+---------------------+-----------+-------------+
-1 row in set (0.01 sec)
-```
-
-## TiDB Lightning 支持哪些格式的数据源？
-
-到 v2.1.6 版本为止，只支持本地文档形式的数据源，支持 [Mydumper](/v3.0/reference/tools/mydumper.md) 或 [CSV](/v3.0/reference/tools/tidb-lightning/csv.md) 格式。
-
-## 我已经在下游创建好库和表了，TiDB Lightning 可以忽略建库建表操作吗？
-
-可以。在配置文档中的 `[mydumper]` 将 `no-schema` 设置为 `true` 即可。`no-schema=true` 会默认下游已经创建好所需的数据库和表，如果没有创建，会报错。
-
-## 有些不合法的数据，能否通过关掉严格 SQL 模式 (Strict SQL MOde) 来导入？
-
-可以。Lightning 默认的 [`sql_mode`](https://dev.mysql.com/doc/refman/5.7/en/sql-mode.html) 为 `"STRICT_TRANS_TABLES,NO_ENGINE_SUBSTITUTION"`。
-
-这个设置不允许一些非法的数值，例如 `1970-00-00` 这样的日期。可以修改配置文件 `[tidb]` 下的 `sql-mode` 值。
-
-```toml
-...
-[tidb]
-sql-mode = ""
-...
-```
-
-## 可以起一个 `tikv-importer`，同时有多个 `tidb-lightning` 进程导入数据吗？
-
-只要每个 Lightning 操作的表互不相同就可以。
-
-## 如何正确关闭 `tikv-importer` 进程？
-
-根据您的部署方式，选择相应操作结束进程
-
-- 使用 TiDB Ansible 部署：在 Importer 的服务器上运行 `scripts/stop_importer.sh` 。
-
-- 手动部署：如果 `tikv-importer` 正在前台运行，可直接按 <kbd>Ctrl</kbd>+<kbd>C</kbd> 退出。否则，可通过 `ps aux | grep tikv-importer` 获取进程ID，然后通过 `kill «pid»` 结束进程。
-
-## 如何正确关闭 `tidb-lightning` 进程？
-
-根据您的部署方式，选择相应操作结束进程
-
-- 使用 TiDB Ansible 部署：在 Lightning 的服务器上运行 `scripts/stop_lightning.sh` 。
-
-- 手动部署：如果 `tidb-lightning` 正在前台运行，可直接按 <kbd>Ctrl</kbd>+<kbd>C</kbd> 退出。否则，可通过 `ps aux | grep tidb-lightning` 获取进程 ID，然后通过 `kill -2 «pid»` 结束进程。
-
-## `tidb-lightning` 在服务器上运行，进程莫名其妙地退出了，是怎么回事呢？
-
-这种情况可能是启动方式不正确，导致收到 SIGHUP 信号而退出。此时 `tidb-lightning.log` 通常有如下日志：
-
-```
-[2018/08/10 07:29:08.310 +08:00] [INFO] [main.go:41] ["got signal to exit"] [signal=hangup]
-```
-
-不推荐在命令行中直接使用 `nohup` 启动进程，推荐按照 [启动 tidb-lightning](/v3.0/reference/tools/tidb-lightning/deployment.md) 使用脚本启动。
-
-## 为什么用过 TiDB Lightning 之后，TiDB 集群变得又慢又耗 CPU？
-
-如果 `tidb-lightning` 曾经异常退出，集群可能仍留在“导入模式” (import mode)，不适合在生产环境工作。此时需要强制切换回“普通模式” (normal mode)：
-
-{{< copyable "shell-regular" >}}
-
-```sh
-tidb-lightning-ctl --switch-mode=normal
-```
-
-## TiDB Lightning 可以使用千兆网卡吗？
-
-使用 TiDB Lightning 必须配置万兆网卡。**不能使用**千兆网卡，尤其是在部署 `tikv-importer` 的机器上。千兆网卡的总带宽只有 120 MB/s，而且需要与整个 TiKV 集群共享。在使用 TiDB Lightning 导入时，极易用尽所有带宽，继而因 PD 无法联络集群使集群断连。
-
-## 为什么 TiDB Lightning 需要在 TiKV 集群预留这么多空间？
-
-当使用默认的 3 副本设置时，TiDB Lightning 需要 TiKV 集群预留数据源大小 6 倍的空间。多出来的 2 倍是算上下列没储存在数据源的因素的保守估计：
-
-- 索引会占据额外的空间
-- RocksDB 的空间放大效应
-
-## TiDB Lightning 使用过程中是否可以重启 TiKV Importer？
-
-不能，Importer 会保存一些 Engine 的信息在内存中，Importer 重启后，Lightning 必须重启。
+    例如：出错任务名为 `dm_test`，对应的 `source-id` 为 `replica-1`，出错时对应的 binlog 文件为 `mysql-bin|000001.004451`，则执行 `UPDATE dm_test_syncer_checkpoint SET binlog_name='mysql-bin|000001.004451', binlog_pos = 4 WHERE id='replica-1';`。
+4. 在同步任务配置中为 `syncers` 部分设置 `safe-mode: true` 以保证可重入执行。
+5. 通过 `start-task` 启动同步任务。
+6. 通过 `query-status` 观察同步任务状态，当原造成出错的 relay log 文件同步完成后，即可还原 `safe-mode` 为原始值并重启同步任务。
