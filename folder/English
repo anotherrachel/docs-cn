@@ -1,24 +1,28 @@
 ---
-title: 信息函数
+title: 加密和压缩函数
 category: reference
 ---
 
-# 信息函数
+# 加密和压缩函数
 
-TiDB 中信息函数的使用方法与 MySQL 基本一致，详情参见：[Information Functions](https://dev.mysql.com/doc/refman/5.7/en/information-functions.html)。
-
-## 信息函数表
-
-| 函数名                                                                                                                          | 功能描述                                                   |
-| ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| [`CONNECTION_ID()`](https://dev.mysql.com/doc/refman/5.7/en/information-functions.html#function_connection-id)               | 返回当前连接的连接 ID (线程 ID)                                   |
-| [`CURRENT_USER()`, `CURRENT_USER`](https://dev.mysql.com/doc/refman/5.7/en/information-functions.html#function_current-user) | 返回当前用户的用户名和主机名                                         |
-| [`DATABASE()`](https://dev.mysql.com/doc/refman/5.7/en/information-functions.html#function_database)                         | 返回默认(当前)的数据库名                                          |
-| [`FOUND_ROWS()`](https://dev.mysql.com/doc/refman/5.7/en/information-functions.html#function_found-rows)                     | 该函数返回对于一个包含 LIMIT 的 SELECT 查询语句，在不包含 LIMIT 的情况下回返回的记录数 |
-| [`LAST_INSERT_ID()`](https://dev.mysql.com/doc/refman/5.7/en/information-functions.html#function_last-insert-id)             | 返回最后一条 INSERT 语句中自增列的值                                 |
-| [`SCHEMA()`](https://dev.mysql.com/doc/refman/5.7/en/information-functions.html#function_schema)                             | 与 DATABASE() 同义                                        |
-| [`SESSION_USER()`](https://dev.mysql.com/doc/refman/5.7/en/information-functions.html#function_session-user)                 | 与 USER() 同义                                            |
-| [`SYSTEM_USER()`](https://dev.mysql.com/doc/refman/5.7/en/information-functions.html#function_system-user)                   | 与 USER() 同义                                            |
-| [`USER()`](https://dev.mysql.com/doc/refman/5.7/en/information-functions.html#function_user)                                 | 返回客户端提供的用户名和主机名                                        |
-| [`VERSION()`](https://dev.mysql.com/doc/refman/5.7/en/information-functions.html#function_version)                           | 返回当前 MySQL 服务器的版本信息                                    |
-| `TIDB_VERSION()`                                                                                                             | 返回当前 TiDB 服务器的版本信息                                     |
+| 函数名                                                                                                                                                    | 功能描述                               |
+|:------------------------------------------------------------------------------------------------------------------------------------------------------ |:---------------------------------- |
+| [`MD5()`](https://dev.mysql.com/doc/refman/5.7/en/encryption-functions.html#function_md5)                                                              | 计算字符串的 MD5 校验和                     |
+| [`PASSWORD()`](https://dev.mysql.com/doc/refman/5.7/en/encryption-functions.html#function_password)                                                    | 计算并返回密码字符串                         |
+| [`RANDOM_BYTES()`](https://dev.mysql.com/doc/refman/5.7/en/encryption-functions.html#function_random-bytes)                                            | 返回随机字节向量                           |
+| [`SHA1()`, `SHA()`](https://dev.mysql.com/doc/refman/5.7/en/encryption-functions.html#function_sha1)                                                   | 计算 SHA-1 160 位校验和                  |
+| [`SHA2()`](https://dev.mysql.com/doc/refman/5.7/en/encryption-functions.html#function_sha2)                                                            | 计算 SHA-2 校验和                       |
+| [`AES_DECRYPT()`](https://dev.mysql.com/doc/refman/5.7/en/encryption-functions.html#function_aes-decrypt)                                              | 使用 AES 解密                          |
+| [`AES_ENCRYPT()`](https://dev.mysql.com/doc/refman/5.7/en/encryption-functions.html#function_aes-encrypt)                                              | 使用 AES 加密                          |
+| [`COMPRESS()`](https://dev.mysql.com/doc/refman/5.7/en/encryption-functions.html#function_compress)                                                    | 返回经过压缩的二进制字符串                      |
+| [`UNCOMPRESS()`](https://dev.mysql.com/doc/refman/5.7/en/encryption-functions.html#function_uncompress)                                                | 解压缩字符串                             |
+| [`UNCOMPRESSED_LENGTH()`](https://dev.mysql.com/doc/refman/5.7/en/encryption-functions.html#function_uncompressed-length)                              | 返回字符串解压后的长度                        |
+| [`CREATE_ASYMMETRIC_PRIV_KEY()`](https://dev.mysql.com/doc/refman/5.7/en/enterprise-encryption-functions.html#function_create-asymmetric-priv-key)     | 创建私钥                               |
+| [`CREATE_ASYMMETRIC_PUB_KEY()`](https://dev.mysql.com/doc/refman/5.7/en/enterprise-encryption-functions.html#function_create-asymmetric-pub-key)       | 创建公钥                               |
+| [`CREATE_DH_PARAMETERS()`](https://dev.mysql.com/doc/refman/5.7/en/enterprise-encryption-functions.html#function_create-dh-parameters)                 | 创建 DH 共享密钥                         |
+| [`CREATE_DIGEST()`](https://dev.mysql.com/doc/refman/5.7/en/enterprise-encryption-functions.html#function_create-digest)                               | 从字符串创建摘要                           |
+| [`ASYMMETRIC_DECRYPT()`](https://dev.mysql.com/doc/refman/5.7/en/enterprise-encryption-functions.html#function_asymmetric-decrypt)                     | 使用公钥或私钥解密密文                        |
+| [`ASYMMETRIC_DERIVE()`](https://dev.mysql.com/doc/refman/5.7/en/enterprise-encryption-functions.html#function_asymmetric-derive)                       | 从非对称密钥导出对称密钥                       |
+| [`ASYMMETRIC_ENCRYPT()`](https://dev.mysql.com/doc/refman/5.7/en/enterprise-encryption-functions.html#function_asymmetric-encrypt)                     | 使用公钥或私钥加密明文                        |
+| [`ASYMMETRIC_SIGN()`](https://dev.mysql.com/doc/refman/5.7/en/enterprise-encryption-functions.html#function_asymmetric-sign)                           | 从摘要创建签名                            |
+| [`ASYMMETRIC_VERIFY()`](https://dev.mysql.com/doc/refman/5.7/en/enterprise-encryption-functions.html#function_asymmetric-verify)                       | 验证签名字符串是否匹配摘要字符串                   |
