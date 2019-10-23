@@ -1,53 +1,24 @@
 ---
-title: 数值函数与操作符
+title: 信息函数
 category: user guide
 ---
 
-# 数值函数与操作符
+# 信息函数
 
-## 算术操作符
+TiDB 中信息函数的使用方法与 MySQL 基本一致，详情参见：[Information Functions](https://dev.mysql.com/doc/refman/5.7/en/information-functions.html)。
 
-| 操作符名                                                                                          | 功能描述   |
-|:--------------------------------------------------------------------------------------------- |:------ |
-| [`+`](https://dev.mysql.com/doc/refman/5.7/en/arithmetic-functions.html#operator_plus)        | 加号     |
-| [`-`](https://dev.mysql.com/doc/refman/5.7/en/arithmetic-functions.html#operator_minus)       | 减号     |
-| [`*`](https://dev.mysql.com/doc/refman/5.7/en/arithmetic-functions.html#operator_times)       | 乘号     |
-| [`/`](https://dev.mysql.com/doc/refman/5.7/en/arithmetic-functions.html#operator_divide)      | 除号     |
-| [`DIV`](https://dev.mysql.com/doc/refman/5.7/en/arithmetic-functions.html#operator_div)       | 整数除法   |
-| [`%`, `MOD`](https://dev.mysql.com/doc/refman/5.7/en/arithmetic-functions.html#operator_mod)  | 模运算，取余 |
-| [`-`](https://dev.mysql.com/doc/refman/5.7/en/arithmetic-functions.html#operator_unary-minus) | 更改参数符号 |
+## 信息函数表
 
-## 数学函数
-
-| 函数名                                                                                                       | 功能描述                                         |
-|:--------------------------------------------------------------------------------------------------------- |:-------------------------------------------- |
-| [`POW()`](https://dev.mysql.com/doc/refman/5.7/en/mathematical-functions.html#function_pow)               | 返回参数的指定乘方的结果值                                |
-| [`POWER()`](https://dev.mysql.com/doc/refman/5.7/en/mathematical-functions.html#function_power)           | 返回参数的指定乘方的结果值                                |
-| [`EXP()`](https://dev.mysql.com/doc/refman/5.7/en/mathematical-functions.html#function_exp)               | 返回 e（自然对数的底）的指定乘方后的值                         |
-| [`SQRT()`](https://dev.mysql.com/doc/refman/5.7/en/mathematical-functions.html#function_sqrt)             | 返回非负数的二次方根                                   |
-| [`LN()`](https://dev.mysql.com/doc/refman/5.7/en/mathematical-functions.html#function_ln)                 | 返回参数的自然对数                                    |
-| [`LOG()`](https://dev.mysql.com/doc/refman/5.7/en/mathematical-functions.html#function_log)               | 返回第一个参数的自然对数                                 |
-| [`LOG2()`](https://dev.mysql.com/doc/refman/5.7/en/mathematical-functions.html#function_log2)             | 返回参数以 2 为底的对数                                |
-| [`LOG10()`](https://dev.mysql.com/doc/refman/5.7/en/mathematical-functions.html#function_log10)           | 返回参数以 10 为底的对数                               |
-| [`PI()`](https://dev.mysql.com/doc/refman/5.7/en/mathematical-functions.html#function_pi)                 | 返回 pi 的值                                     |
-| [`TAN()`](https://dev.mysql.com/doc/refman/5.7/en/mathematical-functions.html#function_tan)               | 返回参数的正切值                                     |
-| [`COT()`](https://dev.mysql.com/doc/refman/5.7/en/mathematical-functions.html#function_cot)               | 返回参数的余切值                                     |
-| [`SIN()`](https://dev.mysql.com/doc/refman/5.7/en/mathematical-functions.html#function_sin)               | 返回参数的正弦值                                     |
-| [`COS()`](https://dev.mysql.com/doc/refman/5.7/en/mathematical-functions.html#function_cos)               | 返回参数的余弦值                                     |
-| [`ATAN()`](https://dev.mysql.com/doc/refman/5.7/en/mathematical-functions.html#function_atan)             | 返回参数的反正切值                                    |
-| [`ATAN2(), ATAN()`](https://dev.mysql.com/doc/refman/5.7/en/mathematical-functions.html#function_atan2)   | 返回两个参数的反正切值                                  |
-| [`ASIN()`](https://dev.mysql.com/doc/refman/5.7/en/mathematical-functions.html#function_asin)             | 返回参数的反正弦值                                    |
-| [`ACOS()`](https://dev.mysql.com/doc/refman/5.7/en/mathematical-functions.html#function_acos)             | 返回参数的反余弦值                                    |
-| [`RADIANS()`](https://dev.mysql.com/doc/refman/5.7/en/mathematical-functions.html#function_radians)       | 返回由度转化为弧度的参数                                 |
-| [`DEGREES()`](https://dev.mysql.com/doc/refman/5.7/en/mathematical-functions.html#function_degrees)       | 返回由弧度转化为度的参数                                 |
-| [`MOD()`](https://dev.mysql.com/doc/refman/5.7/en/mathematical-functions.html#function_mod)               | 返回余数                                         |
-| [`ABS()`](https://dev.mysql.com/doc/refman/5.7/en/mathematical-functions.html#function_abs)               | 返回参数的绝对值                                     |
-| [`CEIL()`](https://dev.mysql.com/doc/refman/5.7/en/mathematical-functions.html#function_ceil)             | 返回不小于参数的最小整数值                                |
-| [`CEILING()`](https://dev.mysql.com/doc/refman/5.7/en/mathematical-functions.html#function_ceiling)       | 返回不小于参数的最小整数值                                |
-| [`FLOOR()`](https://dev.mysql.com/doc/refman/5.7/en/mathematical-functions.html#function_floor)           | 返回不大于参数的最大整数值                                |
-| [`ROUND()`](https://dev.mysql.com/doc/refman/5.7/en/mathematical-functions.html#function_round)           | 返回参数最近似的整数或指定小数位数的数值                         |
-| [`RAND()`](https://dev.mysql.com/doc/refman/5.7/en/mathematical-functions.html#function_rand)             | 返回一个随机浮点值                                    |
-| [`SIGN()`](https://dev.mysql.com/doc/refman/5.7/en/mathematical-functions.html#function_sign)             | 返回参数的符号                                      |
-| [`CONV()`](https://dev.mysql.com/doc/refman/5.7/en/mathematical-functions.html#function_conv)             | 不同数基间转换数字，返回数字的字符串表示                         |
-| [`TRUNCATE()`](https://dev.mysql.com/doc/refman/5.7/en/mathematical-functions.html#function_truncate)     | 返回被舍位至指定小数位数的数字                              |
-| [`CRC32()`](https://dev.mysql.com/doc/refman/5.7/en/mathematical-functions.html#function_crc32)           | 计算循环冗余码校验值并返回一个 32 位无符号值                     |
+| 函数名                                                                                                                          | 功能描述                                                   |
+| ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| [`CONNECTION_ID()`](https://dev.mysql.com/doc/refman/5.7/en/information-functions.html#function_connection-id)               | 返回当前连接的连接 ID (线程 ID)                                   |
+| [`CURRENT_USER()`, `CURRENT_USER`](https://dev.mysql.com/doc/refman/5.7/en/information-functions.html#function_current-user) | 返回当前用户的用户名和主机名                                         |
+| [`DATABASE()`](https://dev.mysql.com/doc/refman/5.7/en/information-functions.html#function_database)                         | 返回默认(当前)的数据库名                                          |
+| [`FOUND_ROWS()`](https://dev.mysql.com/doc/refman/5.7/en/information-functions.html#function_found-rows)                     | 该函数返回对于一个包含 LIMIT 的 SELECT 查询语句，在不包含 LIMIT 的情况下回返回的记录数 |
+| [`LAST_INSERT_ID()`](https://dev.mysql.com/doc/refman/5.7/en/information-functions.html#function_last-insert-id)             | 返回最后一条 INSERT 语句中自增列的值                                 |
+| [`SCHEMA()`](https://dev.mysql.com/doc/refman/5.7/en/information-functions.html#function_schema)                             | 与 DATABASE() 同义                                        |
+| [`SESSION_USER()`](https://dev.mysql.com/doc/refman/5.7/en/information-functions.html#function_session-user)                 | 与 USER() 同义                                            |
+| [`SYSTEM_USER()`](https://dev.mysql.com/doc/refman/5.7/en/information-functions.html#function_system-user)                   | 与 USER() 同义                                            |
+| [`USER()`](https://dev.mysql.com/doc/refman/5.7/en/information-functions.html#function_user)                                 | 返回客户端提供的用户名和主机名                                        |
+| [`VERSION()`](https://dev.mysql.com/doc/refman/5.7/en/information-functions.html#function_version)                           | 返回当前 MySQL 服务器的版本信息                                    |
+| `TIDB_VERSION()`                                                                                                             | 返回当前 TiDB 服务器的版本信息                                     |
