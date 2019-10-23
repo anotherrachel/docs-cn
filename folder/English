@@ -1,54 +1,45 @@
 ---
-title: TiDB 2.1 RC4 Release Notes
+title: TiDB 2.1.11 Release Notes
 category: Releases
 ---
 
-# TiDB 2.1 RC4 Release Notes
+# TiDB 2.1.11 Release Notes
 
-2018 年 10 月 23 日，TiDB 发布 2.1 RC4 版。相比 2.1 RC3 版本，该版本对系统稳定性、优化器、统计信息以及执行引擎做了很多改进。
+发版日期：2019 年 6 月 03 日
+
+TiDB 版本：2.1.11
+
+TiDB Ansible 版本：2.1.11
 
 ## TiDB
 
-+ SQL 优化器
-    - 修复某些情况下 `UnionAll` 的列裁剪不正确的问题 [#7941](https://github.com/pingcap/tidb/pull/7941)
-    - 修复某些情况下 `UnionAll` 算子结果不正确的问题 [#8007](https://github.com/pingcap/tidb/pull/8007)
-+ SQL 执行引擎
-    - 修复 `AVG` 函数的精度问题 [#7874](https://github.com/pingcap/tidb/pull/7874)
-    - 支持通过 `EXPLAIN ANALYZE` 语句查看 Query 执行过程中各个算子的运行时间，返回结果行数等运行时统计信息 [#7925](https://github.com/pingcap/tidb/pull/7925)
-    - 修复多次引用同一列时 `PointGet` 算子 panic 的问题 [#7943](https://github.com/pingcap/tidb/pull/7943)
-    - 修复当 `Limit` 子句中的值太大时 panic 的问题 [#8002](https://github.com/pingcap/tidb/pull/8002)
-    - 修复某些情况下 `AddDate`/`SubDate` 执行过程中 panic 的问题 [#8009](https://github.com/pingcap/tidb/pull/8009)
-+ 统计信息
-    - 修复将组合索引的直方图下边界前缀判断为越界的问题 [#7856](https://github.com/pingcap/tidb/pull/7856)
-    - 修复统计信息收集引发的内存泄漏问题 [#7873](https://github.com/pingcap/tidb/pull/7873)
-    - 修复直方图为空时 panic 的问题 [#7928](https://github.com/pingcap/tidb/pull/7928)
-    - 修复加载统计信息时直方图边界越界的问题 [#7944](https://github.com/pingcap/tidb/pull/7944)
-    - 限制统计信息采样过程中数值的最大长度 [#7982](https://github.com/pingcap/tidb/pull/7982)
-+ Server
-    - 重构 Latch，避免事务冲突误判，提升并发事务的执行性能 [#7711](https://github.com/pingcap/tidb/pull/7711)
-    - 修复某些情况下收集 Slow Query 导致的 panic 问题 [#7874](https://github.com/pingcap/tidb/pull/7847)
-    - 修复 `LOAD DATA` 语句中，`ESCAPED BY` 为空字符串时 panic 的问题 [#8005](https://github.com/pingcap/tidb/pull/8005)
-    - 完善 “coprocessor error” 日志信息 [#8006](https://github.com/pingcap/tidb/pull/8006)
-+ 兼容性
-    - 当 Query 为空时，将 `SHOW PROCESSLIST` 结果中的 `Command` 字段设置为 “Sleep” [#7839](https://github.com/pingcap/tidb/pull/7839)
-+ 表达式
-    - 修复 `SYSDATE` 函数被常量折叠的问题 [#7895](https://github.com/pingcap/tidb/pull/7895)
-    - 修复 `SUBSTRING_INDEX` 在某些情况下 panic 的问题 [#7897](https://github.com/pingcap/tidb/pull/7897)
-+ DDL
-    - 修复抛出 “invalid ddl job type” 的错误时导致栈溢出的问题 [#7958](https://github.com/pingcap/tidb/pull/7958)
-    - 修复某些情况下 `ADMIN CHECK TABLE` 结果不正确的问题 [#7975](https://github.com/pingcap/tidb/pull/7975)
+- 修复 delete 多表 join 的结果时使用错误 schema 的问题 [#10595](https://github.com/pingcap/tidb/pull/10595)
+- 修复 `CONVERT()` 函数返回错误的字段类型的问题 [#10263](https://github.com/pingcap/tidb/pull/10263)
+- 更新统计信息时合并不重叠的反馈信息 [#10569](https://github.com/pingcap/tidb/pull/10569)
+- 修复  `unix_timestamp()-unix_timestamp(now())` 计算错误的问题 [#10491](https://github.com/pingcap/tidb/pull/10491)
+- 修复 `period_diff` 与 MySQL 8.0 不兼容的问题 [#10501](https://github.com/pingcap/tidb/pull/10501)
+- 收集统计信息的时候，忽略 `Virtual Column`，避免异常报错 [#10628](https://github.com/pingcap/tidb/pull/10628)
+- 支持 `SHOW OPEN TABLES` 语句 [#10374](https://github.com/pingcap/tidb/pull/10374)
+- 修复某些情况下导致的 goroutine 泄露问题 [#10656](https://github.com/pingcap/tidb/pull/10656)
+- 修复某些情况下设置 `tidb_snapshot` 变量时间格式解析出错的问题 [#10637](https://github.com/pingcap/tidb/pull/10637)
 
 ## PD
 
-- 修复下线后的 TiKV 没有从 Grafana 面板中移除的问题 [#1261](https://github.com/pingcap/pd/pull/1261)
-- 修复 grpc-go 设置 status 时的 data race 问题[#1265](https://github.com/pingcap/pd/pull/1265)
-- 修复 etcd 启动失败导致的服务挂起问题 [#1267](https://github.com/pingcap/pd/pull/1267)
-- 修复 leader 切换过程中可能产生的 data race [#1273](https://github.com/pingcap/pd/pull/1273)
-- 修复下线 TiKV 时可能输出多余 warning 日志的问题 [#1280](https://github.com/pingcap/pd/pull/1273)
+- 修复因为 `balance-region` 可能会导致热点 Region 没有机会调度的问题 [#1551](https://github.com/pingcap/pd/pull/1551)
+- 将热点相关调度的优先级改为高优先级 [#1551](https://github.com/pingcap/pd/pull/1551)
+- 新增配置项 `hot-region-schedule-limit` 控制同时进行热点调度任务的数量及新增 `hot-region-cache-hits-threshold` 控制判断是否为热点 Region [#1551](https://github.com/pingcap/pd/pull/1551)
 
 ## TiKV
 
-- 优化 apply snapshot 导致的 RocksDB Write stall 的问题 [#3606](https://github.com/tikv/tikv/pull/3606)
-- 增加 raftstore tick 相关 metrics [#3657](https://github.com/tikv/tikv/pull/3657)
-- 升级 RocksDB，修复写入卡死及 IngestExternalFile 时可能写坏源文件的问题 [#3661](https://github.com/tikv/tikv/pull/3661)
-- 升级 grpcio，修复 “too many pings” 误报的问题 [#3650](https://github.com/tikv/tikv/pull/3650)
+- 修复在仅有一个 leader，learner 时，learner 读到空 index 的问题 [#4751](https://github.com/tikv/tikv/pull/4751)
+- 将 `ScanLock` 和 `ResolveLock` 放在高优先级线程池中处理，减少对普通优先级命令的影响 [#4791](https://github.com/tikv/tikv/pull/4791)
+- 同步所有收到的 snapshot 的文件 [#4811](https://github.com/tikv/tikv/pull/4811)
+
+## Tools
+
+- TiDB Binlog
+    - 新增 GC 删数据限速功能，避免因为删除数据导致 QPS 降低的问题 [#620](https://github.com/pingcap/tidb-binlog/pull/620)
+
+## TiDB Ansible
+
+- 新增 Drainer 参数 [#760](https://github.com/pingcap/tidb-ansible/pull/760)
