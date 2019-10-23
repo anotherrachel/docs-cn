@@ -1,25 +1,26 @@
 ---
-title: JSON 类型
+title: 数据类型的默认值
 category: reference
 ---
 
-# JSON 类型
+# 数据类型的默认值
 
-JSON 类型可以存储 JSON 这种半结构化的数据，相比于直接将 JSON 存储为字符串，它的好处在于：
+在一个数据类型描述中的 `DEFAULT value` 段描述了一个列的默认值。这个默认值必须是常量，不可以是一个函数或者是表达式。但是对于时间类型，可以例外的使用 `NOW`、`CURRENT_TIMESTAMP`、`LOCALTIME`、`LOCALTIMESTAMP` 等函数作为 `DATETIME` 或者 `TIMESTAMP` 的默认值。
 
-1. 使用 Binary 格式进行序列化，对 JSON 的内部字段的查询、解析加快；
-2. 多了 JSON 合法性验证的步骤，只有合法的 JSON 文档才可以放入这个字段中；
+`BLOB`、`TEXT` 以及 `JSON` 不可以设置默认值。
 
-JSON 字段本身上，并不能创建索引。相反，可以对 JSON 文档中的某个子字段创建索引。例如：
+如果一个列的定义中没有 `DEFAULT` 的设置。TiDB 按照如下的规则决定:
 
-{{< copyable "sql" >}}
+* 如果该类型可以使用 `NULL` 作为值，那么这个列会在定义时添加隐式的默认值设置 `DEFAULT NULL`。
+* 如果该类型无法使用 `NULL` 作为值，那么这个列在定义时不会添加隐式的默认值设置。
 
-```sql
-CREATE TABLE city (
-    id INT PRIMARY KEY,
-    detail JSON,
-    population INT AS (JSON_EXTRACT(detail, '$.population'))
-);
-INSERT INTO city (id,detail) VALUES (1, '{"name": "Beijing", "population": 100}');
-SELECT id FROM city WHERE population >= 100;
-```
+对于一个设置了 `NOT NULL` 但是没有显式设置 `DEFAULT` 的列，当 `INSERT`、`REPLACE` 没有涉及到该列的值时，TiDB 根据当时的 `SQL_MODE` 进行不同的行为：
+
+* 如果此时是 `strict sql mode`，在事务中的语句会导致事务失败并回滚，非事务中的语句会直接报错。
+* 如果此时不是 `strict sql mode`，TiDB 会为这列赋值为列数据类型的隐式默认值。
+
+此时隐式默认值的设置按照如下规则：
+
+* 对于数值类型，它们的默认值是 0。当有 `AUTO_INCREMENT` 参数时，默认值会按照增量情况赋予正确的值。
+* 对于除了时间戳外的日期时间类型，默认值会是该类型的“零值”。时间戳类型的默认值会是当前的时间。
+* 对于除枚举以外的字符串类型，默认值会是空字符串。对于枚举类型，默认值是枚举中的第一个值。
