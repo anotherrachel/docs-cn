@@ -1,176 +1,144 @@
 ---
-title: crwdns40956:0crwdne40956:0
-category: crwdns40958:0crwdne40958:0
+title: crwdns48638:0crwdne48638:0
+category: crwdns48640:0crwdne48640:0
 ---
 
-# crwdns40960:0crwdne40960:0
+# crwdns48642:0crwdne48642:0
 
-crwdns40962:0crwdne40962:0
+## crwdns48644:0crwdne48644:0
 
-crwdns40964:0crwdne40964:0
+crwdns48646:0crwdne48646:0
 
-- crwdns40966:0crwdne40966:0
-- crwdns40968:0crwdne40968:0
+crwdns48648:0crwdne48648:0
 
-> **crwdns40970:0crwdne40970:0**
-> 
-> - crwdns40972:0crwdne40972:0
-> - crwdns40974:0crwdne40974:0
-> - crwdns40976:0crwdne40976:0
-> - crwdns40978:0crwdne40978:0
+* crwdns48650:0crwdne48650:0
+* crwdns48652:0crwdne48652:0
 
-## crwdns40980:0crwdne40980:0
+## crwdns48654:0crwdne48654:0
 
-### crwdns40982:0crwdne40982:0
+crwdns48656:0crwdne48656:0
 
-```bash
-crwdns40984:0crwdne40984:0
-```
+![crwdns48660:0crwdne48660:0](crwdns48658:0crwdne48658:0)
 
-### crwdns40986:0crwdne40986:0
+crwdns48662:0crwdne48662:0
 
-- crwdns40988:0crwdne40988:0
-- crwdns40990:0crwdne40990:0
-- crwdns40992:0crwdne40992:0
+- crwdns48664:0crwdne48664:0
 
-### crwdns40994:0crwdne40994:0
+- crwdns48666:0crwdne48666:0
 
-1. crwdns40996:0crwdne40996:0
-2. crwdns40998:0crwdne40998:0
-3. crwdns41000:0crwdne41000:0
-4. crwdns41002:0crwdne41002:0
+## crwdns48668:0crwdne48668:0
 
-> **crwdns41004:0crwdne41004:0**
-> 
-> crwdns41006:0crwdne41006:0
+### crwdns48670:0crwdne48670:0
 
-## crwdns41008:0crwdne41008:0
+crwdns48672:0crwdne48672:0
 
-### crwdns41010:0crwdne41010:0
+### crwdns48674:0crwdne48674:0
 
-```bash
-crwdns41012:0crwdne41012:0
-```
+#### crwdns48676:0crwdne48676:0
 
-### crwdns41014:0crwdne41014:0
+* crwdns48678:0crwdne48678:0
+* crwdns48680:0crwdne48680:0
 
-crwdns41016:0crwdne41016:0
+    crwdns48682:0crwdne48682:0
 
-### crwdns41018:0crwdne41018:0
+    ![crwdns48686:0crwdne48686:0](crwdns48684:0crwdne48684:0)
 
-crwdns41020:0crwdne41020:0
+* crwdns48688:0crwdne48688:0
 
-- crwdns41022:0crwdne41022:0
-- crwdns41024:0crwdne41024:0
+* crwdns48690:0crwdne48690:0
 
-## crwdns41026:0crwdne41026:0
+    crwdns48692:0crwdne48692:0
 
-### crwdns41028:0crwdne41028:0
+    * crwdns48694:0${drainer_savepoint_dir}crwdnd48694:0${pd_urls}crwdne48694:0
+    * crwdns48696:0crwdne48696:0
+    * crwdns48698:0crwdne48698:0
+    * crwdns48700:0${drainer_savepoint_dir}crwdne48700:0
 
-```bash
-crwdns41030:0crwdne41030:0
-```
+* crwdns48702:0crwdne48702:0
 
-### crwdns41032:0crwdne41032:0
-
-crwdns41034:0crwdne41034:0
-
-- crwdns41036:0crwdne41036:0
-- crwdns41038:0crwdne41038:0
-
-crwdns41040:0crwdne41040:0
-
-### crwdns41042:0crwdne41042:0
-
-1. crwdns41044:0crwdne41044:0
-
-    - crwdns41046:0crwdne41046:0
-    - crwdns41048:0crwdne41048:0
-
-    crwdns41050:0crwdne41050:0
-
-    ```ini
-    crwdns41052:0crwdne41052:0
+    ```toml
+    crwdns48704:0[syncer]crwdnd48704:0[syncer.to]crwdne48704:0
     ```
 
-    crwdns41054:0crwdne41054:0
+#### crwdns48706:0crwdne48706:0
 
-    ```ini
-    crwdns41056:0crwdne41056:0
+* crwdns48708:0crwdne48708:0
+    * crwdns48710:0crwdne48710:0
+        * crwdns48712:0crwdne48712:0
+    * crwdns48714:0crwdne48714:0
+    * crwdns48716:0crwdne48716:0
+        * crwdns48718:0crwdne48718:0
+
+* crwdns48720:0crwdne48720:0
+    * crwdns48722:0crwdne48722:0
+        * crwdns48724:0crwdne48724:0
+    * crwdns48726:0crwdne48726:0
+        * crwdns48728:0crwdne48728:0
+
+#### crwdns48730:0crwdne48730:0
+
+1. crwdns48732:0crwdne48732:0
+
+    ```
+    crwdns48734:0crwdne48734:0
     ```
 
-    crwdns41058:0crwdne41058:0
+ 2. crwdns48736:0crwdne48736:0
 
-    ```ini
-    crwdns41060:0crwdne41060:0
+    ```toml
+    crwdns48738:0crwdne48738:0
+    crwdns48740:0crwdne48740:0
     ```
 
-    crwdns41062:0crwdne41062:0
+3. crwdns48742:0crwdne48742:0
 
-    ```ini
-    crwdns41064:0crwdne41064:0
+    crwdns48744:0crwdne48744:0
+
+    ```bash
+    crwdns48746:0crwdne48746:0
     ```
 
-2. crwdns41066:0crwdne41066:0
+#### crwdns48748:0crwdne48748:0
 
-## crwdns41068:0crwdne41068:0
+1. crwdns48750:0crwdne48750:0
 
-### crwdns41070:0crwdne41070:0
-
-```bash
-crwdns41072:0crwdne41072:0
-```
-
-### crwdns41074:0crwdne41074:0
-
-crwdns41076:0crwdne41076:0
-
-- crwdns41078:0crwdne41078:0
-- crwdns41080:0crwdne41080:0
-
-crwdns41082:0crwdne41082:0
-
-- crwdns41084:0crwdne41084:0
-- crwdns41086:0crwdne41086:0
-
-> **crwdns41088:0crwdne41088:0**
-> 
-> crwdns41090:0crwdne41090:0
-
-### crwdns41092:0crwdne41092:0
-
-1. crwdns41094:0crwdne41094:0
-
-    crwdns41096:0crwdne41096:0
-
-    crwdns41098:0crwdne41098:0
-
-    ```ini
-    crwdns41100:0crwdne41100:0
+    ```
+    crwdns48752:0crwdne48752:0
     ```
 
-    crwdns41102:0crwdne41102:0
+2. crwdns48754:0crwdne48754:0
 
-    ```ini
-    crwdns41104:0crwdne41104:0
+    ```toml
+    crwdns48756:0crwdne48756:0
+
+    crwdns48758:0crwdne48758:0
+    crwdns48760:0[syncer]crwdnd48760:0[syncer.replicate-do-table]crwdnd48760:0[syncer.replicate-do-table]crwdnd48760:0[syncer.to]crwdnd48760:0[syncer.to]crwdne48760:0
     ```
 
-2. crwdns41106:0crwdne41106:0
+3. crwdns48762:0crwdne48762:0
 
-3. crwdns41108:0crwdne41108:0
+    crwdns48764:0crwdne48764:0
 
-    crwdns41110:0crwdne41110:0
-
-    crwdns41112:0crwdne41112:0
-
-    ```yaml
-    crwdns41114:0crwdne41114:0
+    ```bash
+    crwdns48766:0crwdne48766:0
     ```
 
-    crwdns41116:0crwdne41116:0
+## crwdns48768:0crwdne48768:0
 
-    ```yaml
-    crwdns41118:0crwdne41118:0
-    ```
+crwdns48770:0crwdne48770:0
 
-4. crwdns41120:0crwdne41120:0
+### crwdns48772:0crwdne48772:0
+
+crwdns48774:0crwdne48774:0
+
+crwdns48776:0crwdne48776:0
+
+### crwdns48778:0crwdne48778:0
+
++ crwdns48780:0crwdne48780:0
+
+    crwdns48782:0crwdne48782:0
+
++ crwdns48784:0crwdne48784:0
+
+    crwdns48786:0crwdne48786:0
