@@ -1,77 +1,72 @@
 ---
-title: UPDATE
-summary: TiDB 数据库中 UPDATE 的使用概况。
+title: TRUNCATE
+summary: TiDB 数据库中 TRUNCATE 的使用概况。
 category: reference
 ---
 
-# UPDATE
+# TRUNCATE
 
-`UPDATE` 语句用于修改指定表中的数据。
+`TRUNCATE` 语句以非事务方式从表中删除所有数据。可认为 `TRUNCATE` 语句同 `DROP TABLE` + `CREATE TABLE` 组合在语义上相同，定义与 `DROP TABLE` 语句相同。
+
+`TRUNCATE TABLE tableName` 和 `TRUNCATE tableName` 均为有效语法。
 
 ## 语法图
 
-**UpdateStmt:**
+**TruncateTableStmt:**
 
-![UpdateStmt](/media/sqlgram/UpdateStmt.png)
+![TruncateTableStmt](/media/sqlgram/TruncateTableStmt.png)
 
-**TableRef:**
+**OptTable:**
 
-![TableRef](/media/sqlgram/TableRef.png)
+![OptTable](/media/sqlgram/OptTable.png)
 
-**TableRefs:**
+**TableName:**
 
-![TableRefs](/media/sqlgram/TableRefs.png)
-
-**AssignmentList:**
-
-![AssignmentList](/media/sqlgram/AssignmentList.png)
-
-**WhereClauseOptional:**
-
-![WhereClauseOptional](/media/sqlgram/WhereClauseOptional.png)
+![TableName](/media/sqlgram/TableName.png)
 
 ## 示例
 
 ```sql
-mysql> CREATE TABLE t1 (id INT NOT NULL PRIMARY KEY auto_increment, c1 INT NOT NULL);
+mysql> CREATE TABLE t1 (a INT NOT NULL PRIMARY KEY);
 Query OK, 0 rows affected (0.11 sec)
 
-mysql> INSERT INTO t1 (c1) VALUES (1), (2), (3);
-Query OK, 3 rows affected (0.02 sec)
-Records: 3  Duplicates: 0  Warnings: 0
+mysql> INSERT INTO t1 VALUES (1),(2),(3),(4),(5);
+Query OK, 5 rows affected (0.01 sec)
+Records: 5  Duplicates: 0  Warnings: 0
 
 mysql> SELECT * FROM t1;
-+----+----+
-| id | c1 |
-+----+----+
-|  1 |  1 |
-|  2 |  2 |
-|  3 |  3 |
-+----+----+
-3 rows in set (0.00 sec)
++---+
+| a |
++---+
+| 1 |
+| 2 |
+| 3 |
+| 4 |
+| 5 |
++---+
+5 rows in set (0.00 sec)
 
-mysql> UPDATE t1 SET c1=5 WHERE c1=3;
-Query OK, 1 row affected (0.01 sec)
-Rows matched: 1  Changed: 1  Warnings: 0
+mysql> TRUNCATE t1;
+Query OK, 0 rows affected (0.11 sec)
 
 mysql> SELECT * FROM t1;
-+----+----+
-| id | c1 |
-+----+----+
-|  1 |  1 |
-|  2 |  2 |
-|  3 |  5 |
-+----+----+
-3 rows in set (0.00 sec)
+Empty set (0.00 sec)
+
+mysql> INSERT INTO t1 VALUES (1),(2),(3),(4),(5);
+Query OK, 5 rows affected (0.01 sec)
+Records: 5  Duplicates: 0  Warnings: 0
+
+mysql> TRUNCATE TABLE t1;
+Query OK, 0 rows affected (0.11 sec)
 ```
 
 ## MySQL 兼容性
 
-`UPDATE` 语句与 MySQL 完全兼容。如有任何兼容性差异，请在 GitHub 上提交 [issue](/v2.1/report-issue.md)。
+`TRUNCATE` 语句与 MySQL 完全兼容。如有任何兼容性差异，请在 GitHub 上提交 [issue](/v2.1/report-issue.md)。
 
 ## 另请参阅
 
-* [INSERT](/v2.1/reference/sql/statements/insert.md)
-* [SELECT](/v2.1/reference/sql/statements/select.md)
+* [DROP TABLE](/v2.1/reference/sql/statements/drop-table.md)
 * [DELETE](/v2.1/reference/sql/statements/delete.md)
-* [REPLACE](/v2.1/reference/sql/statements/replace.md)
+* [CREATE TABLE](/v2.1/reference/sql/statements/create-table.md)
+* [SHOW CREATE TABLE](/v2.1/reference/sql/statements/show-create-table.md)
