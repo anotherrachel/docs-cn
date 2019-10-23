@@ -1,38 +1,155 @@
 ---
-title: TiDB 2.0 RC4 Release Notes
-category: Releases
+title: SHOW WARNINGS
+summary: TiDB 数据库中 SHOW WARNINGS 的使用概况。
+category: reference
 ---
 
-# TiDB 2.0 RC4 Release Notes
+# SHOW WARNINGS
 
-2018 年 3 月 30 日，TiDB 发布 2.0 RC4 版。该版本在 2.0 RC3 版的基础上，对 MySQL 兼容性、系统稳定性和优化器做了很多改进。
+`SHOW WARNINGS` 语句用于显示当前客户端连接中已执行语句的报错列表。与在 MySQL 中一样，`sql_mode` 极大地影响哪些语句会导致错误与警告。
 
-## TiDB
+## 语法图
 
-- 支持 `SHOW GRANTS FOR CURRENT_USER();`
-- 修复 `UnionScan` 里的 `Expression` 没有 Clone 的问题
-- 支持 `SET TRANSACTION` 语法
-- 修复 `copIterator` 中潜在的 goroutine 泄露问题
-- 修复 `admin check table` 对包含 null 的 unique index 误判的问题
-- 支持用科学计数法显示浮点数
-- 修复 binary literal 计算时的类型推导
-- 修复解析 `CREATE VIEW` 语句的问题
-- 修复语句中同时包含 `ORDER BY` 和 `LIMIT 0` 时 panic 的问题
-- 提升 `DecodeBytes` 执行性能
-- 优化 `LIMIT 0` 为 `TableDual`，避免无用的执行计划构建
+**ShowStmt:**
 
-## PD
+![ShowStmt](/media/sqlgram/ShowStmt.png)
 
-- 支持手动 split Region，可用于处理单 Region 热点的问题
-- 修复 `pdctl` 运行 `config show all` 不显示 label property 的问题
-- metrics 及代码结构相关的优化
+**ShowTargetFilterable:**
 
-## TiKV
+![ShowTargetFilterable](/media/sqlgram/ShowTargetFilterable.png)
 
-- 限制接收 snapshot 时的内存使用，解决极端情况下的 OOM
-- 可以配置 Coprocessor 在遇到 warnings 时的行为
-- TiKV 支持导数据模式
-- 支持 Region 从正中间分裂
-- 提升 CI test 的速度
-- 使用 `crossbeam channel`
-- 改善 TiKV 在被隔离的情况下由于 leader missing 输出太多日志的问题
+## 示例
+
+{{< copyable "sql" >}}
+
+```sql
+CREATE TABLE t1 (a INT UNSIGNED);
+```
+
+```
+Query OK, 0 rows affected (0.11 sec)
+```
+
+{{< copyable "sql" >}}
+
+```sql
+INSERT INTO t1 VALUES (0);
+```
+
+```
+Query OK, 1 row affected (0.02 sec)
+```
+
+{{< copyable "sql" >}}
+
+```sql
+SELECT 1/a FROM t1;
+```
+
+```
++------+
+| 1/a  |
++------+
+| NULL |
++------+
+1 row in set, 1 warning (0.00 sec)
+```
+
+{{< copyable "sql" >}}
+
+```sql
+SHOW WARNINGS;
+```
+
+```
++---------+------+---------------+
+| Level   | Code | Message       |
++---------+------+---------------+
+| Warning | 1365 | Division by 0 |
++---------+------+---------------+
+1 row in set (0.00 sec)
+```
+
+{{< copyable "sql" >}}
+
+```sql
+INSERT INTO t1 VALUES (-1);
+```
+
+```
+ERROR 1264 (22003): Out of range value for column 'a' at row 1
+```
+
+{{< copyable "sql" >}}
+
+```sql
+SELECT * FROM t1;
+```
+
+```
++------+
+| a    |
++------+
+|    0 |
++------+
+1 row in set (0.00 sec)
+```
+
+{{< copyable "sql" >}}
+
+```sql
+SET sql_mode='';
+```
+
+```
+Query OK, 0 rows affected (0.00 sec)
+```
+
+{{< copyable "sql" >}}
+
+```sql
+INSERT INTO t1 VALUES (-1);
+```
+
+```
+Query OK, 1 row affected, 1 warning (0.01 sec)
+```
+
+{{< copyable "sql" >}}
+
+```sql
+SHOW WARNINGS;
+```
+
+```
++---------+------+---------------------------+
+| Level   | Code | Message                   |
++---------+------+---------------------------+
+| Warning | 1690 | constant -1 overflows int |
++---------+------+---------------------------+
+1 row in set (0.00 sec)
+```
+
+{{< copyable "sql" >}}
+
+```sql
+SELECT * FROM t1;
+```
+
+```
++------+
+| a    |
++------+
+|    0 |
+|    0 |
++------+
+2 rows in set (0.00 sec)
+```
+
+## MySQL 兼容性
+
+`SHOW WARNINGS` 语句与 MySQL 完全兼容。如有任何兼容性差异，请在 GitHub 上提交 [issue](/v3.0/report-issue.md)。
+
+## 另请参阅
+
+* [SHOW ERRORS](/v3.0/reference/sql/statements/show-errors.md)
