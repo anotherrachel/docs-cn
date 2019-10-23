@@ -1,446 +1,352 @@
-# TiDB 中文用户文档
+---
+title: Kubernetes 上的 TiDB 集群故障诊断
+category: how-to
+aliases:
+  - '/docs-cn/v3.0/how-to/troubleshoot/tidb-in-kubernetes/'
+---
 
-<!-- markdownlint-disable MD007 -->
-<!-- markdownlint-disable MD032 -->
+# Kubernetes 上的 TiDB 集群故障诊断
 
-## 目录
+本文介绍了 Kubernetes 上 TiDB 集群的一些常见故障以及诊断解决方案。
 
-+ 关于 TiDB
-  - [TiDB 简介](/v3.0/overview.md)
-  + Benchmark 测试
-    - [如何用 Sysbench 测试 TiDB](/v3.0/benchmark/how-to-run-sysbench.md)
-    - [如何对 TiDB 进行 TPC-C 测试](/v3.0/benchmark/how-to-run-tpcc.md)
-    - [Sysbench 性能对比 - v3.0 对比 v2.1](/v3.0/benchmark/sysbench-v4.md)
-    - [TPC-C 性能对比 - v3.0 对比 v2.1](/v3.0/benchmark/tpcc.md)
-    - [线上负载与 Add Index 相互影响测试](/v3.0/benchmark/add-index-with-load.md)
-    - [TiDB in Kubernetes Sysbench 性能测试](/v3.0/benchmark/sysbench-in-k8s.md)
-    - [DM 1.0-GA 性能测试](/v3.0/benchmark/dm-v1.0-ga.md)
-+ 主要概念
-  - [整体架构](/v3.0/architecture.md)
-  + 核心特性
-    - [水平扩展](/v3.0/key-features.md#水平扩展)
-    - [高可用](/v3.0/key-features.md#高可用)
-+ 操作指南
-  + 快速上手
-    + 创建集群
-      - [使用 Docker Compose 部署 TiDB 集群](https://pingcap.com/docs-cn/dev/how-to/get-started/deploy-tidb-from-docker-compose/)
-    - [SQL 基本操作](/v3.0/how-to/get-started/explore-sql.md)
-    - [读取历史数据](/v3.0/how-to/get-started/read-historical-data.md)
-    - [TiDB Binlog 教程](/v3.0/how-to/get-started/tidb-binlog.md)
-    - [TiDB Data Migration 教程](/v3.0/how-to/get-started/data-migration.md)
-    - [TiSpark 教程](/v3.0/how-to/get-started/tispark.md)
-  + 部署
-    - [软硬件环境需求](/v3.0/how-to/deploy/hardware-recommendations.md)
-    + 集群部署方式
-      - [使用 Ansible 部署（推荐）](/v3.0/how-to/deploy/orchestrated/ansible.md)
-      - [使用 Ansible 离线部署](/v3.0/how-to/deploy/orchestrated/offline-ansible.md)
-      - [使用 Docker 部署](/v3.0/how-to/deploy/orchestrated/docker.md)
-    + 跨地域冗余
-      - [跨数据中心部署方案](/v3.0/how-to/deploy/geographic-redundancy/overview.md)
-      - [配置集群拓扑](/v3.0/how-to/deploy/geographic-redundancy/location-awareness.md)
-    - [使用 Ansible 部署 DM 集群](/v3.0/how-to/deploy/data-migration-with-ansible.md)
-  + 配置
-    - [时区](/v3.0/how-to/configure/time-zone.md)
-    - [内存控制](/v3.0/how-to/configure/memory-control.md)
-  + 安全
-    + 安全传输层协议 (TLS)
-      - [为 MySQL 客户端开启 TLS](/v3.0/how-to/secure/enable-tls-clients.md)
-      - [为 TiDB 组件间开启 TLS](/v3.0/how-to/secure/enable-tls-between-components.md)
-    - [生成自签名证书](/v3.0/how-to/secure/generate-self-signed-certificates.md)
-  + 监控
-    - [概述](/v3.0/how-to/monitor/overview.md)
-    - [监控 TiDB 集群](/v3.0/how-to/monitor/monitor-a-cluster.md)
-  + 迁移
-    - [概述](/v3.0/how-to/migrate/overview.md)
-    + 从 MySQL 迁移
-      - [全量迁移](/v3.0/how-to/migrate/from-mysql.md)
-      - [增量复制](/v3.0/how-to/migrate/incrementally-from-mysql.md)
-    - [从 Amazon Aurora MySQL 迁移数据](/v3.0/how-to/migrate/from-aurora.md)
-    - [从 CSV 迁移](/v3.0/reference/tools/tidb-lightning/csv.md)
-  + 运维
-    - [Ansible 常见运维操作](/v3.0/how-to/maintain/ansible-operations.md)
-    + [备份与恢复](/v3.0/how-to/maintain/backup-and-restore.md)
-    - [定位慢查询](/v3.0/how-to/maintain/identify-slow-queries.md)
-  + 扩容缩容
-    - [使用 Ansible 扩容缩容](/v3.0/how-to/scale/with-ansible.md)
-  + 升级
-    - [升级至 TiDB 3.0](/v3.0/how-to/upgrade/from-previous-version.md)
-    - [使用 Ansible 滚动升级](/v3.0/how-to/upgrade/rolling-updates-with-ansible.md)
-    - [升级 Data Migration](/v3.0/reference/tools/data-migration/dm-upgrade.md)
-  + 故障诊断
-    - [集群配置诊断](/v3.0/how-to/troubleshoot/cluster-setup.md)
-    - [Data Migration 故障诊断](/v3.0/how-to/troubleshoot/data-migration.md)
-    - [TiDB Lightning 故障诊断](/v3.0/how-to/troubleshoot/tidb-lightning.md)
-+ 参考手册
-  + 周边工具
-    - [Mydumper](/v3.0/reference/tools/mydumper.md)
-    - [Loader](/v3.0/reference/tools/loader.md)
-    - [Syncer](/v3.0/reference/tools/syncer.md)
-    + Data Migration
-      + 概述
-        - [DM 架构](/v3.0/reference/tools/data-migration/overview.md#dm-架构)
-        - [同步功能介绍](/v3.0/reference/tools/data-migration/overview.md#同步功能介绍)
-        - [使用限制](/v3.0/reference/tools/data-migration/overview.md#使用限制)
-      + 核心特性
-        - [Table Routing](/v3.0/reference/tools/data-migration/features/overview.md#table-routing)
-        - [Black & White Lists](/v3.0/reference/tools/data-migration/features/overview.md#black--white-table-lists)
-        - [Binlog Event Filter](/v3.0/reference/tools/data-migration/features/overview.md#binlog-event-filter)
-        - [同步延迟监控](/v3.0/reference/tools/data-migration/features/overview.md#同步延迟监控)
-        + Shard Support
-          - [简介](/v3.0/reference/tools/data-migration/features/shard-merge.md)
-          - [使用限制](/v3.0/reference/tools/data-migration/features/shard-merge.md#使用限制)
-          - [手动处理 Sharding DDL Lock](/v3.0/reference/tools/data-migration/features/manually-handling-sharding-ddl-locks.md)
-      + 使用场景
-        - [简单的从库同步场景](/v3.0/reference/tools/data-migration/usage-scenarios/simple-synchronization.md)
-        - [分库分表合并场景](/v3.0/reference/tools/data-migration/usage-scenarios/shard-merge.md)
-        - [分表合并数据迁移最佳实践](/v3.0/reference/tools/data-migration/usage-scenarios/best-practice-dm-shard.md)
-        - [DM-worker 在上游 MySQL 主从间切换](/v3.0/reference/tools/data-migration/usage-scenarios/master-slave-switch.md)
-      + [部署使用](/v3.0/reference/tools/data-migration/deploy.md)
-      + 配置
-        - [概述](/v3.0/reference/tools/data-migration/configure/overview.md)
-        - [任务配置](/v3.0/reference/tools/data-migration/configure/task-configuration-file.md)
-      - [监控 DM 集群](/v3.0/reference/tools/data-migration/monitor.md)
-      - [管理数据同步任务](/v3.0/reference/tools/data-migration/manage-tasks.md)
-      - [DM 集群操作](/v3.0/reference/tools/data-migration/cluster-operations.md)
-      + 从与 MySQL 兼容的数据库迁移数据
-        - [从 Amazon Aurora MySQL 迁移数据](/v3.0/how-to/migrate/from-aurora.md)
-      - [DM Portal](/v3.0/reference/tools/data-migration/dm-portal.md)
-      - [DM 错误含义和诊断](/v3.0/reference/tools/data-migration/error-system.md)
-      - [DM 故障诊断](/v3.0/how-to/troubleshoot/data-migration.md)
-      - [FAQ](/v3.0/faq/data-migration.md)
-    + TiDB Lightning
-      - [概述](/v3.0/reference/tools/tidb-lightning/overview.md)
-      - [部署执行](/v3.0/reference/tools/tidb-lightning/deployment.md)
-      - [断点续传](/v3.0/reference/tools/tidb-lightning/checkpoints.md)
-      - [表库过滤](/v3.0/reference/tools/tidb-lightning/table-filter.md)
-      - [CSV 支持](/v3.0/reference/tools/tidb-lightning/csv.md)
-      - [监控告警](/v3.0/reference/tools/tidb-lightning/monitor.md)
-      - [故障诊断](/v3.0/how-to/troubleshoot/tidb-lightning.md)
-      - [FAQ](/v3.0/faq/tidb-lightning.md)
-    - [sync-diff-inspector](/v3.0/reference/tools/sync-diff-inspector/overview.md)
-    - [PD Control](/v3.0/reference/tools/pd-control.md)
-    - [PD Recover](/v3.0/reference/tools/pd-recover.md)
-    - [TiKV Control](/v3.0/reference/tools/tikv-control.md)
-    - [TiDB Controller](/v3.0/reference/tools/tidb-control.md)
-    - [工具下载](/v3.0/reference/tools/download.md)
-  + 最佳实践
-    - [HAProxy 最佳实践](/v3.0/reference/best-practices/haproxy.md)
-    - [Java 应用开发最佳实践](/v3.0/reference/best-practices/java-app.md)
-    - [高并发写入场景最佳实践](/v3.0/reference/best-practices/high-concurrency.md)
-    - [Grafana 监控最佳实践](/v3.0/reference/best-practices/grafana-monitor.md)
-  + [与 MySQL 兼容性对比](/v3.0/reference/mysql-compatibility.md)
-  + SQL
-    + SQL 语言结构
-      - [字面值](/v3.0/reference/sql/language-structure/literal-values.md)
-      - [Schema 对象名](/v3.0/reference/sql/language-structure/schema-object-names.md)
-      - [关键字和保留字](/v3.0/reference/sql/language-structure/keywords-and-reserved-words.md)
-      - [用户自定义变量](/v3.0/reference/sql/language-structure/user-defined-variables.md)
-      - [表达式语法](/v3.0/reference/sql/language-structure/expression-syntax.md)
-      - [注释语法](/v3.0/reference/sql/language-structure/comment-syntax.md)
-    + 数据类型
-      - [概述](/v3.0/reference/sql/data-types/overview.md)
-      - [默认值](/v3.0/reference/sql/data-types/default-values.md)
-      + 数值类型
-        - [`BIT`](/v3.0/reference/sql/data-types/numeric.md#bit-类型)
-        - [`BOOL|BOOLEAN`](/v3.0/reference/sql/data-types/numeric.md#boolean-类型)
-        - [`TINYINT`](/v3.0/reference/sql/data-types/numeric.md#tinyint-类型)
-        - [`SMALLINT`](/v3.0/reference/sql/data-types/numeric.md#smallint-类型)
-        - [`MEDIUMINT`](/v3.0/reference/sql/data-types/numeric.md#mediumint-类型)
-        - [`INT|INTEGER`](/v3.0/reference/sql/data-types/numeric.md#integer-类型)
-        - [`BIGINT`](/v3.0/reference/sql/data-types/numeric.md#bigint-类型)
-        - [`DECIMAL`](/v3.0/reference/sql/data-types/numeric.md#decimal-类型)
-        - [`FLOAT`](/v3.0/reference/sql/data-types/numeric.md#float-类型)
-        - [`DOUBLE`](/v3.0/reference/sql/data-types/numeric.md#double-类型)
-      + 日期和时间类型
-        - [`DATE`](/v3.0/reference/sql/data-types/date-and-time.md#date-类型)
-        - [`DATETIME`](/v3.0/reference/sql/data-types/date-and-time.md#datetime-类型)
-        - [`TIMESTAMP`](/v3.0/reference/sql/data-types/date-and-time.md#timestamp-类型)
-        - [`TIME`](/v3.0/reference/sql/data-types/date-and-time.md#time-类型)
-        - [`YEAR`](/v3.0/reference/sql/data-types/date-and-time.md#year-类型)
-      + 字符串类型
-        - [`CHAR`](/v3.0/reference/sql/data-types/string.md#char-类型)
-        - [`VARCHAR`](/v3.0/reference/sql/data-types/string.md#varchar-类型)
-        - [`TEXT`](/v3.0/reference/sql/data-types/string.md#text-类型)
-        - [`LONGTEXT`](/v3.0/reference/sql/data-types/string.md#longtext-类型)
-        - [`BINARY`](/v3.0/reference/sql/data-types/string.md#binary-类型)
-        - [`VARBINARY`](/v3.0/reference/sql/data-types/string.md#varbinary-类型)
-        - [`TINYBLOB`](/v3.0/reference/sql/data-types/string.md#tinyblob-类型)
-        - [`BLOB`](/v3.0/reference/sql/data-types/string.md#blob-类型)
-        - [`MEDIUMBLOB`](/v3.0/reference/sql/data-types/string.md#mediumblob-类型)
-        - [`LONGBLOB`](/v3.0/reference/sql/data-types/string.md#longblob-类型)
-        - [`ENUM`](/v3.0/reference/sql/data-types/string.md#enum-类型)
-        - [`SET`](/v3.0/reference/sql/data-types/string.md#set-类型)
-      - [JSON Type](/v3.0/reference/sql/data-types/json.md)
-    + 函数与操作符
-      - [函数与操作符概述](/v3.0/reference/sql/functions-and-operators/reference.md)
-      - [表达式求值的类型转换](/v3.0/reference/sql/functions-and-operators/type-conversion.md)
-      - [操作符](/v3.0/reference/sql/functions-and-operators/operators.md)
-      - [控制流程函数](/v3.0/reference/sql/functions-and-operators/control-flow-functions.md)
-      - [字符串函数](/v3.0/reference/sql/functions-and-operators/string-functions.md)
-      - [数值函数与操作符](/v3.0/reference/sql/functions-and-operators/numeric-functions-and-operators.md)
-      - [日期和时间函数](/v3.0/reference/sql/functions-and-operators/date-and-time-functions.md)
-      - [位函数和操作符](/v3.0/reference/sql/functions-and-operators/bit-functions-and-operators.md)
-      - [Cast 函数和操作符](/v3.0/reference/sql/functions-and-operators/cast-functions-and-operators.md)
-      - [加密和压缩函数](/v3.0/reference/sql/functions-and-operators/encryption-and-compression-functions.md)
-      - [信息函数](/v3.0/reference/sql/functions-and-operators/information-functions.md)
-      - [JSON 函数](/v3.0/reference/sql/functions-and-operators/json-functions.md)
-      - [GROUP BY 聚合函数](/v3.0/reference/sql/functions-and-operators/aggregate-group-by-functions.md)
-      - [窗口函数](/v3.0/reference/sql/functions-and-operators/window-functions.md)
-      - [其它函数](/v3.0/reference/sql/functions-and-operators/miscellaneous-functions.md)
-      - [精度数学](/v3.0/reference/sql/functions-and-operators/precision-math.md)
-      - [下推到 TiKV 的表达式列表](/v3.0/reference/sql/functions-and-operators/expressions-pushed-down.md)
-    + SQL 语句
-      - [`ADD COLUMN`](/v3.0/reference/sql/statements/add-column.md)
-      - [`ADD INDEX`](/v3.0/reference/sql/statements/add-index.md)
-      - [`ADMIN`](/v3.0/reference/sql/statements/admin.md)
-      - [`ALTER DATABASE`](/v3.0/reference/sql/statements/alter-database.md)
-      - [`ALTER TABLE`](/v3.0/reference/sql/statements/alter-table.md)
-      - [`ALTER USER`](/v3.0/reference/sql/statements/alter-user.md)
-      - [`ANALYZE TABLE`](/v3.0/reference/sql/statements/analyze-table.md)
-      - [`BEGIN`](/v3.0/reference/sql/statements/begin.md)
-      - [`COMMIT`](/v3.0/reference/sql/statements/commit.md)
-      - [`CREATE DATABASE`](/v3.0/reference/sql/statements/create-database.md)
-      - [`CREATE INDEX`](/v3.0/reference/sql/statements/create-index.md)
-      - [`CREATE TABLE LIKE`](/v3.0/reference/sql/statements/create-table-like.md)
-      - [`CREATE TABLE`](/v3.0/reference/sql/statements/create-table.md)
-      - [`CREATE USER`](/v3.0/reference/sql/statements/create-user.md)
-      - [`CREATE VIEW`](/v3.0/reference/sql/statements/create-view.md)
-      - [`DEALLOCATE`](/v3.0/reference/sql/statements/deallocate.md)
-      - [`DELETE`](/v3.0/reference/sql/statements/delete.md)
-      - [`DESC`](/v3.0/reference/sql/statements/desc.md)
-      - [`DESCRIBE`](/v3.0/reference/sql/statements/describe.md)
-      - [`DO`](/v3.0/reference/sql/statements/do.md)
-      - [`DROP COLUMN`](/v3.0/reference/sql/statements/drop-column.md)
-      - [`DROP DATABASE`](/v3.0/reference/sql/statements/drop-database.md)
-      - [`DROP INDEX`](/v3.0/reference/sql/statements/drop-index.md)
-      - [`DROP TABLE`](/v3.0/reference/sql/statements/drop-table.md)
-      - [`DROP USER`](/v3.0/reference/sql/statements/drop-user.md)
-      - [`DROP VIEW`](/v3.0/reference/sql/statements/drop-view.md)
-      - [`EXECUTE`](/v3.0/reference/sql/statements/execute.md)
-      - [`EXPLAIN ANALYZE`](/v3.0/reference/sql/statements/explain-analyze.md)
-      - [`EXPLAIN`](/v3.0/reference/sql/statements/explain.md)
-      - [`FLUSH PRIVILEGES`](/v3.0/reference/sql/statements/flush-privileges.md)
-      - [`FLUSH STATUS`](/v3.0/reference/sql/statements/flush-status.md)
-      - [`FLUSH TABLES`](/v3.0/reference/sql/statements/flush-tables.md)
-      - [`GRANT <privileges>`](/v3.0/reference/sql/statements/grant-privileges.md)
-      - [`INSERT`](/v3.0/reference/sql/statements/insert.md)
-      - [`KILL [TIDB]`](/v3.0/reference/sql/statements/kill.md)
-      - [`LOAD DATA`](/v3.0/reference/sql/statements/load-data.md)
-      - [`MODIFY COLUMN`](/v3.0/reference/sql/statements/modify-column.md)
-      - [`PREPARE`](/v3.0/reference/sql/statements/prepare.md)
-      - [`RECOVER TABLE`](/v3.0/reference/sql/statements/recover-table.md)
-      - [`RENAME INDEX`](/v3.0/reference/sql/statements/rename-index.md)
-      - [`RENAME TABLE`](/v3.0/reference/sql/statements/rename-table.md)
-      - [`REPLACE`](/v3.0/reference/sql/statements/replace.md)
-      - [`REVOKE <privileges>`](/v3.0/reference/sql/statements/revoke-privileges.md)
-      - [`ROLLBACK`](/v3.0/reference/sql/statements/rollback.md)
-      - [`SELECT`](/v3.0/reference/sql/statements/select.md)
-      - [`SET [NAMES|CHARACTER SET]`](/v3.0/reference/sql/statements/set-names.md)
-      - [`SET PASSWORD`](/v3.0/reference/sql/statements/set-password.md)
-      - [`SET TRANSACTION`](/v3.0/reference/sql/statements/set-transaction.md)
-      - [`SET [GLOBAL|SESSION] <variable>`](/v3.0/reference/sql/statements/set-variable.md)
-      - [`SHOW CHARACTER SET`](/v3.0/reference/sql/statements/show-character-set.md)
-      - [`SHOW COLLATION`](/v3.0/reference/sql/statements/show-collation.md)
-      - [`SHOW [FULL] COLUMNS FROM`](/v3.0/reference/sql/statements/show-columns-from.md)
-      - [`SHOW CREATE TABLE`](/v3.0/reference/sql/statements/show-create-table.md)
-      - [`SHOW CREATE USER`](/v3.0/reference/sql/statements/show-create-user.md)
-      - [`SHOW DATABASES`](/v3.0/reference/sql/statements/show-databases.md)
-      - [`SHOW ENGINES`](/v3.0/reference/sql/statements/show-engines.md)
-      - [`SHOW ERRORS`](/v3.0/reference/sql/statements/show-errors.md)
-      - [`SHOW [FULL] FIELDS FROM`](/v3.0/reference/sql/statements/show-fields-from.md)
-      - [`SHOW GRANTS`](/v3.0/reference/sql/statements/show-grants.md)
-      - [`SHOW INDEXES [FROM|IN]`](/v3.0/reference/sql/statements/show-indexes.md)
-      - [`SHOW INDEX [FROM|IN]`](/v3.0/reference/sql/statements/show-index.md)
-      - [`SHOW KEYS [FROM|IN]`](/v3.0/reference/sql/statements/show-keys.md)
-      - [`SHOW PRIVILEGES`](/v3.0/reference/sql/statements/show-privileges.md)
-      - [`SHOW [FULL] PROCESSSLIST`](/v3.0/reference/sql/statements/show-processlist.md)
-      - [`SHOW SCHEMAS`](/v3.0/reference/sql/statements/show-schemas.md)
-      - [`SHOW [FULL] TABLES`](/v3.0/reference/sql/statements/show-tables.md)
-      - [`SHOW TABLE REGIONS`](/v3.0/reference/sql/statements/show-table-regions.md)
-      - [`SHOW TABLE STATUS`](/v3.0/reference/sql/statements/show-table-status.md)
-      - [`SHOW [GLOBAL|SESSION] VARIABLES`](/v3.0/reference/sql/statements/show-variables.md)
-      - [`SHOW WARNINGS`](/v3.0/reference/sql/statements/show-warnings.md)
-      - [`SPLIT REGION`](/v3.0/reference/sql/statements/split-region.md)
-      - [`START TRANSACTION`](/v3.0/reference/sql/statements/start-transaction.md)
-      - [`TRACE`](/v3.0/reference/sql/statements/trace.md)
-      - [`TRUNCATE`](/v3.0/reference/sql/statements/truncate.md)
-      - [`UPDATE`](/v3.0/reference/sql/statements/update.md)
-      - [`USE`](/v3.0/reference/sql/statements/use.md)
-    - [约束](/v3.0/reference/sql/constraints.md)
-    - [生成列](/v3.0/reference/sql/generated-columns.md)
-    - [分区表](/v3.0/reference/sql/partitioning.md)
-    - [字符集](/v3.0/reference/sql/character-set.md)
-    - [SQL 模式](/v3.0/reference/sql/sql-mode.md)
-    - [视图](/v3.0/reference/sql/view.md)
-  + 配置
-    + tidb-server
-      - [MySQL 系统变量](/v3.0/reference/configuration/tidb-server/mysql-variables.md)
-      - [TiDB 特定系统变量](/v3.0/reference/configuration/tidb-server/tidb-specific-variables.md)
-      - [配置参数](/v3.0/reference/configuration/tidb-server/configuration.md)
-      - [配置文件描述](/v3.0/reference/configuration/tidb-server/configuration-file.md)
-    + pd-server
-      - [配置参数](/v3.0/reference/configuration/pd-server/configuration.md)
-      - [配置文件描述](/v3.0/reference/configuration/pd-server/configuration-file.md)
-    + tikv-server
-      - [配置参数](/v3.0/reference/configuration/tikv-server/configuration.md)
-      - [配置文件描述](/v3.0/reference/configuration/tikv-server/configuration-file.md)
-  + 监控指标
-    - [Overview 面板](/v3.0/reference/key-monitoring-metrics/overview-dashboard.md)
-    - [TiDB 面板](/v3.0/reference/key-monitoring-metrics/tidb-dashboard.md)
-    - [PD 面板](/v3.0/reference/key-monitoring-metrics/pd-dashboard.md)
-    - [TiKV 面板](/v3.0/reference/key-monitoring-metrics/tikv-dashboard.md)
-  - [报警规则](/v3.0/reference/alert-rules.md)
-  + 安全
-    - [与 MySQL 的安全特性差异](/v3.0/reference/security/compatibility.md)
-    - [TiDB 数据库权限管理](/v3.0/reference/security/privilege-system.md)
-    - [TiDB 用户账户管理](/v3.0/reference/security/user-account-management.md)
-    - [基于角色的访问控制](/v3.0/reference/security/role-based-access-control.md)
-  + 事务
-    - [事务语句](/v3.0/reference/transactions/overview.md)
-    - [事务模型](/v3.0/reference/transactions/transaction-model.md)
-    - [隔离级别](/v3.0/reference/transactions/transaction-isolation.md)
-    - [悲观事务](/v3.0/reference/transactions/transaction-pessimistic.md)
-  + 系统数据库
-    - [`mysql`](/v3.0/reference/system-databases/mysql.md)
-    - [`information_schema`](/v3.0/reference/system-databases/information-schema.md)
-  - [错误码](/v3.0/reference/error-codes.md)
-  - [支持的连接器和 API](/v3.0/reference/supported-clients.md)
-  + 垃圾回收 (GC)
-    - [GC 机制简介](/v3.0/reference/garbage-collection/overview.md)
-    - [GC 配置](/v3.0/reference/garbage-collection/configuration.md)
-  + 性能调优
-    - [SQL 优化流程](/v3.0/reference/performance/sql-optimizer-overview.md)
-    - [理解 TiDB 执行计划](/v3.0/reference/performance/understanding-the-query-execution-plan.md)
-    - [执行计划绑定](/v3.0/reference/performance/execution-plan-bind.md)
-    - [统计信息概述](/v3.0/reference/performance/statistics.md)
-    - [Optimizer Hints](/v3.0/reference/performance/optimizer-hints.md)
-    - [使用 SQL 语句检查 TiDB 集群状态](/v3.0/reference/performance/check-cluster-status-using-sql-statements.md)
-    - [Statement Summary Table](/v3.0/reference/performance/statement-summary.md)
-    - [TiKV 调优](/v3.0/reference/performance/tune-tikv.md)
-    - [TiDB 最佳实践](https://pingcap.com/blog-cn/tidb-best-practice/)
-  + [TiSpark 使用指南](/v3.0/reference/tispark.md)
-  + TiDB Binlog
-    - [概述](/v3.0/reference/tools/tidb-binlog/overview.md)
-    - [部署使用](/v3.0/reference/tools/tidb-binlog/deploy.md)
-    - [运维管理](/v3.0/reference/tools/tidb-binlog/maintain.md)
-    - [版本升级](/v3.0/reference/tools/tidb-binlog/upgrade.md)
-    - [监控告警](/v3.0/reference/tools/tidb-binlog/monitor.md)
-    - [增量恢复](/v3.0/reference/tools/tidb-binlog/reparo.md)
-    - [Kafka 自定义开发](/v3.0/reference/tools/tidb-binlog/binlog-slave-client.md)
-    - [FAQ](/v3.0/reference/tools/tidb-binlog/faq.md)
-+ TiDB in Kubernetes
-  - [TiDB Operator 简介](/v3.0/tidb-in-kubernetes/tidb-operator-overview.md)
-  + 快速上手
-    - [kind](/v3.0/tidb-in-kubernetes/get-started/deploy-tidb-from-kubernetes-kind.md)
-    - [DinD](/v3.0/tidb-in-kubernetes/get-started/deploy-tidb-from-kubernetes-dind.md)
-    - [GKE](/v3.0/tidb-in-kubernetes/get-started/deploy-tidb-from-kubernetes-gke.md)
-    - [Minikube](/v3.0/tidb-in-kubernetes/get-started/deploy-tidb-from-kubernetes-minikube.md)
-  + 部署
-    - [集群环境要求](/v3.0/tidb-in-kubernetes/deploy/prerequisites.md)
-    - [部署 TiDB Operator](/v3.0/tidb-in-kubernetes/deploy/tidb-operator.md)
-    - [标准 Kubernetes 上的 TiDB 集群](/v3.0/tidb-in-kubernetes/deploy/general-kubernetes.md)
-    - [AWS EKS 上的 TiDB 集群](/v3.0/tidb-in-kubernetes/deploy/aws-eks.md)
-    - [GCP 上的 TiDB 集群](/v3.0/tidb-in-kubernetes/deploy/gcp-gke.md)
-    - [阿里云上的 TiDB 集群](/v3.0/tidb-in-kubernetes/deploy/alibaba-cloud.md)
-    - [访问 Kubernetes 上的 TiDB 集群](/v3.0/tidb-in-kubernetes/deploy/access-tidb.md)
-  + 配置
-    - [初始化集群](/v3.0/tidb-in-kubernetes/initialize-cluster.md)
-  - [监控](/v3.0/tidb-in-kubernetes/monitor/tidb-in-kubernetes.md)
-  + 运维
-    - [销毁 TiDB 集群](/v3.0/tidb-in-kubernetes/maintain/destroy-tidb-cluster.md)
-    - [维护 TiDB 集群所在节点](/v3.0/tidb-in-kubernetes/maintain/kubernetes-node.md)
-    - [备份与恢复](/v3.0/tidb-in-kubernetes/maintain/backup-and-restore.md)
-    - [恢复 Kubernetes 上的 TiDB 集群数据](/v3.0/tidb-in-kubernetes/maintain/lightning.md)
-    - [收集日志](/v3.0/tidb-in-kubernetes/maintain/log-collecting.md)
-    - [集群故障自动转移](/v3.0/tidb-in-kubernetes/maintain/auto-failover.md)
-    - [TiDB Binlog](/v3.0/tidb-in-kubernetes/maintain/tidb-binlog.md)
-  - [扩缩容](/v3.0/tidb-in-kubernetes/scale-in-kubernetes.md)
-  + 升级
-    - [TiDB 集群](/v3.0/tidb-in-kubernetes/upgrade/tidb-cluster.md)
-    - [TiDB Operator](/v3.0/tidb-in-kubernetes/upgrade/tidb-operator.md)
-  + 参考信息
-    + 配置
-      - [集群配置](/v3.0/tidb-in-kubernetes/reference/configuration/tidb-cluster.md)
-      - [备份配置](/v3.0/tidb-in-kubernetes/reference/configuration/backup.md)
-      - [PV 配置](/v3.0/tidb-in-kubernetes/reference/configuration/storage-class.md)
-      - [TiDB Drainer](/v3.0/tidb-in-kubernetes/reference/configuration/tidb-drainer.md)
-    + 工具
-      - [tkctl](/v3.0/tidb-in-kubernetes/reference/tools/tkctl.md)
-      - [相关工具使用](/v3.0/tidb-in-kubernetes/reference/tools/in-kubernetes.md)
-  - [故障诊断](/v3.0/tidb-in-kubernetes/troubleshoot.md)
-  - [常见问题](/v3.0/tidb-in-kubernetes/faq.md)
-+ 常见问题 (FAQ)
-  - [TiDB FAQ](/v3.0/faq/tidb.md)
-  - [TiDB Lightning FAQ](/v3.0/faq/tidb-lightning.md)
-  - [Data Migration FAQ](/v3.0/faq/data-migration.md)
-  - [升级 FAQ](/v3.0/faq/upgrade.md)
-+ 技术支持
-  - [支持渠道](/v3.0/support-resources.md)
-  - [反馈问题](/v3.0/report-issue.md)
-+ [贡献](/v3.0/contribute.md)
-  - [贡献代码](/v3.0/contribute.md#成为-tidb-的贡献者)
-  - [改进文档](/v3.0/contribute.md#改进文档)
-+ [TiDB 路线图](/v3.0/roadmap.md)
-+ [版本发布历史](/v3.0/releases/rn.md)
-  + v3.0
-    - [3.0.4](/v3.0/releases/3.0.4.md)
-    - [3.0.3](/v3.0/releases/3.0.3.md)
-    - [3.0.2](/v3.0/releases/3.0.2.md)
-    - [3.0.1](/v3.0/releases/3.0.1.md)
-    - [3.0 GA](/v3.0/releases/3.0-ga.md)
-    - [3.0.0-rc.3](/v3.0/releases/3.0.0-rc.3.md)
-    - [3.0.0-rc.2](/v3.0/releases/3.0.0-rc.2.md)
-    - [3.0.0-rc.1](/v3.0/releases/3.0.0-rc.1.md)
-    - [3.0.0-beta.1](/v3.0/releases/3.0.0-beta.1.md)
-    - [3.0.0-beta](/v3.0/releases/3.0beta.md)
-  + v2.1
-    - [2.1.17](/v3.0/releases/2.1.17.md)
-    - [2.1.16](/v3.0/releases/2.1.16.md)
-    - [2.1.15](/v3.0/releases/2.1.15.md)
-    - [2.1.14](/v3.0/releases/2.1.14.md)
-    - [2.1.13](/v3.0/releases/2.1.13.md)
-    - [2.1.12](/v3.0/releases/2.1.12.md)
-    - [2.1.11](/v3.0/releases/2.1.11.md)
-    - [2.1.10](/v3.0/releases/2.1.10.md)
-    - [2.1.9](/v3.0/releases/2.1.9.md)
-    - [2.1.8](/v3.0/releases/2.1.8.md)
-    - [2.1.7](/v3.0/releases/2.1.7.md)
-    - [2.1.6](/v3.0/releases/2.1.6.md)
-    - [2.1.5](/v3.0/releases/2.1.5.md)
-    - [2.1.4](/v3.0/releases/2.1.4.md)
-    - [2.1.3](/v3.0/releases/2.1.3.md)
-    - [2.1.2](/v3.0/releases/2.1.2.md)
-    - [2.1.1](/v3.0/releases/2.1.1.md)
-    - [2.1 GA](/v3.0/releases/2.1ga.md)
-    - [2.1 RC5](/v3.0/releases/21rc5.md)
-    - [2.1 RC4](/v3.0/releases/21rc4.md)
-    - [2.1 RC3](/v3.0/releases/21rc3.md)
-    - [2.1 RC2](/v3.0/releases/21rc2.md)
-    - [2.1 RC1](/v3.0/releases/21rc1.md)
-    - [2.1 Beta](/v3.0/releases/21beta.md)
-  + v2.0
-    - [2.0.11](/v3.0/releases/2.0.11.md)
-    - [2.0.10](/v3.0/releases/2.0.10.md)
-    - [2.0.9](/v3.0/releases/209.md)
-    - [2.0.8](/v3.0/releases/208.md)
-    - [2.0.7](/v3.0/releases/207.md)
-    - [2.0.6](/v3.0/releases/206.md)
-    - [2.0.5](/v3.0/releases/205.md)
-    - [2.0.4](/v3.0/releases/204.md)
-    - [2.0.3](/v3.0/releases/203.md)
-    - [2.0.2](/v3.0/releases/202.md)
-    - [2.0.1](/v3.0/releases/201.md)
-    - [2.0](/v3.0/releases/2.0ga.md)
-    - [2.0 RC5](/v3.0/releases/2rc5.md)
-    - [2.0 RC4](/v3.0/releases/2rc4.md)
-    - [2.0 RC3](/v3.0/releases/2rc3.md)
-    - [2.0 RC1](/v3.0/releases/2rc1.md)
-    - [1.1 Beta](/v3.0/releases/11beta.md)
-    - [1.1 Alpha](/v3.0/releases/11alpha.md)
-  + v1.0
-    - [1.0](/v3.0/releases/ga.md)
-    - [Pre-GA](/v3.0/releases/prega.md)
-    - [RC4](/v3.0/releases/rc4.md)
-    - [RC3](/v3.0/releases/rc3.md)
-    - [RC2](/v3.0/releases/rc2.md)
-    - [RC1](/v3.0/releases/rc1.md)
+## 诊断模式
+
+当 Pod 处于 `CrashLoopBackoff` 状态时，Pod 内会容器不断退出，导致无法正常使用 `kubectl exec` 或 `tkctl debug`，给诊断带来不便。为了解决这个问题，TiDB in Kubernetes 提供了 PD/TiKV/TiDB Pod 诊断模式。在诊断模式下，Pod 内的容器启动后会直接挂起，不会再进入重复 Crash 的状态，此时，便可以通过 `kubectl exec` 或 `tkctl debug` 连接 Pod 内的容器进行诊断。
+
+操作方式：
+
+首先，为待诊断的 Pod 添加 Annotation：
+
+{{< copyable "shell-regular" >}}
+
+```shell
+kubectl annotate pod <pod-name> -n <namespace> runmode=debug
+```
+
+在 Pod 内的容器下次重启时，会检测到该 Annotation，进入诊断模式。等待 Pod 进入 Running 状态即可开始诊断：
+
+{{< copyable "shell-regular" >}}
+
+```shell
+watch kubectl get pod <pod-name> -n <namespace>
+```
+
+下面是使用 `kubectl exec` 进入容器进行诊断工作的例子：
+
+{{< copyable "shell-regular" >}}
+
+```shell
+kubectl exec -it <pod-name> -n <namespace> -- /bin/sh
+```
+
+诊断完毕，修复问题后，删除 Pod：
+
+```shell
+kubectl delete pod <pod-name> -n <namespace>
+```
+
+Pod 重建后会自动回到正常运行模式。
+
+## 集群意外删除后恢复
+
+TiDB Operator 使用 PV (Persistent Volume)、PVC (Persistent Volume Claim) 来存储持久化的数据，如果不小心使用 `helm delete` 意外删除了集群，PV/PVC 对象以及数据都会保留下来，以最大程度保证数据安全。
+
+此时集群恢复的办法就是使用 `helm install` 命令来创建一个同名的集群，之前保留下来未被删除的 PV/PVC 以及数据会被复用：
+
+{{< copyable "shell-regular" >}}
+
+```shell
+helm install pingcap/tidb-cluster -n <release-name> --namespace=<namespace> --version=<chart-version> -f values.yaml
+```
+
+## Pod 未正常创建
+
+通过 `helm install` 创建集群后，如果 Pod 没有创建，则可以通过以下方式进行诊断：
+
+{{< copyable "shell-regular" >}}
+
+```shell
+kubectl get tidbclusters -n <namespace>
+kubectl get statefulsets -n <namespace>
+kubectl describe statefulsets -n <namespace> <release-name>-pd
+```
+
+## Pod 之间网络不通
+
+针对 TiDB 集群而言，绝大部分 Pod 间的访问均通过 Pod 的域名（使用 Headless Service 分配）进行，例外的情况是 TiDB Operator 在收集集群信息或下发控制指令时，会通过 PD Service 的 `service-name` 访问 PD 集群。
+
+当通过日志或监控确认 Pod 间存在网络连通性问题，或根据故障情况推断出 Pod 间网络连接可能不正常时，可以按照下面的流程进行诊断，逐步缩小问题范围：
+
+1. 确认 Service 和 Headless Service 的 Endpoints 是否正常：
+
+    {{< copyable "shell-regular" >}}
+
+    ```shell
+    kubectl -n <namespace> get endpoints <release-name>-pd
+    kubectl -n <namespace> get endpoints <release-name>-tidb
+    kubectl -n <namespace> get endpoints <release-name>-pd-peer
+    kubectl -n <namespace> get endpoints <release-name>-tikv-peer
+    kubectl -n <namespace> get endpoints <release-name>-tidb-peer
+    ```
+
+    以上命令展示的 `ENDPOINTS` 字段中，应当是由逗号分隔的 `cluster_ip:port` 列表。假如字段为空或不正确，请检查 Pod 的健康状态以及 `kube-controller-manager` 是否正常工作。
+
+2. 进入 Pod 的 Network Namespace 诊断网络问题：
+
+    {{< copyable "shell-regular" >}}
+
+    ```
+    tkctl debug -n <namespace> <pod-name>
+    ```
+
+    远端 shell 启动后，使用 `dig` 命令诊断 DNS 解析，假如 DNS 解析异常，请参照[诊断 Kubernetes DNS 解析](https://kubernetes.io/docs/tasks/administer-cluster/dns-debugging-resolution/)进行故障排除：
+
+    {{< copyable "shell-regular" >}}
+
+    ```shell
+    dig <HOSTNAME>
+    ```
+
+    使用 `ping` 命令诊断到目的 IP 的三层网络是否连通（目的 IP 为使用 `dig` 解析出的 ClusterIP）:
+
+    {{< copyable "shell-regular" >}}
+
+    ```shell
+    ping <TARGET_IP>
+    ```
+
+    假如 ping 检查失败，请参照[诊断 Kubernetes 网络](https://www.praqma.com/stories/debugging-kubernetes-networking/)进行故障排除。
+
+    假如 ping 检查正常，继续使用 `telnet` 检查目标端口是否打开：
+
+    {{< copyable "shell-regular" >}}
+
+    ```shell
+    telnet <TARGET_IP> <TARGET_PORT>
+    ```
+
+    假如 `telnet` 检查失败，则需要验证 Pod 的对应端口是否正确暴露以及应用的端口是否配置正确：
+
+    {{< copyable "shell-regular" >}}
+
+    ```shell
+    # 检查端口是否一致
+    kubectl -n <namespace> get po <pod-name> -ojson | jq '.spec.containers[].ports[].containerPort'
+
+    # 检查应用是否被正确配置服务于指定端口上
+    # PD, 未配置时默认为 2379 端口
+    kubectl -n <namespace> -it exec <pod-name> -- cat /etc/pd/pd.toml | grep client-urls
+    # TiKV, 未配置时默认为 20160 端口
+    kubectl -n <namespace> -it exec <pod-name> -- cat /etc/tikv/tikv.toml | grep addr
+    # TiDB, 未配置时默认为 4000 端口
+    kubectl -n <namespace> -it exec <pod-name> -- cat /etc/tidb/tidb.toml | grep port
+    ```
+
+## Pod 处于 Pending 状态
+
+Pod 处于 Pending 状态，通常都是资源不满足导致的，比如：
+
+* 使用持久化存储的 PD、TiKV、Monitor Pod 使用的 PVC 的 StorageClass 不存在或 PV 不足
+* Kubernetes 集群中没有节点能满足 Pod 申请的 CPU 或内存
+
+此时，可以通过 `kubectl describe pod` 命令查看 Pending 的具体原因：
+
+{{< copyable "shell-regular" >}}
+
+```
+kubectl describe po -n <namespace> <pod-name>
+```
+
+如果是 CPU 或内存资源不足，可以通过降低对应组件的 CPU 或内存资源申请使其能够得到调度，或是增加新的 Kubernetes 节点。
+
+如果是 PVC 的 StorageClass 找不到，则需要将 TiDB Pod 删除，并且将对应的 PVC 也都删除，然后在 `values.yaml` 里面将 `storageClassName` 修改为集群中可用的 StorageClass 名字，可以通过以下命令获取集群中可用的 StorageClass：
+
+{{< copyable "shell-regular" >}}
+
+```
+kubectl get storageclass
+```
+
+如果集群中有 StorageClass，但可用的 PV 不足，则需要添加对应的 PV 资源。对于 Local PV，可以参考[本地 PV 配置](/v3.0/tidb-in-kubernetes/reference/configuration/storage-class.md#本地-pv-配置)进行扩充。
+
+## Pod 处于 CrashLoopBackOff 状态
+
+Pod 处于 CrashLoopBackOff 状态意味着 Pod 内的容器重复地异常退出（异常退出后，容器被 Kubelet 重启，重启后又异常退出，如此往复）。可能导致 CrashLoopBackOff 的原因有很多，此时，最有效的定位办法是查看 Pod 内容器的日志：
+
+{{< copyable "shell-regular" >}}
+
+```shell
+kubectl -n <namespace> logs -f <pod-name>
+```
+
+假如本次日志没有能够帮助诊断的有效信息，可以添加 `-p` 参数输出容器上次启动时的日志信息：
+
+{{< copyable "shell-regular" >}}
+
+```shell
+kubectl -n <namespace> logs -p <pod-name>
+```
+
+确认日志中的错误信息后，可以根据 [tidb-server 启动报错](/v3.0/how-to/troubleshoot/cluster-setup.md#tidb-server-启动报错)，[tikv-server 启动报错](/v3.0/how-to/troubleshoot/cluster-setup.md#tikv-server-启动报错)，[pd-server 启动报错](/v3.0/how-to/troubleshoot/cluster-setup.md#pd-server-启动报错)中的指引信息进行进一步排查解决。
+
+若是 TiKV Pod 日志中出现 "cluster id mismatch" 信息，则 TiKV Pod 使用的数据可能是其他或之前的 TiKV Pod 的旧数据。在集群配置本地存储时未清除机器上本地磁盘上的数据，或者强制删除了 PV 导致数据并没有被 local volume provisioner 程序回收，可能导致 PV 遗留旧数据，导致错误。
+
+在确认该 TiKV 应作为新节点加入集群、且 PV 上的数据应该删除后，可以删除该 TiKV Pod 和关联 PVC。TiKV Pod 将自动重建并绑定新的 PV 来使用。集群本地存储配置中，应对机器上的本地存储删除，避免 Kubernetes 使用机器上遗留的数据。集群运维中，不可强制删除 PV ，应由 local volume provisioner 程序管理。用户通过创建、删除 PVC 以及设置 PV 的 reclaimPolicy 来管理 PV 的生命周期。
+
+另外，TiKV 在 ulimit 不足时也会发生启动失败的状况，对于这种情况，可以修改 Kubernetes 节点的 `/etc/security/limits.conf` 调大 ulimit：
+
+```
+root        soft        nofile        1000000
+root        hard        nofile        1000000
+root        soft        core          unlimited
+root        soft        stack         10240
+```
+
+假如通过日志无法确认失败原因，ulimit 也设置正常，那么可以通过[诊断模式](#诊断模式)进行进一步排查。
+
+## 无法访问 TiDB 服务
+
+TiDB 服务访问不了时，首先确认 TiDB 服务是否部署成功，确认方法如下：
+
+查看该集群的所有组件是否全部都启动了，状态是否为 Running。
+
+{{< copyable "shell-regular" >}}
+
+```shell
+kubectl get po -n <namespace>
+```
+
+检查 TiDB 组件的日志，看日志是否有报错。
+
+{{< copyable "shell-regular" >}}
+
+```shell
+kubectl logs -f <tidb-pod-name> -n <namespace> -c tidb
+```
+
+如果确定集群部署成功，则进行网络检查：
+
+1. 如果你是通过 `NodePort` 方式访问不了 TiDB 服务，请在 node 上尝试使用 service domain 或 clusterIP 访问 TiDB 服务，假如 serviceName 或 clusterIP 的方式能访问，基本判断 Kubernetes 集群内的网络是正常的，问题可能出在下面两个方面：
+
+    * 客户端到 node 节点的网络不通。
+    * 查看 TiDB service 的 `externalTrafficPolicy` 属性是否为 Local。如果是 Local 则客户端必须通过 TiDB Pod 所在 node 的 IP 来访问。
+
+2. 如果 service domain 或 clusterIP 方式也访问不了 TiDB 服务，尝试用 TiDB服务后端的 `<PodIP>:4000` 连接看是否可以访问，如果通过 PodIP 可以访问 TiDB 服务，可以确认问题出在 service domain 或 clusterIP 到 PodIP 之间的连接上，排查项如下：
+
+    * 检查 DNS 服务是否正常：
+
+        {{< copyable "shell-regular" >}}
+
+        ```shell
+        kubectl get po -n kube-system -l k8s-app=kube-dns
+        dig <tidb-service-domain>
+        ```
+
+    * 检查各个 node 上的 kube-proxy 是否正常运行：
+
+        {{< copyable "shell-regular" >}}
+
+        ```shell
+        kubectl get po -n kube-system -l k8s-app=kube-proxy
+        ```
+
+    * 检查 node 上的 iptables 规则中 TiDB 服务的规则是否正确
+
+        {{< copyable "shell-regular" >}}
+
+        ```shell
+        iptables-save -t nat |grep <clusterIP>
+        ```
+
+    * 检查对应的 endpoint 是否正确
+
+3. 如果通过 PodIP 访问不了 TiDB 服务，问题出在 Pod 层面的网络上，排查项如下：
+
+    * 检查 node 上的相关 route 规则是否正确
+    * 检查网络插件服务是否正常
+    * 参考上面的 [Pod 之间网络不通](#pod-之间网络不通)章节
+
+## TiKV Store 异常进入 Tombstone 状态
+
+正常情况下，当 TiKV Pod 处于健康状态时（Pod 状态为 `Running`），对应的 TiKV Store 状态也是健康的（Store 状态为 `UP`）。但并发进行 TiKV 组件的扩容和缩容可能会导致部分 TiKV Store 异常并进入 Tombstone 状态。此时，可以按照以下步骤进行修复：
+
+1. 查看 TiKV Store 状态：
+
+    {{< copyable "shell-regular" >}}
+
+    ```shell
+    kubectl get -n <namespace> tidbcluster <release-name> -ojson | jq '.status.tikv.stores'
+    ```
+
+2. 查看 TiKV Pod 运行状态：
+
+    {{< copyable "shell-regular" >}}
+
+    ```shell
+    kubectl get -n <namespace> po -l app.kubernetes.io/component=tikv
+    ```
+
+3. 对比 Store 状态与 Pod 运行状态。假如某个 TiKV Pod 所对应的 Store 处于 `Offline` 状态，则表明该 Pod 的 Store 正在异常下线中。此时，可以通过下面的命令取消下线进程，进行恢复：
+
+    1. 打开到 PD 服务的连接：
+
+        {{< copyable "shell-regular" >}}
+
+        ```shell
+        kubectl port-forward -n <namespace> svc/<cluster-name>-pd <local-port>:2379 &>/tmp/portforward-pd.log &
+        ```
+
+    2. 上线对应 Store：
+
+        {{< copyable "shell-regular" >}}
+
+        ```shell
+        curl -X POST http://127.0.0.1:2379/pd/api/v1/store/<store-id>/state?state=Up
+        ```
+
+4. 假如某个 TiKV Pod 所对应的 `lastHeartbeatTime` 最新的 Store 处于 `Tombstone` 状态 ，则表明异常下线已经完成。此时，需要重建 Pod 并绑定新的 PV 进行恢复：
+
+    1. 将该 Store 对应 PV 的 `reclaimPolicy` 调整为 `Delete`：
+
+        {{< copyable "shell-regular" >}}
+
+        ```shell
+        kubectl patch $(kubectl get pv -l app.kubernetes.io/instance=<release-name>,tidb.pingcap.com/store-id=<store-id> -o name) -p '{"spec":{"persistentVolumeReclaimPolicy":"Delete"}}
+        ```
+
+    2. 删除 Pod 使用的 PVC：
+
+        {{< copyable "shell-regular" >}}
+
+        ```shell
+        kubectl delete -n <namespace> pvc tikv-<pod-name> --wait=false
+        ```
+
+    3. 删除 Pod，等待 Pod 重建：
+
+        {{< copyable "shell-regular" >}}
+
+        ```shell
+        kubectl delete -n <namespace> pod <pod-name>
+        ```
+
+    Pod 重建后，会以在集群中注册一个新的 Store，恢复完成。
+
+## TiDB 长连接被异常中断
+
+许多负载均衡器 (Load Balancer) 会设置连接空闲超时时间。当连接上没有数据传输的时间超过设定值，负载均衡器会主动将连接中断。若发现 TiDB 使用过程中，长查询会被异常中断，可检查客户端与 TiDB 服务端之间的中间件程序。若其连接空闲超时时间较短，可尝试增大该超时时间。若不可修改，可打开 TiDB `tcp-keep-alive` 选项，启用 TCP keepalive 特性。
+
+默认情况下，Linux 发送 keepalive 探测包的等待时间为 7200 秒。若需减少该时间，可通过 `podSecurityContext` 字段配置 `sysctls`，例子如下：
+
+```
+tidb:
+  ...
+  podSecurityContext:
+    sysctls:
+    - name: net.ipv4.tcp_keepalive_time
+      value: "300"
+```
+
+> **注意：**
+> 
+> 以上配置的环境要求：TiDB Operator 1.1 版本或以上。
