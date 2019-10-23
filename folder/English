@@ -1,47 +1,68 @@
 ---
-title: SHOW CHARACTER SET
-summary: TiDB 数据库中 SHOW CHARACTER SET 的使用概况。
+title: SET TRANSACTION
+summary: TiDB 数据库中 SET TRANSACTION 的使用概况。
 category: reference
 ---
 
-# SHOW CHARACTER SET
+# SET TRANSACTION
 
-`SHOW CHARACTER SET` 语句提供 TiDB 中可用字符集的静态列表。此列表不反映当前连接或用户的任何属性。
+`SET TRANSACTION` 语句用于在 `GLOBAL` 或 `SESSION` 的基础上更改当前的隔离级别，是 `SET transaction_isolation ='new-value'` 的替代语句，提供 MySQL 和 SQL 标准的兼容性。
 
 ## 语法图
 
-**ShowStmt:**
+**SetStmt:**
 
-![ShowStmt](/media/sqlgram/ShowStmt.png)
+![SetStmt](/media/sqlgram/SetStmt.png)
 
-**ShowTargetFilterable:**
+**TransactionChar:**
 
-![ShowTargetFilterable](/media/sqlgram/ShowTargetFilterable.png)
+![TransactionChar](/media/sqlgram/TransactionChar.png)
 
-**CharsetKw:**
+**IsolationLevel:**
 
-![CharsetKw](/media/sqlgram/CharsetKw.png)
+![IsolationLevel](/media/sqlgram/IsolationLevel.png)
 
 ## 示例
 
 ```sql
-mysql> SHOW CHARACTER SET;
-+---------+---------------+-------------------+--------+
-| Charset | Description   | Default collation | Maxlen |
-+---------+---------------+-------------------+--------+
-| utf8    | UTF-8 Unicode | utf8_bin          |      3 |
-| utf8mb4 | UTF-8 Unicode | utf8mb4_bin       |      4 |
-| ascii   | US ASCII      | ascii_bin         |      1 |
-| latin1  | Latin1        | latin1_bin        |      1 |
-| binary  | binary        | binary            |      1 |
-+---------+---------------+-------------------+--------+
-5 rows in set (0.00 sec)
+mysql> SHOW SESSION VARIABLES like 'transaction_isolation';
++-----------------------+-----------------+
+| Variable_name         | Value           |
++-----------------------+-----------------+
+| transaction_isolation | REPEATABLE-READ |
++-----------------------+-----------------+
+1 row in set (0.00 sec)
+
+mysql> SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql> SHOW SESSION VARIABLES like 'transaction_isolation';
++-----------------------+----------------+
+| Variable_name         | Value          |
++-----------------------+----------------+
+| transaction_isolation | READ-COMMITTED |
++-----------------------+----------------+
+1 row in set (0.01 sec)
+
+mysql> SET SESSION transaction_isolation = 'REPEATABLE-READ';
+Query OK, 0 rows affected (0.00 sec)
+
+mysql> SHOW SESSION VARIABLES like 'transaction_isolation';
++-----------------------+-----------------+
+| Variable_name         | Value           |
++-----------------------+-----------------+
+| transaction_isolation | REPEATABLE-READ |
++-----------------------+-----------------+
+1 row in set (0.00 sec)
 ```
 
 ## MySQL 兼容性
 
-`SHOW CHARACTER SET` 语句与 MySQL 完全兼容。如有任何兼容性差异，请在 GitHub 上提交 [issue](/v2.1/report-issue.md)。
+* TiDB 支持仅在语法中将事务设置为只读的功能。
+* 不支持隔离级别 `READ-UNCOMMITTED` 和 `SERIALIZABLE`。
+* 隔离级别 `REPEATABLE-READ` 在技术上属于快照隔离（Snapshot Isolation）。在 TiDB 中称为 `REPEATABLE-READ` 是为了和 MySQL 保持一致。
 
 ## 另请参阅
 
-* [SHOW COLLATION](/v2.1/reference/sql/statements/show-collation.md)
+* [SET \[GLOBAL|SESSION\] <variable>](/v2.1/reference/sql/statements/set-variable.md)
+* [Isolation Levels](/v2.1/reference/transactions/transaction-isolation.md)
