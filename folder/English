@@ -1,273 +1,370 @@
 ---
-title: 数据操作语言
+title: 数据定义语言
 category: user guide
 ---
 
-# TiDB 数据操作语言
+# 数据定义语言
 
-数据操作语言 (Data Manipulation Language, DML) 用于帮助用户实现对数据库的基本操作，比如查询、写入、删除和修改数据库中的数据。
+DDL（Data Definition Language）用于定义和管理数据库以及数据库中各种对象的语句。
 
-TiDB 支持的数据操作语言包括 Select，Insert，Delete，Update 和 Replace。
+目前 TiDB 实现了 `ADD INDEX` 操作和 `GENERAL` 操作（除了 `ADD INDEX` 以外的 DDL 操作）在表间的并行。即在不同表之间，`ADD INDEX` 操作和 `GENERAL` 操作可以并行执行。也可以认为目前有两个 worker 分别处理 `ADD INDEX` 操作和 `GENERAL` 操作，当处理的请求是同一个表内的操作时，按接受到 DDL 请求的先后顺序来执行。该功能是为了初步且稳定地解决 `ADD INDEX` 操作（当前 TiDB 中只有 `ADD INDEX` 操作的执行时间会比较久）可能阻塞其他 DDL 操作的问题。
 
-## Select 语句
-
-Select 语句用于从数据库中查询数据。
-
-### 语法定义
+## CREATE DATABASE 语法
 
 ```sql
-SELECT
-    [ALL | DISTINCT | DISTINCTROW ]
-      [HIGH_PRIORITY]
-      [STRAIGHT_JOIN]
-      [SQL_CACHE | SQL_NO_CACHE] [SQL_CALC_FOUND_ROWS]
-    select_expr [, select_expr ...]
-    [FROM table_references
-    [WHERE where_condition]
-    [GROUP BY {col_name | expr | position}
-      [ASC | DESC], ...]
-    [HAVING where_condition]
-    [ORDER BY {col_name | expr | position}
-      [ASC | DESC], ...]
-    [LIMIT {[offset,] row_count | row_count OFFSET offset}]
-    [FOR UPDATE | LOCK IN SHARE MODE]]
+CREATE {DATABASE | SCHEMA} [IF NOT EXISTS] db_name
+    [create_specification] ...
+
+create_specification:
+    [DEFAULT] CHARACTER SET [=] charset_name
+  | [DEFAULT] COLLATE [=] collation_name
 ```
 
-### 语法元素说明
+`CREATE DATABASE` 用于创建数据库，并可以指定数据库的默认属性（如数据库默认字符集,校验规则。`CREATE SCHEMA` 跟 `CREATE DATABASE` 操作效果一样。
 
-| 语法元素                                             | 说明                                                                                                                                                                                                                                                   |
-| ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ALL`、`DISTINCT`、`DISTINCTROW`                   | 查询结果集中可能会包含重复值。指定 DISTINCT/DISTINCTROW 则在查询结果中过滤掉重复的行；指定 ALL 则列出所有的行。默认为 ALL。                                                                                                                                                                        |
-| `HIGH_PRIORITY`                                  | 该语句为高优先级语句，TiDB 在执行阶段会优先处理这条语句                                                                                                                                                                                                                       |
-| `SQL_CACHE`、`SQL_NO_CACHE`、`SQL_CALC_FOUND_ROWS` | TiDB 出于兼容性解析这三个语法，但是不做任何处理                                                                                                                                                                                                                           |
-| `STRAIGHT_JOIN`                                  | `STRAIGHT_JOIN` 会强制优化器按照 `FROM` 子句中所使用的表的顺序做联合查询。当优化器选择的 Join 顺序并不优秀时，你可以使用这个语法来加速查询的执行                                                                                                                                                              |
-| `select_expr`                                    | 投影操作列表，一般包括列名、表达式，或者是用 '\*' 表示全部列                                                                                                                                                                                                                  |
-| `FROM table_references`                          | 表示数据来源，数据来源可以是一个表（`select * from t;`）或者是多个表 (`select * from t1 join t2;`) 或者是0个表 (`select 1+1 from dual;`, 等价于 `select 1+1;`)                                                                                                                        |
-| `WHERE where_condition`                          | Where 子句用于设置过滤条件，查询结果中只会包含满足条件的数据                                                                                                                                                                                                                    |
-| `GROUP BY`                                       | GroupBy 子句用于对查询结果集进行分组                                                                                                                                                                                                                               |
-| `HAVING where_condition`                         | Having 子句与 Where 子句作用类似，Having 子句可以让过滤 GroupBy 后的各种数据，Where 子句用于在聚合前过滤记录。                                                                                                                                                                            |
-| `ORDER BY`                                       | OrderBy 子句用于指定结果排序顺序，可以按照列、表达式或者是 `select_expr` 列表中某个位置的字段进行排序。                                                                                                                                                                                      |
-| `LIMIT`                                          | Limit 子句用于限制结果条数。Limit 接受一个或两个数字参数，如果只有一个参数，那么表示返回数据的最大行数；如果是两个参数，那么第一个参数表示返回数据的第一行的偏移量（第一行数据的偏移量是 0），第二个参数指定返回数据的最大条目数。                                                                                                                             |
-| `FOR UPDATE`                                     | 对查询结果集所有数据上读锁（对于在查询条件内，但是不在结果集的数据，将不会加锁，如事务启动后由其他事务写入的数据），以监测其他事务对这些的并发修改。TiDB 使用[乐观事务模型](/v2.1-legacy/reference/mysql-compatibility.md#事务)在语句执行期间不会检测锁冲突，在事务的提交阶段才会检测事务冲突，如果执行 Select For Update 期间，有其他事务修改相关的数据，那么包含 Select For Update 语句的事务会提交失败。 |
-| `LOCK IN SHARE MODE`                             | TiDB 出于兼容性解析这个语法，但是不做任何处理                                                                                                                                                                                                                            |
+当创建已存在的数据库且不指定使用 `IF NOT EXISTS` 时会报错。
 
-## Insert 语句
+`create_specification` 选项用于指定数据库具体的 `CHARACTER SET` 和 `COLLATE`。目前这个选项只是语法支持。
 
-Insert 语句用于向数据库中插入数据，TiDB 兼容 MySQL Insert 语句的所有语法。
-
-### 语法定义
+## DROP DATABASE 语法
 
 ```sql
-InsertStatement:
-INSERT [LOW_PRIORITY | DELAYED | HIGH_PRIORITY] [IGNORE]
-    [INTO] tbl_name
-    insert_values
-    [ON DUPLICATE KEY UPDATE assignment_list]
-
-insert_values:
-    [(col_name [, col_name] ...)]
-    {VALUES | VALUE} (expr_list) [, (expr_list)] ...
-|   SET assignment_list
-|   [(col_name [, col_name] ...)]
-    SELECT ...
-
-expr_list:
-    expr [, expr] ...
-
-assignment:
-    col_name = expr
-
-assignment_list:
-    assignment [, assignment] ...
+DROP {DATABASE | SCHEMA} [IF EXISTS] db_name
 ```
 
-### 语法元素说明
+`DROP DATABASE` 用于删除指定数据库以及它其中的所用表格。
 
-| 语法元素                                      | 说明                                                    |
-| ----------------------------------------- | ----------------------------------------------------- |
-| `LOW_PRIORITY`                            | 该语句为低优先级语句，TiDB 在执行阶段会降低这条语句的优先级                      |
-| `DELAYED`                                 | TiDB 出于兼容性解析这个语法，但是不做任何处理                             |
-| `HIGH_PRIORITY`                           | 该语句为高优先级语句，TiDB 在执行阶段会优先处理这条语句                        |
-| `IGNORE`                                  | 如果发生 Uniq Key 冲突，则忽略插入的数据，不报错                         |
-| `tbl_name`                                | 要插入的表名                                                |
-| `insert_values`                           | 待插入的数据，下面一节会详细描述                                      |
-| `ON DUPLICATE KEY UPDATE assignment_list` | 如果发生 Uniq Key 冲突，则舍弃要插入的数据，改用 assignment_list 更新已存在的行 |
+`IF EXISTS` 用于防止当数据库不存在时发生错误。
 
-### insert_values
-
-待插入的数据集，可以用以下三种方式指定：
-
-* Value List
-
-将被插入的数据值写入列表中，例如：
+## CREATE TABLE 语法
 
 ```sql
-CREATE TABLE tbl_name (
-    a int,
-    b int,
-    c int
-);
-INSERT INTO tbl_name VALUES(1,2,3),(4,5,6),(7,8,9);
+CREATE TABLE [IF NOT EXISTS] tbl_name
+    (create_definition,...)
+    [table_options]
+
+CREATE TABLE [IF NOT EXISTS] tbl_name
+    { LIKE old_tbl_name | (LIKE old_tbl_name) }
+
+create_definition:
+    col_name column_definition
+  | [CONSTRAINT [symbol]] PRIMARY KEY [index_type] (index_col_name,...)
+      [index_option] ...
+  | {INDEX|KEY} [index_name] [index_type] (index_col_name,...)
+      [index_option] ...
+  | [CONSTRAINT [symbol]] UNIQUE [INDEX|KEY]
+      [index_name] [index_type] (index_col_name,...)
+      [index_option] ...
+  | {FULLTEXT} [INDEX|KEY] [index_name] (index_col_name,...)
+      [index_option] ...
+  | [CONSTRAINT [symbol]] FOREIGN KEY
+      [index_name] (index_col_name,...) reference_definition
+
+column_definition:
+    data_type [NOT NULL | NULL] [DEFAULT default_value]
+      [AUTO_INCREMENT] [UNIQUE [KEY] | [PRIMARY] KEY]
+      [COMMENT 'string']
+      [reference_definition]
+  | data_type [GENERATED ALWAYS] AS (expression)
+      [VIRTUAL | STORED] [UNIQUE [KEY]] [COMMENT comment]
+      [NOT NULL | NULL] [[PRIMARY] KEY]
+
+data_type:
+    BIT[(length)]
+  | TINYINT[(length)] [UNSIGNED] [ZEROFILL]
+  | SMALLINT[(length)] [UNSIGNED] [ZEROFILL]
+  | MEDIUMINT[(length)] [UNSIGNED] [ZEROFILL]
+  | INT[(length)] [UNSIGNED] [ZEROFILL]
+  | INTEGER[(length)] [UNSIGNED] [ZEROFILL]
+  | BIGINT[(length)] [UNSIGNED] [ZEROFILL]
+  | REAL[(length,decimals)] [UNSIGNED] [ZEROFILL]
+  | DOUBLE[(length,decimals)] [UNSIGNED] [ZEROFILL]
+  | FLOAT[(length,decimals)] [UNSIGNED] [ZEROFILL]
+  | DECIMAL[(length[,decimals])] [UNSIGNED] [ZEROFILL]
+  | NUMERIC[(length[,decimals])] [UNSIGNED] [ZEROFILL]
+  | DATE
+  | TIME[(fsp)]
+  | TIMESTAMP[(fsp)]
+  | DATETIME[(fsp)]
+  | YEAR
+  | CHAR[(length)] [BINARY]
+      [CHARACTER SET charset_name] [COLLATE collation_name]
+  | VARCHAR(length) [BINARY]
+      [CHARACTER SET charset_name] [COLLATE collation_name]
+  | BINARY[(length)]
+  | VARBINARY(length)
+  | TINYBLOB
+  | BLOB
+  | MEDIUMBLOB
+  | LONGBLOB
+  | TINYTEXT [BINARY]
+      [CHARACTER SET charset_name] [COLLATE collation_name]
+  | TEXT [BINARY]
+      [CHARACTER SET charset_name] [COLLATE collation_name]
+  | MEDIUMTEXT [BINARY]
+      [CHARACTER SET charset_name] [COLLATE collation_name]
+  | LONGTEXT [BINARY]
+      [CHARACTER SET charset_name] [COLLATE collation_name]
+  | ENUM(value1,value2,value3,...)
+      [CHARACTER SET charset_name] [COLLATE collation_name]
+  | SET(value1,value2,value3,...)
+      [CHARACTER SET charset_name] [COLLATE collation_name]
+  | JSON
+
+index_col_name:
+    col_name [(length)] [ASC | DESC]
+
+index_type:
+    USING {BTREE | HASH}
+
+index_option:
+    KEY_BLOCK_SIZE [=] value
+  | index_type
+  | COMMENT 'string'
+
+reference_definition:
+    REFERENCES tbl_name (index_col_name,...)
+      [MATCH FULL | MATCH PARTIAL | MATCH SIMPLE]
+      [ON DELETE reference_option]
+      [ON UPDATE reference_option]
+
+reference_option:
+    RESTRICT | CASCADE | SET NULL | NO ACTION | SET DEFAULT
+
+table_options:
+    table_option [[,] table_option] ...
+
+table_option:
+    AUTO_INCREMENT [=] value
+  | AVG_ROW_LENGTH [=] value
+  | [DEFAULT] CHARACTER SET [=] charset_name
+  | CHECKSUM [=] {0 | 1}
+  | [DEFAULT] COLLATE [=] collation_name
+  | COMMENT [=] 'string'
+  | COMPRESSION [=] {'ZLIB'|'LZ4'|'NONE'}
+  | CONNECTION [=] 'connect_string'
+  | DELAY_KEY_WRITE [=] {0 | 1}
+  | ENGINE [=] engine_name
+  | KEY_BLOCK_SIZE [=] value
+  | MAX_ROWS [=] value
+  | MIN_ROWS [=] value
+  | ROW_FORMAT [=] {DEFAULT|DYNAMIC|FIXED|COMPRESSED|REDUNDANT|COMPACT}
+  | STATS_PERSISTENT [=] {DEFAULT|0|1}
 ```
 
-上面的例子中，`(1,2,3),(4,5,6),(7,8,9)` 即为 Value List，其中每个括号内部的数据表示一行数据，这个例子中插入了三行数据。Insert 语句也可以只给部分列插入数据，这种情况下，需要在 Value List 之前加上 ColumnName List，如：
+`CREATE TABLE` 用于创建一个表。目前不支持临时表，不支持 `CHECK` 约束，不支持创建表的同时从其它表导入数据功能。 在语法上也支持一些 `Partition_options`，但是并不完全，就不做列举了。
+
+* 使用 `IF NOT EXIST` 时，即使创建的表已经存在，也不会报错，如果不指定时，则报错。
+
+* 使用 `LIKE` 基于一个表的定义创建一个空表，包括这个表中的列属性和索引属性。
+
+* `create_definition` 中 `FULLTEXT` 和 `FOREIGN KEY` 目前只是语法上支持
+
+* `data_type` 请参考[数据类型](../sql/datatype.md)章节。
+
+* `index_col_name` 中 `[ASC | DESC]` 目前只是语法上支持。
+
+* `index_type` 目前只是语法上支持。
+
+* `index_option` 中 `KEY_BLOCK_SIZE` 目前只是语法上支持。
+
+* `table_option` 目前支持的只有 `AUTO_INCREMENT`，`CHARACTER SET` 和 `COMMENT`，其它只是语法上支持。具体内容参考下表，各个子句之间用逗号隔开。
+
+    | 参数               | 含义                      | 举例                           |
+    | ---------------- | ----------------------- | ---------------------------- |
+    | `AUTO_INCREMENT` | 自增字段初始值                 | `AUTO_INCREMENT` = 5         |
+    | `CHARACTER SET`  | 指定该表的字符串编码。目前支持 UTF8MB4 | `CHARACTER SET` =  'utf8mb4' |
+    | `COMMENT`        | 注释信息                    | `COMMENT` = 'comment info'   |
+
+### AUTO_INCREMENT 说明
+
+TiDB 的自增 ID (`AUTO_INCREMENT` ID) 只保证自增且唯一，并不保证连续分配。TiDB 目前采用批量分配的方式，所以如果在多台 TiDB 上同时插入数据，分配的自增 ID 会不连续。
+
+允许给整型类型的字段指定 `AUTO_INCREMENT`，且一个表只允许一个属性为 `AUTO_INCREMENT` 的字段。
+
+## DROP TABLE 语法
 
 ```sql
-INSERT INTO tbl_name (a,c) VALUES(1,2),(4,5),(7,8);
+DROP TABLE [IF EXISTS]
+    tbl_name [, tbl_name] ...
+    [RESTRICT | CASCADE]
 ```
 
-上面的例子中，每行数据只指定了 a 和 c 这两列的值，b 列的值会设为 Null。
+可以同时删除多个表，表之间用 `,` 隔开。
 
-* Assignment List
+当删除不存在的表时且不指定使用 `IF EXISTS` 时会报错。
 
-通过赋值列表指定插入的数据，例如：
+关键字 RESTRICT 和 CASCADE 没有实际效果。其作用是与其他数据库兼容。
+
+## TRUNCATE TABLE 语法
 
 ```sql
-INSERT INTO tbl_name SET a=1, b=2, c=3;
+TRUNCATE [TABLE] tbl_name
 ```
 
-这种方式每次只能插入一行数据，每列的值通过赋值列表指定。
+`TRUNCATE TABLE` 用于清除指定表中所有数据，但是保留表结构。
 
-* Select Statement
+此操作于删除指定表全表数据的操作类似，但是操作的执行速度会远快于删除全表的速度，且不受表内数据行数影响。
 
-待插入的数据集是通过一个 Select 语句获取，要插入的列是通过 Select 语句的 Schema 获得。例如：
+> **注意：**
+> 
+> 使用此语句后，原先表内的 `AUTO_INCREMENT` 的值不会记录，会被重新计数。
+
+## RENAME TABLE 语法
 
 ```sql
-CREATE TABLE tbl_name1 (
-    a int,
-    b int,
-    c int
-);
-INSERT INTO tbl_name SELECT * from tbl_name1;
+RENAME TABLE
+    tbl_name TO new_tbl_name
 ```
 
-上面的例子中，从 `tbl_name1` 中查询出数据，插入 `tbl_name` 中。
+`RENAME TABLE` 用于对一个表进行重命名。
 
-## Delete 语句
-
-Delete 语句用于删除数据库中的数据，TiDB 兼容 MySQL Delete 语句除 PARTITION 之外的所有语法。Delete 语句主要分为单表删除和多表删除两种，下面分开描述。
-
-### 单表删除
-
-这种语法用于删除的数据只会涉及一个表的情况。
-
-### 语法定义
+这个语句等价于如下的 `ALTER TABLE` 语句：
 
 ```sql
-DELETE [LOW_PRIORITY] [QUICK] [IGNORE] FROM tbl_name
-    [WHERE where_condition]
-    [ORDER BY ...]
-    [LIMIT row_count]
+ALTER TABLE old_table RENAME new_table;
 ```
 
-### 多表删除
-
-这种语法用于删除的数据会涉及多张表的情况。一共有两种写法：
+## ALTER TABLE 语法
 
 ```sql
-DELETE [LOW_PRIORITY] [QUICK] [IGNORE]
-    tbl_name[.*] [, tbl_name[.*]] ...
-    FROM table_references
-    [WHERE where_condition]
+ALTER TABLE tbl_name
+    [alter_specification]
 
-DELETE [LOW_PRIORITY] [QUICK] [IGNORE]
-    FROM tbl_name[.*] [, tbl_name[.*]] ...
-    USING table_references
-    [WHERE where_condition]
+alter_specification:
+    table_options
+  | ADD [COLUMN] col_name column_definition
+        [FIRST | AFTER col_name]
+  | ADD [COLUMN] (col_name column_definition,...)
+  | ADD {INDEX|KEY} [index_name]
+        [index_type] (index_col_name,...) [index_option] ...
+  | ADD [CONSTRAINT [symbol]] PRIMARY KEY
+        [index_type] (index_col_name,...) [index_option] ...
+  | ADD [CONSTRAINT [symbol]]
+        UNIQUE [INDEX|KEY] [index_name]
+        [index_type] (index_col_name,...) [index_option] ...
+  | ADD FULLTEXT [INDEX|KEY] [index_name]
+        (index_col_name,...) [index_option] ...
+  | ADD [CONSTRAINT [symbol]]
+        FOREIGN KEY [index_name] (index_col_name,...)
+        reference_definition
+  | ALTER [COLUMN] col_name {SET DEFAULT literal | DROP DEFAULT}
+  | CHANGE [COLUMN] old_col_name new_col_name column_definition
+        [FIRST|AFTER col_name]
+  | {DISABLE|ENABLE} KEYS
+  | DROP [COLUMN] col_name
+  | DROP {INDEX|KEY} index_name
+  | DROP PRIMARY KEY
+  | DROP FOREIGN KEY fk_symbol
+  | LOCK [=] {DEFAULT|NONE|SHARED|EXCLUSIVE}
+  | MODIFY [COLUMN] col_name column_definition
+        [FIRST | AFTER col_name]
+  | RENAME [TO|AS] new_tbl_name
+  | {WITHOUT|WITH} VALIDATION
+
+index_col_name:
+    col_name [(length)] [ASC | DESC]
+
+index_type:
+    USING {BTREE | HASH}
+
+index_option:
+    KEY_BLOCK_SIZE [=] value
+  | index_type
+  | COMMENT 'string'
+
+table_options:
+    table_option [[,] table_option] ...
+
+table_option:
+    AVG_ROW_LENGTH [=] value
+  | [DEFAULT] CHARACTER SET [=] charset_name
+  | CHECKSUM [=] {0 | 1}
+  | [DEFAULT] COLLATE [=] collation_name
+  | COMMENT [=] 'string'
+  | COMPRESSION [=] {'ZLIB'|'LZ4'|'NONE'}
+  | CONNECTION [=] 'connect_string'
+  | DELAY_KEY_WRITE [=] {0 | 1}
+  | ENGINE [=] engine_name
+  | KEY_BLOCK_SIZE [=] value
+  | MAX_ROWS [=] value
+  | MIN_ROWS [=] value
+  | ROW_FORMAT [=] {DEFAULT|DYNAMIC|FIXED|COMPRESSED|REDUNDANT|COMPACT}
+  | STATS_PERSISTENT [=] {DEFAULT|0|1}
 ```
 
-删除多个表的数据的时候，可以用这两种语法。这两种写法都可以指定从多个表查询数据，但只删除其中一些表的数据。在第一种语法中，只会删除 `FROM` 关键字之前的 Table 列表中所列 Table 的表中的数据。对于第二种写法，只会删除 `FROM` 之后 `USING` 之前的 Table 列表中的所列 Table 中的数据。
+`ALTER TABLE` 用于修改已存在的表的结构，比如：修改表及表属性、新增或删除列、创建或删除索引、修改列及属性等。以下是几个字段类型的描述：
 
-### 语法元素说明
+* `index_col_name`、`index_type` 和 `index_option` 可以参考 [CREATE INDEX 语法](#create-index-语法)。
 
-| 语法元素                    | 说明                               |
-| ----------------------- | -------------------------------- |
-| `LOW_PRIORITY`          | 该语句为低优先级语句，TiDB 在执行阶段会降低这条语句的优先级 |
-| `QUICK`                 | TiDB 出于兼容性解析这个语法，但是不做任何处理        |
-| `IGNORE`                | TiDB 出于兼容性解析这个语法，但是不做任何处理        |
-| `tbl_name`              | 要删除数据的表名                         |
-| `WHERE where_condition` | Where 表达式，只删除满足表达式的那些行           |
-| `ORDER BY`              | 对待删除数据集进行排序                      |
-| `LIMIT row_count`       | 只对待删除数据集中排序前 row_count 行的内容进行删除  |
+* `table_option` 目前支持的修改类型为 `AUTO_INCREMENT` 和 `COMMENT`，其它的只是语法上支持。
 
-## Update 语句
+下面介绍一下具体操作类型的支持情况。
 
-Update 语句用于更新表中的数据。
+* `ADD/DROP INDEX/COLUMN` 操作目前不支持同时创建或删除多个索引或列。
 
-### 语法定义
+* `ADD/DROP PRIMARY KEY` 操作目前不支持。
 
-Update 语句一共有两种语法，分别用于更新单表数据和多表数据。
+* `DROP COLUMN` 操作目前不支持删除的列为主键列或索引列。
 
-### 单表 Update
+* `ADD COLUMN` 操作目前不支持同时将新添加的列设为主键或唯一索引，也不支持将此列设成 `AUTO_INCREMENT` 属性。
+
+* `CHANGE/MODIFY COLUMN` 操作目前支持部分语法，细节如下：
+    - 在修改类型方面，只支持整数类型之间修改，字符串类型之间修改和 Blob 类型之间的修改，且只能使原类型长度变长。此外，不能改变列的 `unsigned`/`charset`/`collate` 属性。这里的类型分类如下：
+    - 具体支持的整型类型有：`TinyInt`，`SmallInt`，`MediumInt`，`Int`，`BigInt`。
+    - 具体支持的字符串类型有：`Char`，`Varchar`，`Text`，`TinyText`，`MediumText`，`LongText`。
+    - 具体支持的 Blob 类型有：`Blob`，`TinyBlob`，`MediumBlob`，`LongBlob`。
+    - 在修改类型定义方面，支持的包括 `default value`，`comment`，`null`，`not null` 和 `OnUpdate`。
+    - 不支持对 `enum` 类型的列进行修改
+
+* `LOCK [=] {DEFAULT|NONE|SHARED|EXCLUSIVE}` 目前只是语法支持。
+
+## CREATE INDEX 语法
 
 ```sql
-UPDATE [LOW_PRIORITY] [IGNORE] table_reference
-    SET assignment_list
-    [WHERE where_condition]
-    [ORDER BY ...]
-    [LIMIT row_count]
+CREATE [UNIQUE] INDEX index_name
+    [index_type]
+    ON tbl_name (index_col_name,...)
+    [index_option] ...
 
-assignment:
-    col_name = value
+index_col_name:
+    col_name [(length)] [ASC | DESC]
 
-assignment_list:
-    assignment [, assignment] ...
+index_option:
+    KEY_BLOCK_SIZE [=] value
+  | index_type
+  | COMMENT 'string'
+
+index_type:
+    USING {BTREE | HASH}
 ```
 
-单表 Update 语句会更新 Table 中现有行的指定列。`SET assignment_list` 指定了要更新的列名，以及要赋予地新值。 Where/OrderBy/Limit 子句一起用于从 Table 中查询出待更新的数据。
+`CREATE INDEX` 语句的作用是为一个已经存在的表创建一个索引。在功能上，`CREATE INDEX` 对应于 `ALTER TABLE` 语句的创建索引功能。与 MySQL 一样 `CREATE INDEX` 不能创建主键索引。
 
-### 多表 Update
+### 与 MySQL 的差异
+
+* 支持 `UNIQUE` 索引，不支持 `FULLTEXT` 和 `SPATIAL` 索引。
+
+* `index_col_name` 支持长度选项，最大长度限制为3072字节，该长度限制不根据建表时使用的存储引擎、字符集而变。这是因为 TiDB 并非使用 Innodb 、 MyISAM 等存储引擎，因此，仅对建表时的存储引擎选项进行了 MySQL 语法上的兼容。对于字符集，TiDB 使用的是 utf8mb4 字符集，对于建表时的字符集选项同样仅有 MySQL 语法上的兼容。详见[与 MySQL 兼容性对比](mysql-compatibility.md)章节。
+
+* `index_col_name` 支持索引排序选项 `ASC` 和 `DESC`。 排序选项行为与 MySQL 一致，仅支持语法解析，内部所有索引都是以正序排列。详见 MySQL 的 [CREATE INDEX Syntax](https://dev.mysql.com/doc/refman/5.7/en/create-index.html) 章节。
+
+* `index_option` 支持 `KEY_BLOCK_SIZE` 、`index_type` 和 `COMMENT` 。 `COMMENT` 允许最大1024个字符。不支持 `WITH PARSER` 选项。
+
+* `index_type` 支持 `BTREE` 和 `HASH` ，但仅有 MySQL 语法上的支持，即索引类型与建表语句中的存储引擎选项无关。举例：在 MySQL 中，使用 Innodb 的表，在 `CREATE INDEX` 时只能使用 `BTREE` 索引，而在 TiDB 中既可以使用 `BTREE` 也可以使用 `HASH` 。
+
+* MySQL 的 `algorithm_option` 和 `lock_option` 选项 TiDB 仅作语法支持。
+
+* TiDB 单表最多支持 512 个列。InnoDB 的限制是 1017。MySQL 的硬限制是 4096。详见 MySQL 文档 [Limits on Table Column Count and Row Size](https://dev.mysql.com/doc/refman/5.7/en/column-count-limit.html)
+
+## DROP INDEX 语法
 
 ```sql
-UPDATE [LOW_PRIORITY] [IGNORE] table_references
-    SET assignment_list
-    [WHERE where_condition]
+DROP INDEX index_name ON tbl_name
 ```
 
-多表更新语句用于将 `table_references` 中满足 Where 子句的数据地指定列赋予新的值。
+`DROP INDEX` 用于删除表上的一个索引，目前暂不支持删除主键索引。
 
-### 语法元素说明
+## ADMIN 语句
 
-| 语法元素                    | 说明                               |
-| ----------------------- | -------------------------------- |
-| `LOW_PRIORITY`          | 该语句为低优先级语句，TiDB 在执行阶段会降低这条语句的优先级 |
-| `IGNORE`                | TiDB 出于兼容性解析这个语法，但是不做任何处理        |
-| `table_reference`       | 待更新的 Table 名称                    |
-| `table_references`      | 待更新的 Table 名称列表                  |
-| `SET assignment_list`   | 待更新的列名以及目标值                      |
-| `WHERE where_condition` | Where 表达式，只更新满足表达式的那些行           |
-| `ORDER BY`              | 对待更新数据集进行排序                      |
-| `LIMIT row_count`       | 只对待更新数据集中排序前 row_count 行的内容进行更新  |
-
-## Replace 语句
-
-Replace 语句是 MySQL 对标准 SQL 语法的扩展，其行为和 Insert 语句一样，但是当现有数据中有和待插入数据在 PRIMARY KEY 或者 UNIQUE KEY 冲突的情况下，会先删除旧数据，再插入新数据。
-
-### 语法定义
-
-```sql
-REPLACE [LOW_PRIORITY | DELAYED]
-    [INTO] tbl_name
-    [(col_name [, col_name] ...)]
-    {VALUES | VALUE} (value_list) [, (value_list)] ...
-
-REPLACE [LOW_PRIORITY | DELAYED]
-    [INTO] tbl_name
-    SET assignment_list
-
-REPLACE [LOW_PRIORITY | DELAYED]
-    [INTO] tbl_name
-    [(col_name [, col_name] ...)]
-    SELECT ...
-```
-
-### 语法元素说明
-
-| 语法元素                  | 说明                               |
-| --------------------- | -------------------------------- |
-| `LOW_PRIORITY`        | 该语句为低优先级语句，TiDB 在执行阶段会降低这条语句的优先级 |
-| `DELAYED`             | TiDB 出于兼容性解析这个语法，但是不做任何处理        |
-| `tbl_name`            | 待更新的 Table 名称                    |
-| `value_list`          | 待插入的数据                           |
-| `SET assignment_list` | 待更新的列名以及目标值                      |
-| `SELECT ...`          | 待插入的数据集，该数据集来自于一个 `Select` 语句    |
+`ADMIN` 语句可以查看一些跟 DDL 任务相关的信息，具体可以看[这里](../sql/admin.md)。
