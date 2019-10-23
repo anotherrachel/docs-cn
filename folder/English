@@ -1,125 +1,62 @@
 ---
-title: MODIFY COLUMN
-summary: TiDB 数据库中 MODIFY COLUMN 的使用概况。
+title: LOAD DATA
+summary: TiDB 数据库中 LOAD DATA 的使用概况。
 category: reference
 ---
 
-# MODIFY COLUMN
+# LOAD DATA
 
-`ALTER TABLE .. MODIFY COLUMN` 语句用于修改已有表上的列，包括列的数据类型和属性。若要同时重命名，可改用 [`CHANGE COLUMN`](/v3.0/reference/sql/statements/change-column.md) 语句。
+`LOAD DATA` 语句用于将数据批量加载到 TiDB 表中。
 
 ## 语法图
 
-**AlterTableStmt:**
+**LoadDataStmt:**
 
-![AlterTableStmt](/media/sqlgram/AlterTableStmt.png)
-
-**AlterTableSpec:**
-
-![AlterTableSpec](/media/sqlgram/AlterTableSpec.png)
-
-**ColumnKeywordOpt:**
-
-![ColumnKeywordOpt](/media/sqlgram/ColumnKeywordOpt.png)
-
-**ColumnDef:**
-
-![ColumnDef](/media/sqlgram/ColumnDef.png)
-
-**ColumnPosition:**
-
-![ColumnPosition](/media/sqlgram/ColumnPosition.png)
+![LoadDataStmt](/media/sqlgram/LoadDataStmt.png)
 
 ## 示例
 
 {{< copyable "sql" >}}
 
 ```sql
-CREATE TABLE t1 (id int not null primary key auto_increment, col1 INT);
+CREATE TABLE trips (
+    ->  trip_id bigint NOT NULL PRIMARY KEY auto_increment,
+    ->  duration integer not null,
+    ->  start_date datetime,
+    ->  end_date datetime,
+    ->  start_station_number integer,
+    ->  start_station varchar(255),
+    ->  end_station_number integer,
+    ->  end_station varchar(255),
+    ->  bike_number varchar(255),
+    ->  member_type varchar(255)
+    -> );
 ```
 
 ```
-Query OK, 0 rows affected (0.11 sec)
-```
-
-{{< copyable "sql" >}}
-
-```sql
-INSERT INTO t1 (col1) VALUES (1),(2),(3),(4),(5);
-```
-
-```
-Query OK, 5 rows affected (0.02 sec)
-Records: 5  Duplicates: 0  Warnings: 0
-```
-
-{{< copyable "sql" >}}
-
-```sql
-ALTER TABLE t1 MODIFY col1 BIGINT;
-```
-
-```
-Query OK, 0 rows affected (0.09 sec)
+Query OK, 0 rows affected (0.14 sec)
 ```
 
 {{< copyable "sql" >}}
 
 ```sql
-SHOW CREATE TABLE t1;
+LOAD DATA LOCAL INFILE '/mnt/evo970/data-sets/bikeshare-data/2017Q4-capitalbikeshare-tripdata.csv' INTO TABLE trips FIELDS TERMINATED BY ',' ENCLOSED BY '\"' LINES TERMINATED BY '\r\n' IGNORE 1 LINES (duration, start_date, end_date, start_station_number, start_station, end_station_number, end_station, bike_number, member_type);
 ```
 
 ```
-*************************** 1. row ***************************
-       Table: t1
-Create Table: CREATE TABLE `t1` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `col1` bigint(20) DEFAULT NULL,
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin AUTO_INCREMENT=30001
-1 row in set (0.00 sec)
-```
-
-{{< copyable "sql" >}}
-
-```sql
-ALTER TABLE t1 MODIFY col1 INT;
-```
-
-```
-ERROR 1105 (HY000): unsupported modify column length 11 is less than origin 20
-```
-
-{{< copyable "sql" >}}
-
-```sql
-ALTER TABLE t1 MODIFY col1 BLOB;
-```
-
-```
-ERROR 1105 (HY000): unsupported modify column type 252 not match origin 8
-```
-
-{{< copyable "sql" >}}
-
-```sql
-ALTER TABLE t1 MODIFY col1 BIGINT, MODIFY id BIGINT NOT NULL;
-```
-
-```
-ERROR 1105 (HY000): can't run multi schema change
+Query OK, 815264 rows affected (39.63 sec)
+Records: 815264  Deleted: 0  Skipped: 0  Warnings: 0
 ```
 
 ## MySQL 兼容性
 
-* 目前不支持使用单个 `ALTER TABLE` 语句进行多个修改。
-* 仅支持特定类型的数据类型更改。例如，支持将 `INTEGER` 改为 `BIGINT`，但不支持将 `BIGINT` 改为 `INTEGER`。不支持将整数改为字符串格式或 BLOB 格式。
-* 不支持修改 decimal 类型的精度。
+* 默认情况下，TiDB 每 20,000 行会进行一次提交。这类似于 MySQL NDB Cluster，但并非 InnoDB 存储引擎的默认配置。
+
+> **注意：**
+> 
+> 这种拆分事务提交的方式是以打破事务的原子性和隔离性为代价的，使用该特性时，使用者需要保证没有其他对正在处理的表的**任何**操作，并且在出现报错时，需要及时**人工介入，检查数据的一致性和完整性**。因此，不建议在生产环境中使用。
 
 ## 另请参阅
 
-* [CREATE TABLE](/v3.0/reference/sql/statements/create-table.md)
-* [SHOW CREATE TABLE](/v3.0/reference/sql/statements/show-create-table.md)
-* [ADD COLUMN](/v3.0/reference/sql/statements/add-column.md)
-* [DROP COLUMN](/v3.0/reference/sql/statements/drop-column.md)
-* [CHANGE COLUMN](/v3.0/reference/sql/statements/change-column.md)
+* [INSERT](/v3.0/reference/sql/statements/insert.md)
+* [Transaction Model](/v3.0/reference/transactions/transaction-model.md)
