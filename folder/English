@@ -1,37 +1,38 @@
 ---
-title: TiDB 2.0.3 release notes
+title: TiDB 2.0 RC4 Release Notes
 category: Releases
 ---
 
-# TiDB 2.0.3 Release Notes
+# TiDB 2.0 RC4 Release Notes
 
-2018 年 6 月 1 日，TiDB 发布 2.0.3 版。该版本在 2.0.2 版的基础上，对系统兼容性、稳定性做出了改进。
+2018 年 3 月 30 日，TiDB 发布 2.0 RC4 版。该版本在 2.0 RC3 版的基础上，对 MySQL 兼容性、系统稳定性和优化器做了很多改进。
 
 ## TiDB
 
-- 支持在线更改日志级别
-- 支持 `COM_CHANGE_USER` 命令
-- 支持二进制协议情况下使用时间类型参数
-- 优化带 `BETWEEN` 表达式的查询条件代价估算
-- 在 `SHOW CREATE TABLE` 里不显示 `FOREIGN KEY` 信息
-- 优化带 `LIMIT` 子句的查询代价估算
-- 修复 `YEAR` 类型作为唯一索引的问题
-- 修复在没有唯一索引的情况下 `ON DUPLICATE KEY UPDATE` 的问题
-- 修复 `CEIL` 函数的兼容性问题
-- 修复 `DECIMAL` 类型计算 `DIV` 的精度问题
-- 修复 `ADMIN CHECK TABLE` 误报的问题
-- 修复 `MAX`/`MIN` 在特定表达式参数下 panic 的问题
-- 修复特殊情况下 `JOIN` 结果为空的问题
-- 修复 `IN` 表达式构造查询 `Range` 的问题
-- 修复使用 `Prepare` 方式进行查询且启用 `Plan Cache` 情况下的 Range 计算问题
-- 修复异常情况下频繁加载 Schema 信息的问题
+- 支持 `SHOW GRANTS FOR CURRENT_USER();`
+- 修复 `UnionScan` 里的 `Expression` 没有 Clone 的问题
+- 支持 `SET TRANSACTION` 语法
+- 修复 `copIterator` 中潜在的 goroutine 泄露问题
+- 修复 `admin check table` 对包含 null 的 unique index 误判的问题
+- 支持用科学计数法显示浮点数
+- 修复 binary literal 计算时的类型推导
+- 修复解析 `CREATE VIEW` 语句的问题
+- 修复语句中同时包含 `ORDER BY` 和 `LIMIT 0` 时 panic 的问题
+- 提升 `DecodeBytes` 执行性能
+- 优化 `LIMIT 0` 为 `TableDual`，避免无用的执行计划构建
 
 ## PD
 
-- 修复在特定条件下收集 hot-cache metrics 会 panic 的问题
-- 修复对旧的 Region 产生调度的问题
+- 支持手动 split Region，可用于处理单 Region 热点的问题
+- 修复 `pdctl` 运行 `config show all` 不显示 label property 的问题
+- metrics 及代码结构相关的优化
 
 ## TiKV
 
-- 修复 learner flag 错误上报给 PD 的 bug
-- 在 `do_div_mod` 中 `divisor/dividend` 为 0 时返回错误
+- 限制接收 snapshot 时的内存使用，解决极端情况下的 OOM
+- 可以配置 Coprocessor 在遇到 warnings 时的行为
+- TiKV 支持导数据模式
+- 支持 Region 从正中间分裂
+- 提升 CI test 的速度
+- 使用 `crossbeam channel`
+- 改善 TiKV 在被隔离的情况下由于 leader missing 输出太多日志的问题
