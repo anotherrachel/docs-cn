@@ -1,72 +1,130 @@
 ---
-title: TiDB 悲观事务模式
+title: TiDB Lightning 表库过滤
+summary: 使用黑白名单把一些表剔出要导入的范围。
 category: reference
+aliases:
+  - '/docs-cn/tools/lightning/filter/'
+  - '/docs-cn/dev/reference/tools/tidb-lightning/filter/'
 ---
 
-# TiDB 悲观事务模式
+# TiDB Lightning 表库过滤
 
-TiDB 默认使用乐观事务模式，存在事务提交时因为冲突而失败的问题。为了保证事务的成功率，需要修改应用程序，加上重试的逻辑。 悲观事务模式可以避免这个问题，应用程序无需添加重试逻辑，就可以正常执行。
+TiDB Lightning 支持使用黑名单和白名单来过滤掉某些数据库和表。这可以用来跳过一些用作暂存、毋须迁移的表，或用来手动切分数据源，让多机同时导入。
 
-## 悲观事务模式的行为
+这些过滤规则与 MySQL 的 `replication-rules-db`/`replication-rules-table` 类似。
 
-悲观事务的行为和 MySQL 基本一致（不一致的地方详见[已知的局限](#已知的局限)）：
+## 过滤数据库
 
-- `SELECT FOR UPDATE` 会读取已提交的最新数据，并对读取到的数据加悲观锁。
+```toml
+[black-white-list]
+do-dbs = ["pattern1", "pattern2", "pattern3"]
+ignore-dbs = ["pattern4", "pattern5"]
+```
 
-- `UPDATE`/`DELETE`/`INSERT` 语句都会读取已提交的最新的数据来执行，并对修改的数据加悲观锁。
+* 如果 `[black-white-list]` 下的 `do-dbs` 列表不为空，
+    * 如数据库名称匹配 `do-dbs` 列表中**任何**一项，则数据库会被导入。
+    * 否则，数据库会被略过。
+* 否则，如果数据库名称匹配 `ignore-dbs` 列表中**任何**一项，数据库会被略过。
+* 如果数据库名称**同时**匹配 `do-dbs` 和 `ignore-dbs` 列表，数据库会被导入。
 
-- 当一行数据被加了悲观锁以后，其他尝试修改这一行的写事务会被阻塞，等待悲观锁的释放。
+如果匹配项首字符为 `~`，它会被解析为 [Go 语言的正则表达式](https://golang.org/pkg/regexp/syntax/#hdr-syntax)。否则会视为普通的字串来匹配数据库名称。
 
-- 当一行数据被加了悲观锁以后，其他尝试读取这一行的事务不会被阻塞，可以读到已提交的数据。
+## 过滤表
 
-- 事务提交或回滚的时候，会释放所有的锁。
+```toml
+[[black-white-list.do-tables]]
+db-name = "db-pattern-1"
+tbl-name = "table-pattern-1"
 
-- 如果并发事务出现死锁，会被死锁检测器检测到，并返回和 MySQL 相同的 DEADLOCK 错误。
+[[black-white-list.do-tables]]
+db-name = "db-pattern-2"
+tbl-name = "table-pattern-2"
 
-- 乐观事务和悲观事务可以共存，事务可以任意指定使用乐观模式或悲观模式来执行。
+[[black-white-list.do-tables]]
+db-name = "db-pattern-3"
+tbl-name = "table-pattern-3"
 
-## 悲观事务的使用方法
+[[black-white-list.ignore-tables]]
+db-name = "db-pattern-4"
+tbl-name = "table-pattern-4"
 
-进入悲观事务模式有以下三种方式:
+[[black-white-list.ignore-tables]]
+db-name = "db-pattern-5"
+tbl-name = "table-pattern-5"
+```
 
-- 执行 `BEGIN PESSIMISTIC;` 语句开启的事务，会进入悲观事务模式。 可以通过写成注释的形式 `BEGIN /*!90000 PESSIMISTIC */;` 来兼容 MySQL 语法。
+* 如果 `do-tables` 列表不为空，
+    * 如果表的限定名称匹配 `do-tables` 列表中**任何**一对，则表会被导入。
+    * 否则，表会被略过。
+* 否则，如果表的限定名称匹配 `ignore-tables` 列表中**任何**一对，表会被略过。
+* 如果表的限定名称**同时**匹配 `do-tables` 和 `ignore-tables` 列表，表会被导入。
 
-- 执行 `set @@tidb_txn_mode = 'pessimistic';`，使这个 session 执行的所有显式事务（即非 autocommit 的事务）都会进入悲观事务模式。
+> **注意：**
+> 
+> Lightning 会先执行数据库过滤规则，之后才执行表的过滤规则。所以，如果一个数据库已被 `ignore-dbs` 略过，即使其下的表匹配 `do-tables` 也不会再被导入。
 
-- 执行 `set @@global.tidb_txn_mode = 'pessimistic';`，使之后整个集群所有新创建的 session 都会进入悲观事务模式执行显式事务。
+## 例子
 
-在配置了 `global.tidb_txn_mode` 为 `pessimistic` 之后，默认进入悲观事务模式，但是可以用以下两种方式使事务进入乐观事务模式：
+以下例子演示过滤规则的操作原理。假设数据源包含这些表：
 
-- 执行 `BEGIN OPTIMISTIC;` 语句开启的事务，会进入乐观事务模式。 可以通过写成注释的形式 `BEGIN /*!90000 OPTIMISTIC */;` 来兼容 MySQL 语法。
+```
+`logs`.`messages_2016`
+`logs`.`messages_2017`
+`logs`.`messages_2018`
+`forum`.`users`
+`forum`.`messages`
+`forum_backup_2016`.`messages`
+`forum_backup_2017`.`messages`
+`forum_backup_2018`.`messages`
+`admin`.`secrets`
+```
 
-- 执行 `set @@tidb_txn_mode = 'optimistic';`，使当前的 session 执行的事务进入乐观事务模式。
+我们使用以下设置：
 
-`BEGIN PESSIMISTIC;` 和 `BEGIN OPTIMISTIC;` 语句的优先级高于 `tidb_txn_mode` 系统变量。使用这两个语句开启的事务，会忽略系统变量。
+```toml
+[black-white-list]
+do-dbs = [
+    "forum_backup_2018",            # 规则 A
+    "~^(logs|forum)$",              # 规则 B
+]
+ignore-dbs = [
+    "~^forum_backup_",              # 规则 C
+]
 
-如果想要禁用悲观事务特性，可以修改配置文件，在 `[pessimistic-txn]` 类别下添加 `enable = false`.
+[[black-white-list.do-tables]]      # 规则 D
+db-name = "logs"
+tbl-name = "~_2018$"
 
-## 相关配置参数
+[[black-white-list.ignore-tables]]  # 规则 E
+db-name = "~.*"
+tbl-name = "~^messages.*"
 
-相关配置都在 `[pessimistic-txn]` 类别下，除了前面介绍过的 `enable`，还可配置以下参数：
+[[black-white-list.do-tables]]      # 规则 F
+db-name = "~^forum.*"
+tbl-name = "messages"
+```
 
-- `ttl`
+首先进行数据库过滤：
 
-    ```
-    ttl = "40s"
-    ```
+| 数据库                       | 结果                        |
+| ------------------------- | ------------------------- |
+| `` `logs` ``              | 导入（规则 B）                  |
+| `` `forum` ``             | 导入（规则 B）                  |
+| `` `forum_backup_2016` `` | 略过（规则 C）                  |
+| `` `forum_backup_2017` `` | 略过（规则 C）                  |
+| `` `forum_backup_2018` `` | 导入（规则 A）（不会考虑规则 C）        |
+| `` `admin` ``             | 略过（`do-dbs` 不为空，且没有匹配的项目） |
 
-    `ttl` 是悲观事务的锁超时时间，默认值 40 秒，可以在 15 秒到 120 秒之间配置，超出这个范围会报错。如果事务的执行时间超过了 `ttl`，事务会失败。设置过大，会存在 `tidb-server` 宕机时，残留的悲观锁长时间阻塞写的问题，设置的过小，会存在事务来不及执行完，就被其他事务 rollback 的问题。
+然后进行表过滤：
 
-- `max-retry-count`
-
-    ```
-    max-retry-count = 256
-    ```
-
-    悲观事务会在事务内自动重试单个语句，这个配置指定单个语句最大重试次数，设置这个参数是为了避免极端情况下，出现无限重试，无法停止。 正常情况下不需要修改这个配置。
-
-## 已知的局限
-
-- 不支持 GAP Lock 和 Next Key Lock 在悲观事务内通过范围条件来更新多行数据的时候，其他的事务可以在这个范围内插入数据而不会被阻塞。
-
-- 不支持 SELECT LOCK IN SHARE MODE。
+| 表                                    | 结果                           |
+| ------------------------------------ | ---------------------------- |
+| `` `logs`.`messages_2016` ``         | 略过（规则 E）                     |
+| `` `logs`.`messages_2017` ``         | 略过（规则 E）                     |
+| `` `logs`.`messages_2018` ``         | 导入（规则 D）（不会考虑规则 E）           |
+| `` `forum`.`users` ``                | 略过（`do-tables` 不为空，且没有匹配的项目） |
+| `` `forum`.`messages` ``             | 导入（规则 F）（不会考虑规则 E）           |
+| `` `forum_backup_2016`.`messages` `` | 略过（数据库已被剔除）                  |
+| `` `forum_backup_2017`.`messages` `` | 略过（数据库已被剔除）                  |
+| `` `forum_backup_2018`.`messages` `` | 导入（规则 F）（不会考虑规则 E）           |
+| `` `admin`.`secrets` ``              | 略过（数据库已被剔除）                  |
