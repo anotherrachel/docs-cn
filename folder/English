@@ -1,77 +1,27 @@
 ---
-title: 执行计划绑定
+title: 使用 SQL 语句检查 TiDB 集群状态
 category: reference
 ---
 
-# 执行计划绑定
+# 使用 SQL 语句检查 TiDB 集群状态
 
-在[优化器 Hints](/v3.0/reference/performance/optimizer-hints.md) 中介绍了可以通过 Hint 的方式选择指定的执行计划，但有的时候需要在不修改 SQL 语句的情况下干预执行计划的选择。执行计划绑定提供了一系列功能使得可以在不修改 SQL 语句的情况下选择指定的执行计划。
+为了方便排查问题，TiDB 提供了一些 SQL 语句和系统表以查询一些有用的信息。
 
-## 语法
+`INFORMATION\_SCHEMA` 中提供了如下几个系统表，用于查询集群状态，诊断常见的集群问题。
 
-### 创建绑定
+- [`TABLES`](/v3.0/reference/system-databases/information-schema.md#tables-表)
+- [`TIDB_INDEXES`](/v3.0/reference/system-databases/information-schema.md#tidb_indexes-表)
+- [`ANALYZE_STATUS`](/v3.0/reference/system-databases/information-schema.md#analyze_status-表)
+- [`TIDB_HOT_REGIONS`](/v3.0/reference/system-databases/information-schema.md#tidb_hot_regions-表)
+- [`TIKV_STORE_STATUS`](/v3.0/reference/system-databases/information-schema.md#tikv_store_status-表)
+- [`TIKV_REGION_STATUS`](/v3.0/reference/system-databases/information-schema.md#tikv_region_status-表)
+- [`TIKV_REGION_PEERS`](/v3.0/reference/system-databases/information-schema.md#tikv_region_peers-表)
 
-{{< copyable "sql" >}}
+除此之外，执行下列语句也可获得对排查问题或查询集群状态有用的信息：
 
-```sql
-CREATE [GLOBAL | SESSION] BINDING FOR SelectStmt USING SelectStmt;
-```
-
-该语句可以在 GLOBAL 或者 SESSION 作用域内为 SQL 绑定执行计划。在不指定作用域时，隐式作用域为 SESSION。被绑定的 SQL 会被参数化后存储到系统表中。在处理 SQL 查询时，只要参数化后的 SQL 和系统表中某个被绑定的 SQL 一致即可使用相应的优化器 Hint。
-
-`参数化`：把 SQL 中的常量变成变量参数，并对 SQL 中的空格和换行符等做标准化处理。例如：
-
-```sql
-select * from t where a >    1
--- 参数化后：
-select * from t where a > ？
-```
-
-需要注意的是原始 SQL 和绑定 SQL 在参数化以及去掉 Hint 后文本必须相同，否则创建会失败，例如：
-
-{{< copyable "sql" >}}
-
-```sql
-CREATE BINDING FOR SELECT * FROM t WHERE a > 1 USING SELECT * FROM t use index(idx) WHERE a > 2;
-```
-
-可以创建成功，因为原始 SQL 和绑定 SQL 在参数化以及去掉 Hint 后文本都是 `select * from t where a > ?`，而
-
-{{< copyable "sql" >}}
-
-```sql
-CREATE BINDING FOR SELECT * FROM t WHERE a > 1 USING SELECT * FROM t use index(idx) WHERE b > 2;
-```
-
-则不可以创建成功，因为原始 SQL 在经过处理后是 `select * from t where a > ?`，而绑定 SQL 在经过处理后是 `select * from t where b > ?`。
-
-### 删除绑定
-
-{{< copyable "sql" >}}
-
-```sql
-DROP [GLOBAL | SESSION] BINDING FOR SelectStmt;
-```
-
-该语句可以在 GLOBAL 或者 SESSION 作用域内删除指定的执行计划绑定，在不指定作用域时默认作用域为 SESSION。
-
-### 查看绑定
-
-{{< copyable "sql" >}}
-
-```sql
-SHOW [GLOBAL | SESSION] BINDINGS [ShowLikeOrWhere];
-```
-
-该语句会输出 GLOBAL 或者 SESSION 作用域内的执行计划绑定，在不指定作用域时默认作用域为 SESSION。目前 `SHOW BINDINGS` 会输出 8 列，具体如下：
-
-| 列名           | 说明                                          |
-| ------------ | ------------------------------------------- |
-| original_sql | 参数化后的原始 SQL                                 |
-| bind_sql     | 带 Hint 的绑定 SQL                              |
-| default_db   | 默认数据库名                                      |
-| status       | 状态，包括 using（正在使用）、deleted（已删除）和 invalid（无效） |
-| create_time  | 创建时间                                        |
-| update_time  | 更新时间                                        |
-| charset      | 字符集                                         |
-| collation    | 排序规则                                        |
+- `ADMIN SHOW DDL` 可以获得是 `DDL owner` 角色的 TiDB 的 ID 及 `IP:PORT` 等具体信息。
+- `SHOW ANALYZE STATUS` 和 [`ANALYZE_STATUS`](/v3.0/reference/system-databases/information-schema.md#analyze_status-表) 表的功能相同。
+- 特殊的 `EXPLAIN` 语句：
+    - `EXPLAIN ANALYZE` 语句可以获得一个 SQL 语句执行中的一些具体信息。
+    - `EXPLAIN FOR CONNECTION` 可以获得一个连接中最后执行的查询的执行计划。可以配合 `SHOW PROCESSLIST` 使用。
+    - 关于 `EXPLAIN` 相关的更具体的信息，参考文档[理解 TiDB 执行计划](/v3.0/reference/performance/understanding-the-query-execution-plan.md)。
