@@ -1,18 +1,196 @@
 ---
-title: crwdns200734:0crwdne200734:0
-category: crwdns200736:0crwdne200736:0
-aliases:
-  - 'crwdns200738:0crwdne200738:0'
-  - 'crwdns200740:0crwdne200740:0'
+title: crwdns200466:0crwdne200466:0
+category: crwdns200468:0crwdne200468:0
 ---
 
-# crwdns200742:0crwdne200742:0
+# crwdns200470:0crwdne200470:0
 
-crwdns200744:0crwdne200744:0
+crwdns200472:0crwdne200472:0
 
-crwdns200746:0crwdne200746:0
++ [crwdns200476:0crwdne200476:0](crwdns200474:0crwdne200474:0)
++ [crwdns200480:0crwdne200480:0](crwdns200478:0crwdne200478:0)
++ [crwdns200484:0crwdne200484:0](crwdns200482:0crwdne200482:0)
 
-* crwdns200748:0crwdne200748:0
-* crwdns200750:0crwdne200750:0
-* crwdns200752:0crwdne200752:0
-* crwdns200754:0crwdne200754:0
+## crwdns200486:0crwdne200486:0
+
+crwdns200488:0crwdne200488:0
+
+crwdns200490:0crwdne200490:0
+
+| crwdns200492:0crwdne200492:0 | crwdns200494:0crwdne200494:0 |
+| ---------------------------- | ---------------------------- |
+| crwdns200496:0crwdne200496:0 | crwdns200498:0crwdne200498:0 |
+| crwdns200500:0crwdne200500:0 | crwdns200502:0crwdne200502:0 |
+| crwdns200504:0crwdne200504:0 | crwdns200506:0crwdne200506:0 |
+
+### crwdns200508:0crwdne200508:0
+
+#### crwdns200510:0crwdne200510:0
+
+crwdns200512:0crwdne200512:0
+
+crwdns200514:0crwdne200514:0
+
+```sql
+crwdns200516:0crwdne200516:0
+```
+
+#### crwdns200518:0crwdne200518:0
+
+crwdns200520:0crwdne200520:0
+
+crwdns200522:0crwdne200522:0
+
+```sql
+crwdns200524:0crwdne200524:0
+```
+
+#### crwdns200526:0crwdne200526:0
+
+crwdns200528:0crwdne200528:0
+
+crwdns200530:0crwdne200530:0
+
+```sql
+crwdns200532:0[UNSIGNED]crwdnd200532:0[ZEROFILL]crwdne200532:0
+```
+
+#### crwdns200534:0crwdne200534:0
+
+crwdns200536:0crwdne200536:0
+
+crwdns200538:0crwdne200538:0
+
+```sql
+crwdns200540:0[UNSIGNED]crwdnd200540:0[ZEROFILL]crwdne200540:0
+```
+
+#### crwdns200542:0crwdne200542:0
+
+crwdns200544:0crwdne200544:0
+
+crwdns200546:0crwdne200546:0
+
+```sql
+crwdns200548:0[UNSIGNED]crwdnd200548:0[ZEROFILL]crwdne200548:0
+```
+
+### crwdns200550:0crwdne200550:0
+
+crwdns200552:0crwdne200552:0
+
+crwdns200554:0crwdne200554:0
+
+```sql
+crwdns200556:0[UNSIGNED]crwdnd200556:0[ZEROFILL]crwdne200556:0
+```
+
+crwdns200558:0crwdne200558:0
+
+crwdns200560:0crwdne200560:0
+
+```sql
+crwdns200562:0[UNSIGNED]crwdnd200562:0[ZEROFILL]crwdne200562:0
+```
+
+### crwdns200564:0crwdne200564:0
+
+crwdns200566:0crwdne200566:0
+
+crwdns200568:0crwdne200568:0
+
+```sql
+crwdns200570:0[UNSIGNED]crwdnd200570:0[ZEROFILL]crwdne200570:0
+```
+
+### crwdns200572:0crwdne200572:0
+
+crwdns200574:0crwdne200574:0
+
+| crwdns200576:0crwdne200576:0   | crwdns200578:0crwdne200578:0                                                       | crwdns200580:0crwdne200580:0 | crwdns200582:0crwdne200582:0 |
+| ------------------------------ | ---------------------------------------------------------------------------------- | ---------------------------- | ---------------------------- |
+| `crwdns200584:0crwdne200584:0` | 86:0crwdne200586:0.255crwdns200586:0crwdne200586:08754crwdns200586:0crwdne200586:0 | crwdns200588:0crwdne200588:0 | crwdns200590:0crwdne200590:0 |
+| `crwdns200592:0crwdne200592:0` | crwdns200594:0crwdne200594:0                                                       | crwdns200596:0crwdne200596:0 | crwdns200598:0crwdne200598:0 |
+| `crwdns200600:0crwdne200600:0` | s200602:0crwdne200602:09611crwdns200602:0crwdne200602:0                            | crwdns200604:0crwdne200604:0 | crwdns200606:0crwdne200606:0 |
+| `crwdns200608:0crwdne200608:0` | crwdns200610:0crwdne200610:0                                                       | crwdns200612:0crwdne200612:0 | crwdns200614:0crwdne200614:0 |
+| `crwdns200616:0crwdne200616:0` | crwdns200618:0crwdne200618:0                                                       | crwdns200620:0crwdne200620:0 | crwdns200622:0crwdne200622:0 |
+
+## crwdns200624:0crwdne200624:0
+
+crwdns200626:0crwdne200626:0
+
+crwdns200628:0crwdne200628:0
+
+| crwdns200630:0crwdne200630:0 | crwdns200632:0crwdne200632:0 |
+| ---------------------------- | ---------------------------- |
+| crwdns200634:0crwdne200634:0 | crwdns200636:0crwdne200636:0 |
+| crwdns200638:0crwdne200638:0 | crwdns200640:0crwdne200640:0 |
+| crwdns200642:0crwdne200642:0 | crwdns200644:0crwdne200644:0 |
+| crwdns200646:0crwdne200646:0 | crwdns200648:0crwdne200648:0 |
+
+### crwdns200650:0crwdne200650:0
+
+#### crwdns200652:0crwdne200652:0
+
+crwdns200654:0crwdne200654:0
+
+crwdns200656:0crwdne200656:0
+
+crwdns200658:0crwdne200658:0
+
+```sql
+crwdns200660:0[UNSIGNED]crwdnd200660:0[ZEROFILL]crwdnd200660:0[UNSIGNED]crwdnd200660:0[ZEROFILL]crwdne200660:0
+```
+
+> **crwdns200662:0crwdne200662:0**
+> 
+> crwdns200664:0crwdne200664:0
+
+#### crwdns200666:0crwdne200666:0
+
+crwdns200668:0crwdne200668:0
+
+crwdns200670:0crwdne200670:0
+
+```sql
+crwdns200672:0[UNSIGNED]crwdnd200672:0[ZEROFILL]crwdnd200672:0[UNSIGNED]crwdnd200672:0[ZEROFILL]crwdnd200672:0[UNSIGNED]crwdnd200672:0[ZEROFILL]crwdne200672:0
+```
+
+> **crwdns200674:0crwdne200674:0**
+> 
+> crwdns200676:0crwdne200676:0
+
+### crwdns200678:0crwdne200678:0
+
+crwdns200680:0crwdne200680:0
+
+| crwdns200682:0crwdne200682:0   | crwdns200684:0crwdne200684:0                                                       |
+| ------------------------------ | ---------------------------------------------------------------------------------- |
+| `crwdns200686:0crwdne200686:0` | crwdns200688:0crwdne200688:0                                                       |
+| `crwdns200690:0crwdne200690:0` | crwdns200692:0crwdne200692:0<= p <= 24 为 4 个字节, 如果 25 <= p <= 53 为 8 个字节           |
+| `crwdns200694:0crwdne200694:0` | rwdne200696:053da9.5063465crwdns200696:0crwdne200696:0crwdns200696:0crwdne200696:0 |
+
+## crwdns200698:0crwdne200698:0
+
+crwdns200700:0crwdne200700:0
+
+crwdns200702:0crwdne200702:0
+
+| crwdns200704:0crwdne200704:0 | crwdns200706:0crwdne200706:0 |
+| ---------------------------- | ---------------------------- |
+| crwdns200708:0crwdne200708:0 | crwdns200710:0crwdne200710:0 |
+| crwdns200712:0crwdne200712:0 | crwdns200714:0crwdne200714:0 |
+| crwdns200716:0crwdne200716:0 | crwdns200718:0crwdne200718:0 |
+| crwdns200720:0crwdne200720:0 | crwdns200722:0crwdne200722:0 |
+
+### crwdns200724:0crwdne200724:0
+
+#### crwdns200726:0crwdne200726:0
+
+crwdns200728:0crwdne200728:0
+
+crwdns200730:0crwdne200730:0
+
+```sql
+crwdns200732:0[UNSIGNED]crwdnd200732:0[ZEROFILL]crwdnd200732:0[UNSIGNED]crwdnd200732:0[ZEROFILL]crwdne200732:0
+```
