@@ -1,131 +1,158 @@
 ---
-title: 为 TiDB 组件间开启 TLS 和数据加密存储
+title: 使用加密连接
 category: how-to
 ---
 
-# 为 TiDB 组件间开启 TLS 和数据加密存储
+# 使用加密连接
 
-本文档介绍 TiDB 集群如何开启 TLS 验证和数据加密存储。
+TiDB 服务端默认采用非加密连接，因而具备监视信道流量能力的第三方可以知悉 TiDB 服务端与客户端之间发送和接受的数据，包括但不限于查询语句内容、查询结果等。若信道是不可信的，例如客户端是通过公网连接到 TiDB 服务端的，则非加密连接容易造成信息泄露，建议使用加密连接确保安全性。
 
-## 开启 TLS 验证
+TiDB 服务端支持启用基于 TLS（传输层安全）协议的加密连接，协议与 MySQL 加密连接一致，现有 MySQL 客户端如 MySQL 运维工具和 MySQL 驱动等能直接支持。TLS 的前身是 SSL，因而 TLS 有时也被称为 SSL，但由于 SSL 协议有已知安全漏洞，TiDB 实际上并未支持。TiDB 支持的 TLS/SSL 协议版本为 TLS 1.0、TLS 1.1、TLS 1.2。
 
-本部分介绍 TiDB 集群如何开启 TLS 验证，TLS 验证支持：
+使用加密连接后，连接将具有以下安全性质：
 
-- TiDB 组件之间的双向验证，包括 TiDB、TiKV、PD 相互之间，TiKV Control 与 TiKV、PD Control 与 PD 的双向认证，以及 TiKV peer 之间、PD peer 之间。一旦开启，所有组件之间均使用验证，不支持只开启某一部分的验证。
-- MySQL Client 与 TiDB 之间的客户端对服务器身份的单向验证以及双向验证。
+- 保密性：流量明文无法被窃听；
+- 完整性：流量明文无法被篡改；
+- 身份验证（可选）：客户端和服务端能验证双方身份，避免中间人攻击。
 
-MySQL Client 与 TiDB 之间使用一套证书，TiDB 集群组件之间使用另外一套证书。
+TiDB 的加密连接支持默认是关闭的，必须在 TiDB 服务端通过配置开启加密连接的支持后，才能在客户端中使用加密连接。另外，与 MySQL 一致，TiDB 加密连接是以单个连接为单位的，并且是可选的，因而对于开启了加密连接支持的 TiDB 服务端，客户端既可以选择通过加密连接安全地连接到该 TiDB 服务端，也可以选择使用普通的非加密连接。大部分 MySQL 客户端默认不采用加密连接，因此一般还要显式地要求客户端使用加密连接。
 
-### TiDB 集群组件间开启 TLS（双向认证）
+简单来说，要使用加密连接必须同时满足以下两个条件：
 
-1. 准备证书。
+1. TiDB 服务端配置开启加密连接的支持
+2. 客户端指定使用加密连接
 
-    推荐为 TiDB、TiKV、PD 分别准备一个 server 证书，并保证可以相互验证，而它们的各种客户端共用 client 证书。
+## 配置 TiDB 启用加密连接支持
 
-    有多种工具可以生成自签名证书，如 `openssl`，`easy-rsa`，`cfssl`。
+在启动 TiDB 时，至少需要在配置文件中同时指定 `ssl-cert` 和 `ssl-key` 参数，才能使 TiDB 服务端接受加密连接。还可以指定 `ssl-ca` 参数进行客户端身份验证（请参见[配置启用身份验证](#配置启用身份验证)章节）。
 
-    这里提供一个使用 `cfssl` 生成证书的示例：[生成自签名证书](/dev/how-to/secure/generate-self-signed-certificates.md)。
+- [`ssl-cert`](/dev/reference/configuration/tidb-server/configuration-file.md#ssl-cert)：指定 SSL 证书文件路径
+- [`ssl-key`](/dev/reference/configuration/tidb-server/configuration-file.md#ssl-key)：指定证书文件对应的私钥
+- [`ssl-ca`](/dev/reference/configuration/tidb-server/configuration-file.md#ssl-ca)：可选，指定受信任的 CA 证书文件路径
 
-2. 配置证书。
+参数指定的文件都为 PEM 格式。另外目前 TiDB 尚不支持加载有密码保护的私钥，因此必须提供一个没有密码的私钥文件。若提供的证书或私钥无效，则 TiDB 服务端将照常启动，但并不支持客户端加密连接到 TiDB 服务端。
 
-    - TiDB
+上述证书及密钥可以使用 OpenSSL 签发和生成，也可以使用 MySQL 自带的工具 `mysql_ssl_rsa_setup` 快捷生成：
 
-        在 `config` 文件或命令行参数中设置：
+{{< copyable "shell-regular" >}}
 
-        ```toml
-        [security]
-        # Path of file that contains list of trusted SSL CAs for connection with cluster components.
-        cluster-ssl-ca = "/path/to/ca.pem"
-        # Path of file that contains X509 certificate in PEM format for connection with cluster components.
-        cluster-ssl-cert = "/path/to/tidb-server.pem"
-        # Path of file that contains X509 key in PEM format for connection with cluster components.
-        cluster-ssl-key = "/path/to/tidb-server-key.pem"
-        ```
+```bash
+mysql_ssl_rsa_setup --datadir=./certs
+```
 
-    - TiKV
+以上命令将在 `certs` 目录下生成以下文件：
 
-        在 `config` 文件或命令行参数中设置，并设置相应的 URL 为 https：
+```
+certs
+├── ca-key.pem
+├── ca.pem
+├── client-cert.pem
+├── client-key.pem
+├── private_key.pem
+├── public_key.pem
+├── server-cert.pem
+└── server-key.pem
+```
 
-        ```toml
-        [security]
-        # set the path for certificates. Empty string means disabling secure connectoins.
-        ca-path = "/path/to/ca.pem"
-        cert-path = "/path/to/tikv-server.pem"
-        key-path = "/path/to/tikv-server-key.pem"
-        ```
+对应的 TiDB 配置文件参数为：
 
-    - PD
+```toml
+[security]
+ssl-cert = "certs/server-cert.pem"
+ssl-key = "certs/server-key.pem"
+```
 
-        在 `config` 文件或命令行参数中设置，并设置相应的 URL 为 https：
+若证书参数无误，则 TiDB 在启动时将会输出 `Secure connection is enabled`，否则 TiDB 会输出 `Secure connection is NOT ENABLED`。
 
-        ```toml
-        [security]
-        # Path of file that contains list of trusted SSL CAs. if set, following four settings shouldn't be empty
-        cacert-path = "/path/to/ca.pem"
-        # Path of file that contains X509 certificate in PEM format.
-        cert-path = "/path/to/pd-server.pem"
-        # Path of file that contains X509 key in PEM format.
-        key-path = "/path/to/pd-server-key.pem"
-        ```
+## 配置 MySQL 客户端使用加密连接
 
-    此时 TiDB 集群各个组件间已开启双向验证。
+MySQL 5.7 及以上版本自带的客户端默认尝试使用安全连接，若服务端不支持安全连接则自动退回到使用非安全连接；MySQL 5.7 以下版本自带的客户端默认采用非安全连接。
 
-    > **注意：**
-    > 
-    > 若 TiDB 集群各个组件间已开启 TLS，在使用 tikv-ctl 或 pd-ctl 工具连接集群时，需要指定 client 证书，示例：
+可以通过命令行参数修改客户端的连接行为，包括：
 
-    {{< copyable "shell-regular" >}}
+- 强制使用安全连接，若服务端不支持安全连接则连接失败 (`--ssl-mode=REQUIRED`)
+- 尝试使用安全连接，若服务端不支持安全连接则退回使用不安全连接
+- 使用不安全连接 (`--ssl-mode=DISABLED`)
 
-    ```bash
-    ./pd-ctl -u https://127.0.0.1:2379 --cacert /path/to/ca.pem --cert /path/to/client.pem --key /path/to/client-key.pem
-    ```
+详细信息请参阅 MySQL 文档中关于[客户端配置安全连接](https://dev.mysql.com/doc/refman/5.7/en/using-encrypted-connections.html#using-encrypted-connections-client-side-configuration)的部分。
 
-    {{< copyable "shell-regular" >}}
+## 配置启用身份验证
 
-    ```bash
-    ./tikv-ctl --host="127.0.0.1:20160" --ca-path="/path/to/ca.pem" --cert-path="/path/to/client.pem" --key-path="/path/to/clinet-key.pem"
-    ```
+若在 TiDB 服务端或 MySQL 客户端中未指定 `ssl-ca` 参数，则默认不会进行客户端或服务端身份验证，无法抵御中间人攻击，例如客户端可能会“安全地”连接到了一个伪装的服务端。可以在服务端和客户端中配置 `ssl-ca` 参数进行身份验证。一般情况下只需验证服务端身份，但也可以验证客户端身份进一步增强安全性。
 
-### MySQL 与 TiDB 间开启 TLS
-
-请参考 [使用加密连接](/dev/how-to/secure/enable-tls-clients.md)。
-
-## 开启数据加密存储
-
-在 TiDB 集群中，用户的数据都存储在 TiKV 中，配置了 TiKV 数据加密存储功能，就代表 TiDB 集群已经加密存储了用户的数据。本部分主要介绍如何配置 TiKV 的加密存储功能。
-
-### 操作流程
-
-1. 生成 token 文件。
-
-    token 文件存储的是密钥，用于对用户数据进行加密，以及对已加密的数据进行解密。
-
-    {{< copyable "shell-regular" >}}
-
-    ```bash
-    ./tikv-ctl random-hex --len 256 > cipher-file-256
-    ```
-
-    > **注意：**
-    > 
-    > TiKV 只接受 hex 格式的 token 文件，文件的长度必须是 2^n，并且小于等于 1024。
-
-2. 配置 TiKV。
-
-    ```toml
-    [security]
-    # Cipher file 的存储路径
-    cipher-file = "/path/to/cipher-file-256"
-    ```
+- 若要使 MySQL 客户端验证 TiDB 服务端身份，TiDB 服务端需至少配置 `ssl-cert` 和 `ssl-key` 参数，客户端需至少指定 `--ssl-ca` 参数，且 `--ssl-mode` 至少为 `VERIFY_CA`。必须确保 TiDB 服务端配置的证书（`ssl-cert`）是由客户端 `--ssl-ca` 参数所指定的 CA 所签发的，否则身份验证失败。
+- 若要使 TiDB 服务端验证 MySQL 客户端身份，TiDB 服务端需配置 `ssl-cert`、`ssl-key`、`ssl-ca` 参数，客户端需至少指定 `--ssl-cert`、`--ssl-key` 参数。必须确保服务端配置的证书和客户端配置的证书都是由服务端配置指定的 `ssl-ca` 签发的。
+- 若要进行双向身份验证，请同时满足上述要求。
 
 > **注意：**
 > 
-> 若使用 [Lightning](/dev/reference/tools/tidb-lightning/overview.md) 向集群导入数据，如果目标集群开启了加密功能，Lightning 生成的 sst 文件也必须是加密的格式。
+> 目前 TiDB 尚不支持强制验证客户端身份，即服务端对客户端的身份验证是可选的。若客户端在 TLS 握手时未出示自己的身份证书，也能正常建立 TLS 连接。
 
-### 使用限制
+## 检查当前连接是否是加密连接
 
-目前 TiKV 数据加密存储存在以下限制：
+可以通过 `SHOW STATUS LIKE "%Ssl%";` 了解当前连接的详细情况，包括是否使用了安全连接、安全连接采用的加密协议、TLS 版本号等。
 
-- 对之前没有开启加密存储的集群，不支持开启该功能。
-- 已经开启加密功能的集群，不允许关闭加密存储功能。
-- 同一集群内部，不允许部分 TiKV 实例开启该功能，部分 TiKV 实例不开启该功能。对于加密存储功能，所有 TiKV 实例要么都开启该功能，要么都不开启该功能。这是由于 TiKV 实例之间会有数据迁移，如果开启了加密存储功能，迁移过程中数据也是加密的。
+以下是一个安全连接中执行该语句的结果。由于客户端支持的 TLS 版本号和加密协议会有所不同，执行结果相应地也会有所变化。
+
+{{< copyable "sql" >}}
+
+```sql
+SHOW STATUS LIKE "%Ssl%";
+```
+
+```
+......
+| Ssl_verify_mode | 5                            |
+| Ssl_version     | TLSv1.2                      |
+| Ssl_cipher      | ECDHE-RSA-AES128-GCM-SHA256  |
+......
+```
+
+除此以外，对于 MySQL 自带客户端，还可以使用 `STATUS` 或 `\s` 语句查看连接情况：
+
+{{< copyable "sql" >}}
+
+```sql
+\s
+```
+
+```
+...
+SSL: Cipher in use is ECDHE-RSA-AES128-GCM-SHA256
+...
+```
+
+## 支持的 TLS 版本及密钥交换协议和加密算法
+
+TiDB 支持的 TLS 版本及密钥交换协议和加密算法由 Golang 官方库决定。
+
+### 支持的 TLS 版本
+
+- TLS 1.0
+- TLS 1.1
+- TLS 1.2
+
+### 支持的密钥交换协议及加密算法
+
+- TLS\_RSA\_WITH\_RC4\_128\_SHA
+- TLS\_RSA\_WITH\_3DES\_EDE\_CBC\_SHA
+- TLS\_RSA\_WITH\_AES\_128\_CBC\_SHA
+- TLS\_RSA\_WITH\_AES\_256\_CBC\_SHA
+- TLS\_RSA\_WITH\_AES\_128\_CBC\_SHA256
+- TLS\_RSA\_WITH\_AES\_128\_GCM\_SHA256
+- TLS\_RSA\_WITH\_AES\_256\_GCM\_SHA384
+- TLS\_ECDHE\_ECDSA\_WITH\_RC4\_128\_SHA
+- TLS\_ECDHE\_ECDSA\_WITH\_AES\_128\_CBC\_SHA
+- TLS\_ECDHE\_ECDSA\_WITH\_AES\_256\_CBC\_SHA
+- TLS\_ECDHE\_RSA\_WITH\_RC4\_128\_SHA
+- TLS\_ECDHE\_RSA\_WITH\_3DES\_EDE\_CBC\_SHA
+- TLS\_ECDHE\_RSA\_WITH\_AES\_128\_CBC\_SHA
+- TLS\_ECDHE\_RSA\_WITH\_AES\_256\_CBC\_SHA
+- TLS\_ECDHE\_ECDSA\_WITH\_AES\_128\_CBC\_SHA256
+- TLS\_ECDHE\_RSA\_WITH\_AES\_128\_CBC\_SHA256
+- TLS\_ECDHE\_RSA\_WITH\_AES\_128\_GCM\_SHA256
+- TLS\_ECDHE\_ECDSA\_WITH\_AES\_128\_GCM\_SHA256
+- TLS\_ECDHE\_RSA\_WITH\_AES\_256\_GCM\_SHA384
+- TLS\_ECDHE\_ECDSA\_WITH\_AES\_256\_GCM\_SHA384
+- TLS\_ECDHE\_RSA\_WITH\_CHACHA20\_POLY1305
+- TLS\_ECDHE\_ECDSA\_WITH\_CHACHA20\_POLY1305
