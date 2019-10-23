@@ -1,26 +1,50 @@
 ---
-title: SQL 优化流程简介
+title: Optimizer Hints
 category: reference
 ---
 
-# SQL 优化流程简介
+# Optimizer Hints
 
-在 TiDB 中，SQL 优化过程分为逻辑优化和物理优化两个阶段。
+TiDB 支持 Optimizer Hints 语法，它基于 MySQL 5.7 中介绍的类似 comment 的语法，例如 `/*+ TIDB_XX(t1, t2) */`。当 TiDB 优化器选择的不是最优查询计划时，建议使用 Optimizer Hints。
 
-## 逻辑优化简介
+> **注意：**
+> 
+> MySQL 命令行客户端在 5.7.7 版本之前默认清除了 Optimizer Hints。如果需要在这些早期版本的客户端中使用 `Hint` 语法，需要在启动客户端时加上 `--comments` 选项，例如 `mysql -h 127.0.0.1 -P 4000 -uroot --comments`。
 
-逻辑优化是基于规则的优化，对输入的逻辑执行计划按顺序应用一些优化规则，从而使整个逻辑执行计划变得更好。这些优化规则包括：
+## 语法
 
-- 列裁剪
-- 投影消除
-- 关联子查询去关联
-- Max/Min 消除
-- 谓词下推
-- 分区裁剪
-- TopN 和 Limit 下推
+### TIDB_SMJ(t1, t2)
 
-## 物理优化简介
+```sql
+SELECT /*+ TIDB_SMJ(t1, t2) */ * from t1，t2 where t1.id = t2.id
+```
 
-物理优化是基于代价的优化，为上一阶段产生的逻辑执行计划制定物理执行计划。这一阶段中，优化器会为逻辑执行计划中的每个算子选择具体的物理实现。逻辑算子的不同物理实现有着不同的时间复杂度、资源消耗和物理属性等。在这个过程中，优化器会根据数据的统计信息来确定不同物理实现的代价，并选择整体代价最小的物理执行计划。
+提示优化器使用 Sort Merge Join 算法，这个算法通常会占用更少的内存，但执行时间会更久。 当数据量太大，或系统内存不足时，建议尝试使用。
 
-逻辑执行计划是一个树形结构，每个节点对应 SQL 中的一个逻辑算子。同样的，物理执行计划也是一个树形结构，每个节点对应 SQL 中的一个物理算子。逻辑算子只描述这个算子的功能，而物理算子则描述了完成这个功能的具体算法。对于同一个逻辑算子，可能有多个物理算子实现，比如 `LogicalAggregate`，它的实现可以是采用哈希算法的 `HashAggregate`，也可以是流式的 `StreamAggregate`。不同的物理算子具有不同的物理属性，也对其子节点有着不同的物理属性的要求。物理属性包括数据的顺序和分布等。TiDB 中现在只考虑了数据的顺序。
+### TIDB_INLJ(t1, t2)
+
+```sql
+SELECT /*+ TIDB_INLJ(t1, t2) */ * from t1，t2 where t1.id = t2.id
+```
+
+提示优化器使用 Index Nested Loop Join 算法，这个算法可能会在某些场景更快，消耗更少系统资源，有的场景会更慢，消耗更多系统资源。对于外表经过 WHERE 条件过滤后结果集较小（小于 1 万行）的场景，可以尝试使用。`TIDB_INLJ()` 中的参数是建立查询计划时，内表的候选表。即 `TIDB_INLJ(t1)` 只会考虑使用 t1 作为内表构建查询计划。
+
+### TIDB_HJ(t1, t2)
+
+```sql
+SELECT /*+ TIDB_HJ(t1, t2) */ * from t1，t2 where t1.id = t2.id
+```
+
+提示优化器使用 Hash Join 算法，这个算法多线程并发执行，执行速度较快，但会消耗较多内存。
+
+### MAX\_EXECUTION\_TIME(N)
+
+ 在 `SELECT` 语句中可以使用 `MAX_EXECUTION_TIME(N)`，它会限制语句的执行时间不能超过 `N` 毫秒，否则服务器会终止这条语句的执行。
+
+例如，下面例子设置了 1 秒超时：
+
+```sql
+SELECT /*+ MAX_EXECUTION_TIME(1000) */ * FROM t1 INNER JOIN t2 WHERE ...
+```
+
+ 除了 hint 之外，环境变量 `max_execution_time` 也会对语句执行时间进行限制。
