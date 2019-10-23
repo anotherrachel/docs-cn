@@ -1,100 +1,276 @@
----
-title: crwdns101270:0crwdne101270:0
-category: crwdns101272:0crwdne101272:0
----
+crwdns100760:0$ifcrwdnd100760:0$fontsize$crwdnd100760:0$endif$crwdnd100760:0$ifcrwdnd100760:0$lang$crwdnd100760:0$endif$crwdnd100760:0$ifcrwdnd100760:0$papersize$crwdnd100760:0$endif$crwdnd100760:0$forcrwdnd100760:0$classoption$crwdnd100760:0$sep$crwdnd100760:0$endfor$crwdnd100760:0{$documentclass$}crwdne100760:0
+crwdns100762:0$ifcrwdne100762:0
+crwdns100764:0{$fontfamily$}crwdne100764:0
+crwdns100766:0$else$crwdne100766:0
+crwdns100768:0{lmodern}crwdne100768:0
+crwdns100770:0$endif$crwdne100770:0
+crwdns100772:0$ifcrwdne100772:0
+crwdns100774:0{setspace}crwdne100774:0
+crwdns100776:0{$linestretch$}crwdne100776:0
+crwdns100778:0$endif$crwdne100778:0
+crwdns100780:0{amssymb,amsmath}crwdne100780:0
+crwdns100782:0{ifxetex,ifluatex}crwdne100782:0
+crwdns100784:0{fixltx2e}crwdne100784:0
+crwdns100786:0crwdne100786:0
+  crwdns100788:0[T1]crwdnd100788:0{fontenc}crwdne100788:0
+  crwdns100790:0[utf8]crwdnd100790:0{inputenc}crwdne100790:0
+crwdns100792:0$ifcrwdne100792:0
+  crwdns100794:0{eurosym}crwdne100794:0
+crwdns100796:0$endif$crwdne100796:0
+crwdns100798:0crwdne100798:0
+  crwdns100800:0crwdne100800:0
+    crwdns100802:0{mathspec}crwdne100802:0
+    crwdns100804:0{xltxtra,xunicode}crwdne100804:0
+    crwdns100806:0$ifcrwdne100806:0
+      crwdns100808:0{xeCJK}crwdne100808:0
+      crwdns100810:0{$CJKmainfont$}crwdne100810:0
+    crwdns100812:0$endif$crwdne100812:0
+  crwdns100814:0crwdne100814:0
+    crwdns100816:0{fontspec}crwdne100816:0
+  crwdns100818:0crwdne100818:0
+  crwdns100820:0crwdne100820:0
+  crwdns100822:0crwdne100822:0
+crwdns100824:0$ifcrwdne100824:0
+    crwdns100826:0{$mainfont$}crwdne100826:0
+crwdns100828:0$endif$crwdne100828:0
+crwdns100830:0$ifcrwdne100830:0
+    crwdns100832:0{$sansfont$}crwdne100832:0
+crwdns100834:0$endif$crwdne100834:0
+crwdns100836:0$ifcrwdne100836:0
+    crwdns100838:0{$monofont$}crwdne100838:0
+crwdns100840:0$endif$crwdne100840:0
+crwdns100842:0$ifcrwdne100842:0
+    crwdns100844:0{$mathfont$}crwdne100844:0
+crwdns100846:0$endif$crwdne100846:0
+crwdns100848:0crwdne100848:0
+crwdns100850:0crwdne100850:0
+crwdns100852:0{upquote.sty}crwdnd100852:0{upquote}crwdne100852:0
+crwdns100854:0crwdne100854:0
+crwdns100856:0{microtype.sty}crwdne100856:0
+crwdns100858:0{microtype}crwdne100858:0
+crwdns100860:0[protrusion]crwdnd100860:0{basicmath}crwdne100860:0
+crwdns100862:0crwdne100862:0
+crwdns100864:0$ifcrwdne100864:0
+crwdns100866:0$forcrwdnd100866:0$geometry$crwdnd100866:0$sep$crwdnd100866:0$endfor$crwdnd100866:0{geometry}crwdne100866:0
+crwdns100868:0$endif$crwdne100868:0
+crwdns100870:0$ifcrwdne100870:0
+crwdns100872:0{natbib}crwdne100872:0
+crwdns100874:0$ifcrwdnd100874:0$biblio-style$crwdnd100874:0$else$crwdnd100874:0$endif$crwdne100874:0
+crwdns100876:0$endif$crwdne100876:0
+crwdns100878:0$ifcrwdne100878:0
+crwdns100880:0{biblatex}crwdne100880:0
+crwdns100882:0$ifcrwdne100882:0
+crwdns100884:0{$biblio-files$}crwdne100884:0
+crwdns100886:0$endif$crwdne100886:0
+crwdns100888:0$endif$crwdne100888:0
+crwdns100890:0$ifcrwdne100890:0
 
-# crwdns101274:0crwdne101274:0
+crwdns100892:0{xcolor}crwdne100892:0
+crwdns100894:0{listings}crwdne100894:0
+crwdns100896:0crwdne100896:0
+    crwdns100898:0crwdne100898:0
+    crwdns100900:0[rgb]crwdnd100900:0{0.13,0.29,0.53}crwdne100900:0
+    crwdns100902:0[rgb]crwdnd100902:0{0.31,0.60,0.02}crwdne100902:0
+    crwdns100904:0[rgb]crwdnd100904:0{0.56,0.35,0.01}crwdne100904:0
+    crwdns100906:0crwdne100906:0
+    crwdns100908:0crwdne100908:0
+    crwdns100910:0crwdne100910:0
+    crwdns100912:0{0ex}crwdnd100912:0[0ex]crwdnd100912:0[0ex]crwdnd100912:0{red}crwdne100912:0
+crwdns100914:0crwdne100914:0
 
-crwdns101276:0crwdne101276:0
+crwdns100916:0$endif$crwdne100916:0
+crwdns100918:0$ifcrwdne100918:0
+crwdns100920:0{code}crwdne100920:0
+crwdns100922:0$endif$crwdne100922:0
+crwdns100924:0$ifcrwdne100924:0
+crwdns100926:0$highlighting-macros$crwdne100926:0
+crwdns100928:0$endif$crwdne100928:0
+crwdns100930:0$ifcrwdne100930:0
+crwdns100932:0{fancyvrb}crwdne100932:0
+crwdns100934:0$endif$crwdne100934:0
+crwdns100936:0$ifcrwdne100936:0
+crwdns100938:0{longtable,booktabs}crwdne100938:0
+crwdns100940:0$endif$crwdne100940:0
+crwdns100942:0$ifcrwdne100942:0
+crwdns100944:0{graphicx}crwdne100944:0
+crwdns100946:0crwdne100946:0
+crwdns100948:0crwdne100948:0
+crwdns100950:0crwdne100950:0
+crwdns100952:0crwdne100952:0
+crwdns100954:0crwdne100954:0
+crwdns100956:0crwdne100956:0
+crwdns100958:0crwdne100958:0
+crwdns100960:0{Gin}crwdne100960:0
+crwdns100962:0$endif$crwdne100962:0
+crwdns100964:0crwdne100964:0
+  crwdns100966:0crwdne100966:0
+              crwdns100968:0crwdne100968:0
+              crwdns100970:0{hyperref}crwdne100970:0
+crwdns100972:0crwdne100972:0
+  crwdns100974:0{hyperref}crwdne100974:0
+crwdns100976:0crwdne100976:0
+crwdns100978:0crwdne100978:0
+            crwdns100980:0crwdne100980:0
+            crwdns100982:0{$author-meta$}crwdne100982:0
+            crwdns100984:0{$title-meta$}crwdne100984:0
+            crwdns100986:0crwdne100986:0
+            crwdns100988:0$ifcrwdnd100988:0$citecolor$crwdnd100988:0$else$crwdnd100988:0$endif$crwdne100988:0
+            crwdns100990:0$ifcrwdnd100990:0$urlcolor$crwdnd100990:0$else$crwdnd100990:0$endif$crwdne100990:0
+            crwdns100992:0$ifcrwdnd100992:0$linkcolor$crwdnd100992:0$else$crwdnd100992:0$endif$crwdne100992:0
+            crwdns100994:0{0 0 0}crwdne100994:0
+crwdns100996:0{same}crwdne100996:0
+crwdns100998:0$ifcrwdne100998:0
+crwdns101000:0crwdne101000:0
+crwdns101002:0[2]crwdnd101002:0{#1}crwdne101002:0
+crwdns101004:0$endif$crwdne101004:0
+crwdns101006:0$ifcrwdne101006:0
+crwdns101008:0[normalem]crwdnd101008:0{ulem}crwdne101008:0
+crwdns101010:0crwdne101010:0
+crwdns101012:0crwdne101012:0
+crwdns101014:0$endif$crwdne101014:0
+crwdns101016:0{0pt}crwdne101016:0
+crwdns101018:0{6pt plus 2pt minus 1pt}crwdne101018:0
+crwdns101020:0{3em}crwdne101020:0
+crwdns101022:0crwdne101022:0
+  crwdns101024:0{0pt}crwdnd101024:0{0pt}crwdne101024:0
+crwdns101026:0$ifcrwdne101026:0
+crwdns101028:0{secnumdepth}crwdnd101028:0{5}crwdne101028:0
+crwdns101030:0$else$crwdne101030:0
+crwdns101032:0{secnumdepth}crwdnd101032:0{0}crwdne101032:0
+crwdns101034:0$endif$crwdne101034:0
+crwdns101036:0$ifcrwdne101036:0
+crwdns101038:0crwdne101038:0
+crwdns101040:0$endif$crwdne101040:0
+crwdns101042:0$ifcrwdne101042:0
+crwdns101044:0crwdne101044:0
+  crwdns101046:0{polyglossia}crwdne101046:0
+  crwdns101048:0{$mainlang$}crwdne101048:0
+crwdns101050:0crwdne101050:0
+  crwdns101052:0$lang$crwdnd101052:0{babel}crwdne101052:0
+crwdns101054:0crwdne101054:0
+crwdns101056:0$endif$crwdne101056:0
 
-## crwdns101278:0crwdne101278:0
--   crwdns101280:0crwdne101280:0
--   crwdns101282:0crwdne101282:0
+crwdns101058:0$ifcrwdne101058:0
+crwdns101060:0$title$crwdnd101060:0$ifcrwdnd101060:0{0.5em}crwdnd101060:0$subtitle$crwdnd101060:0$endif$crwdne101060:0
+crwdns101062:0$endif$crwdne101062:0
+crwdns101064:0$ifcrwdne101064:0
+crwdns101066:0$forcrwdnd101066:0$author$crwdnd101066:0$sep$crwdnd101066:0$endfor$crwdne101066:0
+crwdns101068:0$endif$crwdne101068:0
+crwdns101070:0{$date$}crwdne101070:0
+crwdns101072:0$forcrwdne101072:0
+crwdns101074:0$header-includes$crwdne101074:0
+crwdns101076:0$endfor$crwdne101076:0
 
-    crwdns101284:0crwdne101284:0
+crwdns101078:0crwdne101078:0
+crwdns101080:0crwdne101080:0
+crwdns101082:0{framed}crwdne101082:0
+crwdns101084:0{xcolor}crwdne101084:0
+crwdns101086:0crwdne101086:0
+crwdns101088:0crwdne101088:0
+crwdns101090:0{shadecolor}crwdne101090:0
+crwdns101092:0{quote}crwdnd101092:0{oldquote}crwdnd101092:0{oldquote}crwdne101092:0
 
--   crwdns101286:0crwdne101286:0
+crwdns101094:0crwdne101094:0
+crwdns101096:0crwdne101096:0
+crwdns101098:0[section]crwdnd101098:0{placeins}crwdne101098:0
+crwdns101100:0crwdne101100:0
+crwdns101102:0{float}crwdne101102:0
+crwdns101104:0{figure}crwdnd101104:0{H}crwdne101104:0
 
-    crwdns101288:0crwdne101288:0
+crwdns101106:0crwdne101106:0
+crwdns101108:0{indentfirst}crwdne101108:0
+crwdns101110:0{2em}crwdne101110:0
 
-## crwdns101290:0crwdne101290:0
-### crwdns101292:0crwdne101292:0
+crwdns101112:0crwdne101112:0
+crwdns101114:0crwdne101114:0
 
-crwdns101294:0crwdne101294:0
+crwdns101116:0crwdne101116:0
+crwdns101118:0crwdne101118:0
+crwdns101120:0{titlesec}crwdne101120:0
+crwdns101122:0{titletoc}crwdne101122:0
+crwdns101124:0crwdne101124:0
+crwdns101126:0crwdne101126:0
+crwdns101128:0{subsection}crwdne101128:0
+              crwdns101130:0[4em]crwdne101130:0
+              crwdns101132:0crwdne101132:0
+              crwdns101134:0{3em}crwdne101134:0
+              crwdns101136:0crwdne101136:0
+              crwdns101138:0[0.5pc]crwdnd101138:0{0em}crwdne101138:0
 
-crwdns101296:0crwdne101296:0
+crwdns101140:0{subsubsection}crwdne101140:0
+              crwdns101142:0[7em]crwdne101142:0
+              crwdns101144:0crwdne101144:0
+              crwdns101146:0{3.5em}crwdne101146:0
+              crwdns101148:0crwdne101148:0
+              crwdns101150:0[0.5pc]crwdnd101150:0{0em}crwdne101150:0
 
-```bashrc
-crwdns101298:0$JAVA_HOMEcrwdnd101298:0$PATHcrwdne101298:0
-```
+crwdns101152:0[all]crwdnd101152:0{background}crwdne101152:0
+crwdns101154:0crwdne101154:0
+crwdns101156:0crwdne101156:0
+  crwdns101158:0crwdne101158:0
+  crwdns101160:0crwdne101160:0
 
-crwdns101300:0crwdne101300:0
+crwdns101162:0crwdne101162:0
+crwdns101164:0crwdne101164:0
+crwdns101166:0crwdne101166:0
+crwdns101168:0[1]crwdnd101168:0{#1}crwdne101168:0
+crwdns101170:0crwdne101170:0
+crwdns101172:0[1]crwdnd101172:0{#1}crwdne101172:0
 
-```
-crwdns101302:0crwdne101302:0
-```
+crwdns101174:0{document}crwdne101174:0
 
-### crwdns101304:0crwdne101304:0
+crwdns101176:0crwdne101176:0
+crwdns101178:0crwdne101178:0
+crwdns101180:0$ifcrwdne101180:0
+crwdns101182:0crwdne101182:0
+crwdns101184:0$endif$crwdne101184:0
+crwdns101186:0$ifcrwdne101186:0
+crwdns101188:0{abstract}crwdne101188:0
+crwdns101190:0$abstract$crwdne101190:0
+crwdns101192:0{abstract}crwdne101192:0
+crwdns101194:0$endif$crwdne101194:0
 
-crwdns101306:0crwdne101306:0
+crwdns101196:0$forcrwdne101196:0
+crwdns101198:0$include-before$crwdne101198:0
 
-```
-crwdns101308:0crwdne101308:0
-```
+crwdns101200:0$endfor$crwdne101200:0
+crwdns101202:0$ifcrwdne101202:0
+crwdns101204:0crwdne101204:0
+crwdns101206:0crwdne101206:0
+crwdns101208:0{tocdepth}crwdnd101208:0{$toc-depth$}crwdne101208:0
+crwdns101210:0crwdne101210:0
+crwdns101212:0crwdne101212:0
+crwdns101214:0$endif$crwdne101214:0
+crwdns101216:0$ifcrwdne101216:0
+crwdns101218:0crwdne101218:0
+crwdns101220:0$endif$crwdne101220:0
+crwdns101222:0$ifcrwdne101222:0
+crwdns101224:0crwdne101224:0
+crwdns101226:0$endif$crwdne101226:0
 
-crwdns101310:0crwdne101310:0
+crwdns101228:0crwdne101228:0
 
-```
-crwdns101312:0crwdne101312:0
-```
+crwdns101230:0$body$crwdne101230:0
 
-crwdns101314:0crwdne101314:0
+crwdns101232:0$ifcrwdne101232:0
+crwdns101234:0$ifcrwdne101234:0
+crwdns101236:0$ifcrwdne101236:0
+crwdns101238:0$ifcrwdne101238:0
+crwdns101240:0{$biblio-title$}crwdne101240:0
+crwdns101242:0$else$crwdne101242:0
+crwdns101244:0{$biblio-title$}crwdne101244:0
+crwdns101246:0$endif$crwdne101246:0
+crwdns101248:0$endif$crwdne101248:0
+crwdns101250:0{$biblio-files$}crwdne101250:0
 
-```
-crwdns101316:0crwdne101316:0
-```
+crwdns101252:0$endif$crwdne101252:0
+crwdns101254:0$endif$crwdne101254:0
+crwdns101256:0$ifcrwdne101256:0
+crwdns101258:0$ifcrwdnd101258:0$biblio-title$crwdnd101258:0$endif$crwdne101258:0
 
-> crwdns101318:0crwdne101318:0
+crwdns101260:0$endif$crwdne101260:0
+crwdns101262:0$forcrwdne101262:0
+crwdns101264:0$include-after$crwdne101264:0
 
-crwdns101320:0crwdne101320:0
-
-```
-crwdns101322:0[TPCH_001]crwdne101322:0
-```
-
-## crwdns101324:0crwdne101324:0
-
-crwdns101326:0crwdne101326:0
-
-```
-crwdns101328:0crwdne101328:0
-```
-
-```scala
-crwdns101330:0crwdne101330:0
-```
-
-crwdns101332:0crwdne101332:0
-
-```scala
-crwdns101334:0crwdne101334:0
-```
-
-crwdns101336:0crwdne101336:0
-
-```
-crwdns101338:0crwdne101338:0
-```
-
-crwdns101340:0crwdne101340:0
-
-```scala
-crwdns101342:0crwdne101342:0
-```
-
-crwdns101344:0crwdne101344:0
-
-```
-crwdns101346:0crwdne101346:0
-```
-crwdns101348:0crwdne101348:0
+crwdns101266:0$endfor$crwdne101266:0
+crwdns101268:0{document}crwdne101268:0
