@@ -1,220 +1,154 @@
 ---
-title: TiDB Docker 部署方案
+title: 生成自签名证书
 category: how-to
 ---
 
-# TiDB Docker 部署方案
+# 生成自签名证书
 
-本文介绍如何使用 Docker 部署一个多节点的 TiDB 集群。
+## 概述
 
-> **注意：**
-> 
-> 对于生产环境，不要使用 Docker 进行部署，而应[使用 Ansible 部署 TiDB 集群](/v2.1/how-to/deploy/orchestrated/ansible.md)。
+本文档提供使用 `cfssl` 生成自签名证书的示例。
 
-## 环境准备
+假设实例集群拓扑如下：
 
-### 安装 Docker
+| Name  | Host IP     | Services   |
+| ----- | ----------- | ---------- |
+| node1 | 172.16.10.1 | PD1, TiDB1 |
+| node2 | 172.16.10.2 | PD2, TiDB2 |
+| node3 | 172.16.10.3 | PD3        |
+| node4 | 172.16.10.4 | TiKV1      |
+| node5 | 172.16.10.5 | TiKV2      |
+| node6 | 172.16.10.6 | TiKV3      |
 
-Docker 可以方便地在 Linux / Mac OS / Windows 平台安装，安装方法请参考 [Docker 官方文档](https://www.docker.com/products/docker)。
+## 下载 cfssl
 
-### 拉取 TiDB 的 Docker 镜像
-
-部署 TiDB 集群主要包括 3 个服务组件:
-
-- TiDB
-- TiKV
-- PD
-
-对应的最新 Docker 镜像可以通过 [Docker 官方镜像仓库](https://hub.docker.com) 获取：
+假设使用 x86_64 Linux 主机：
 
 ```bash
-docker pull pingcap/tidb:latest
-docker pull pingcap/tikv:latest
-docker pull pingcap/pd:latest
+mkdir ~/bin
+curl -s -L -o ~/bin/cfssl https://pkg.cfssl.org/R1.2/cfssl_linux-amd64
+curl -s -L -o ~/bin/cfssljson https://pkg.cfssl.org/R1.2/cfssljson_linux-amd64
+chmod +x ~/bin/{cfssl,cfssljson}
+export PATH=$PATH:~/bin
 ```
 
-## 部署一个多节点集群
+## 初始化证书颁发机构
 
-假设我们打算在 6 台主机上部署一个 TiDB 集群:
-
-| 主机名   | IP            | 部署服务       | 数据盘挂载 |
-| ----- | ------------- | ---------- | ----- |
-| host1 | 192.168.1.101 | PD1 & TiDB | /data |
-| host2 | 192.168.1.102 | PD2        | /data |
-| host3 | 192.168.1.103 | PD3        | /data |
-| host4 | 192.168.1.104 | TiKV1      | /data |
-| host5 | 192.168.1.105 | TiKV2      | /data |
-| host6 | 192.168.1.106 | TiKV3      | /data |
-
-### 启动 PD
-
-登录 **host1** 执行：
+生成 cfssl 的默认配置，以便于之后修改：
 
 ```bash
-docker run -d --name pd1 \
-  -p 2379:2379 \
-  -p 2380:2380 \
-  -v /etc/localtime:/etc/localtime:ro \
-  -v /data:/data \
-  pingcap/pd:latest \
-  --name="pd1" \
-  --data-dir="/data/pd1" \
-  --client-urls="http://0.0.0.0:2379" \
-  --advertise-client-urls="http://192.168.1.101:2379" \
-  --peer-urls="http://0.0.0.0:2380" \
-  --advertise-peer-urls="http://192.168.1.101:2380" \
-  --initial-cluster="pd1=http://192.168.1.101:2380,pd2=http://192.168.1.102:2380,pd3=http://192.168.1.103:2380"
+mkdir ~/cfssl
+cd ~/cfssl
+cfssl print-defaults config > ca-config.json
+cfssl print-defaults csr > ca-csr.json
 ```
 
-登录 **host2** 执行：
+## 生成证书
 
-```bash
-docker run -d --name pd2 \
-  -p 2379:2379 \
-  -p 2380:2380 \
-  -v /etc/localtime:/etc/localtime:ro \
-  -v /data:/data \
-  pingcap/pd:latest \
-  --name="pd2" \
-  --data-dir="/data/pd2" \
-  --client-urls="http://0.0.0.0:2379" \
-  --advertise-client-urls="http://192.168.1.102:2379" \
-  --peer-urls="http://0.0.0.0:2380" \
-  --advertise-peer-urls="http://192.168.1.102:2380" \
-  --initial-cluster="pd1=http://192.168.1.101:2380,pd2=http://192.168.1.102:2380,pd3=http://192.168.1.103:2380"
+### 证书介绍
+
+- tidb-server certificate 由 TiDB 使用，为其他组件和客户端验证 TiDB 身份。
+- tikv-server certificate 由 TiKV 使用，为其他组件和客户端验证 TiKV 身份。
+- pd-server certificate 由 PD 使用，为其他组件和客户端验证 PD 身份。
+- client certificate 用于通过 PD、TiKV、TiDB 验证客户端。例如 `pd-ctl`，`tikv-ctl`，`pd-recover`。
+
+### 配置 CA 选项
+
+根据实际需求修改 `ca-config.json`：
+
+```json
+{
+    "signing": {
+        "default": {
+            "expiry": "43800h"
+        },
+        "profiles": {
+            "server": {
+                "expiry": "43800h",
+                "usages": [
+                    "signing",
+                    "key encipherment",
+                    "server auth",
+                    "client auth"
+                ]
+            },
+            "client": {
+                "expiry": "43800h",
+                "usages": [
+                    "signing",
+                    "key encipherment",
+                    "client auth"
+                ]
+            }
+        }
+    }
+}
 ```
 
-登录 **host3** 执行：
+根据实际需求修改 `ca-csr.json` ：
 
-```bash
-docker run -d --name pd3 \
-  -p 2379:2379 \
-  -p 2380:2380 \
-  -v /etc/localtime:/etc/localtime:ro \
-  -v /data:/data \
-  pingcap/pd:latest \
-  --name="pd3" \
-  --data-dir="/data/pd3" \
-  --client-urls="http://0.0.0.0:2379" \
-  --advertise-client-urls="http://192.168.1.103:2379" \
-  --peer-urls="http://0.0.0.0:2380" \
-  --advertise-peer-urls="http://192.168.1.103:2380" \
-  --initial-cluster="pd1=http://192.168.1.101:2380,pd2=http://192.168.1.102:2380,pd3=http://192.168.1.103:2380"
+```json
+{
+    "CN": "My own CA",
+    "key": {
+        "algo": "rsa",
+        "size": 2048
+    },
+    "names": [
+        {
+            "C": "CN",
+            "L": "Beijing",
+            "O": "PingCAP",
+            "ST": "Beijing"
+        }
+    ]
+}
 ```
 
-### 启动 TiKV
-
-登录 **host4** 执行：
+### 生成 CA 证书
 
 ```bash
-docker run -d --name tikv1 \
-  -p 20160:20160 \
-  --ulimit nofile=1000000:1000000 \
-  -v /etc/localtime:/etc/localtime:ro \
-  -v /data:/data \
-  pingcap/tikv:latest \
-  --addr="0.0.0.0:20160" \
-  --advertise-addr="192.168.1.104:20160" \
-  --data-dir="/data/tikv1" \
-  --pd="192.168.1.101:2379,192.168.1.102:2379,192.168.1.103:2379"
+cfssl gencert -initca ca-csr.json | cfssljson -bare ca -
 ```
 
-登录 **host5** 执行：
+将会生成以下几个文件：
 
 ```bash
-docker run -d --name tikv2 \
-  -p 20160:20160 \
-  --ulimit nofile=1000000:1000000 \
-  -v /etc/localtime:/etc/localtime:ro \
-  -v /data:/data \
-  pingcap/tikv:latest \
-  --addr="0.0.0.0:20160" \
-  --advertise-addr="192.168.1.105:20160" \
-  --data-dir="/data/tikv2" \
-  --pd="192.168.1.101:2379,192.168.1.102:2379,192.168.1.103:2379"
+ca-key.pem
+ca.csr
+ca.pem
 ```
 
-登录 **host6** 执行：
+### 生成服务器端证书
+
+`hostname` 中为各组件的 IP 地址，以及 `127.0.0.1`
 
 ```bash
-docker run -d --name tikv3 \
-  -p 20160:20160 \
-  --ulimit nofile=1000000:1000000 \
-  -v /etc/localtime:/etc/localtime:ro \
-  -v /data:/data \
-  pingcap/tikv:latest \
-  --addr="0.0.0.0:20160" \
-  --advertise-addr="192.168.1.106:20160" \
-  --data-dir="/data/tikv3" \
-  --pd="192.168.1.101:2379,192.168.1.102:2379,192.168.1.103:2379"
+echo '{"CN":"tidb-server","hosts":[""],"key":{"algo":"rsa","size":2048}}' | cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=server -hostname="172.16.10.1,172.16.10.2,127.0.0.1" - | cfssljson -bare tidb-server
+
+echo '{"CN":"tikv-server","hosts":[""],"key":{"algo":"rsa","size":2048}}' | cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=server -hostname="172.16.10.4,172.16.10.5,172.16.10.6,127.0.0.1" - | cfssljson -bare tikv-server
+
+echo '{"CN":"pd-server","hosts":[""],"key":{"algo":"rsa","size":2048}}' | cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=server -hostname="172.16.10.1,172.16.10.2,172.16.10.3,127.0.0.1" - | cfssljson -bare pd-server
 ```
 
-### 启动 TiDB
+将会生成以下几个文件：
 
-登录 **host1** 执行：
-
-```bash
-docker run -d --name tidb \
-  -p 4000:4000 \
-  -p 10080:10080 \
-  -v /etc/localtime:/etc/localtime:ro \
-  pingcap/tidb:latest \
-  --store=tikv \
-  --path="192.168.1.101:2379,192.168.1.102:2379,192.168.1.103:2379"
+```Bash
+tidb-server-key.pem     tikv-server-key.pem      pd-server-key.pem
+tidb-server.csr         tikv-server.csr          pd-server.csr
+tidb-server.pem         tikv-server.pem          pd-server.pem
 ```
 
-### 使用 MySQL 标准客户端连接 TiDB 测试
-
-登录 **host1** 并确保已安装 [MySQL 命令行客户端](http://dev.mysql.com/downloads/mysql/)，执行：
+#### 生成客户端证书
 
 ```bash
-$ mysql -h 127.0.0.1 -P 4000 -u root -D test
-mysql> show databases;
-+--------------------+
-| Database           |
-+--------------------+
-| INFORMATION_SCHEMA |
-| PERFORMANCE_SCHEMA |
-| mysql              |
-| test               |
-+--------------------+
-4 rows in set (0.00 sec)
+echo '{"CN":"client","hosts":[""],"key":{"algo":"rsa","size":2048}}' | cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=client -hostname="" - | cfssljson -bare client
 ```
 
-### 如何自定义配置文件
-
-TiKV 和 PD 可以通过指定配置文件的方式来加载更加丰富的启动参数，用于性能调优。
-
-假定配置文件在宿主机上的存放路径 `/path/to/config/pd.toml` 和 `/path/to/config/tikv.toml`。启动 Docker 时需要调整相应的启动参数，以 tikv1 和 pd1 为例：
+将会生成以下几个文件：
 
 ```bash
-docker run -d --name tikv1 \
-  -p 20160:20160 \
-  -v /etc/localtime:/etc/localtime:ro \
-  -v /data:/data \
-  -v /path/to/config/tikv.toml:/tikv.toml:ro \
-  pingcap/tikv:latest \
-  --addr="0.0.0.0:20160" \
-  --advertise-addr="192.168.1.104:20160" \
-  --data-dir="/data/tikv1" \
-  --pd="192.168.1.101:2379,192.168.1.102:2379,192.168.1.103:2379" \
-  --config="/tikv.toml"
-```
-
-```bash
-docker run -d --name pd1 \
-  -p 2379:2379 \
-  -p 2380:2380 \
-  -v /etc/localtime:/etc/localtime:ro \
-  -v /data:/data \
-  -v /path/to/config/pd.toml:/pd.toml:ro \
-  pingcap/pd:latest \
-  --name="pd1" \
-  --data-dir="/data/pd1" \
-  --client-urls="http://0.0.0.0:2379" \
-  --advertise-client-urls="http://192.168.1.101:2379" \
-  --peer-urls="http://0.0.0.0:2380" \
-  --advertise-peer-urls="http://192.168.1.101:2380" \
-  --initial-cluster="pd1=http://192.168.1.101:2380,pd2=http://192.168.1.102:2380,pd3=http://192.168.1.103:2380" \
-  --config="/pd.toml"
+client-key.pem
+client.csr
+client.pem
 ```
