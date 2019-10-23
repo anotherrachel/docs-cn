@@ -1,82 +1,83 @@
 ---
-title: 开启 TLS 验证
+title: TiDB 软件和硬件环境要求
 category: deployment
 ---
 
-# 开启 TLS 验证
+# TiDB 软件和硬件环境要求
 
 ## 概述
 
-本文档介绍 TiDB 集群如何开启 TLS 验证，其支持：
+TiDB 作为一款开源分布式 NewSQL 数据库，可以很好的部署和运行在 Intel 架构服务器环境及主流虚拟化环境，并支持绝大多数的主流硬件网络。作为一款高性能数据库系统，TiDB 支持主流的 Linux 操作系统环境。
 
-- TiDB 组件之间的双向验证，包括 TiDB、TiKV、PD 相互之间，TiKV Control 与 TiKV、PD Control 与 PD 的双向认证，以及 TiKV peer 之间、PD peer 之间。一旦开启，所有组件之间均使用验证，不支持只开启某一部分的验证。
-- MySQL Client 与 TiDB 之间的客户端对服务器身份的单向验证以及双向验证。
+## Linux 操作系统版本要求
 
-MySQL Client 与 TiDB 之间使用一套证书，TiDB 集群组件之间使用另外一套证书。
+| Linux 操作系统平台             |    版本     |
+|:------------------------ |:---------:|
+| Red Hat Enterprise Linux |  7.3 及以上  |
+| CentOS                   |  7.3 及以上  |
+| Oracle Enterprise Linux  |  7.3 及以上  |
+| Ubuntu LTS               | 16.04 及以上 |
 
-## TiDB 集群组件间开启 TLS（双向认证）
+> **注意：**
+> 
+> - TiDB 只支持 Red Hat 兼容内核 (RHCK) 的 Oracle Enterprise Linux，不支持 Oracle Enterprise Linux 提供的 Unbreakable Enterprise Kernel。
+> - TiDB 在 CentOS 7.3 的环境下进行过大量的测试，同时社区也有很多该操作系统部署的最佳实践，因此，建议使用 CentOS 7.3 以上的 Linux 操作系统来部署 TiDB。
+> - 以上 Linux 操作系统可运行在物理服务器以及 VMware、KVM、XEN 主流虚拟化环境上。
 
-### 准备证书
+## 服务器要求
 
-推荐为 TiDB、TiKV、PD 分别准备一个 server 证书，并保证可以相互验证，而它们的各种客户端共用 client 证书。
+TiDB 支持部署和运行在 Intel x86-64 架构的 64 位通用硬件服务器平台。对于开发，测试，及生产环境的服务器硬件配置有以下要求和建议：
 
-有多种工具可以生成自签名证书，如 `openssl`，`easy-rsa`，`cfssl`。
+### 开发及测试环境
 
-这里提供一个使用 `cfssl` 生成证书的示例：[生成自签名证书](../op-guide/generate-self-signed-certificates.md)。
+| **组件** | **CPU** | **内存** | **本地存储**     | **网络** | **实例数量(最低要求)** |
+| ------ | ------- | ------ | ------------ | ------ | -------------- |
+| TiDB   | 8核+     | 16 GB+ | SAS, 200 GB+ | 千兆网卡   | 1（可与 PD 同机器）   |
+| PD     | 4核+     | 8 GB+  | SAS, 200 GB+ | 千兆网卡   | 1（可与 TiDB 同机器） |
+| TiKV   | 8核+     | 32 GB+ | SSD, 200 GB+ | 千兆网卡   | 3              |
 
-### 配置证书
+> **注意：**
+> 
+> - 验证测试环境中的 TiDB 和 PD 可以部署在同一台服务器上。
+> - 如进行性能相关的测试，避免采用低性能存储和网络硬件配置，防止对测试结果的正确性产生干扰。
+> - 如果仅验证功能，建议使用 [Docker Compose 部署方案](https://github.com/pingcap/docs-cn/blob/master/op-guide/docker-compose.md)单机进行测试。
 
-##### TiDB
+### 生产环境
 
-在 config 文件或命令行参数中设置：
+| **组件** | **CPU** | **内存** | **硬盘类型** | **网络**     | **实例数量(最低要求)** |
+| ------ | ------- | ------ | -------- | ---------- | -------------- |
+| TiDB   | 16核+    | 32 GB+ | SAS      | 万兆网卡（2块最佳） | 2              |
+| PD     | 4核+     | 8 GB+  | SSD      | 万兆网卡（2块最佳） | 3              |
+| TiKV   | 16核+    | 32 GB+ | SSD      | 万兆网卡（2块最佳） | 3              |
+| 监控     | 8核+     | 16 GB+ | SAS      | 千兆网卡       | 1              |
 
-```toml
-[security]
-# Path of file that contains list of trusted SSL CAs for connection with cluster components.
-cluster-ssl-ca = "/path/to/ca.pem"
-# Path of file that contains X509 certificate in PEM format for connection with cluster components.
-cluster-ssl-cert = "/path/to/tidb-server.pem"
-# Path of file that contains X509 key in PEM format for connection with cluster components.
-cluster-ssl-key = "/path/to/tidb-server-key.pem"
-```
+> **注意：**
+> 
+> - 生产环境中的 TiDB 和 PD 可以部署和运行在同服务器上，如对性能和可靠性有更高的要求，应尽可能分开部署。
+> - 生产环境强烈推荐使用更高的配置。
+> - TiKV 硬盘大小配置建议 PCI-E SSD 不超过 2 TB，普通 SSD 不超过 1.5 TB。
 
-##### TiKV
+## 网络要求
 
-在 config 文件或命令行参数中设置，并设置相应 url 为 https：
+TiDB 作为开源分布式 NewSQL 数据库，其正常运行需要网络环境提供如下的网络端口配置要求，管理员可根据实际环境中 TiDB 组件部署的方案，在网络侧和主机侧开放相关端口：
 
-```toml
-[security]
-# set the path for certificates. Empty string means disabling secure connectoins.
-ca-path = "/path/to/ca.pem"
-cert-path = "/path/to/tikv-server.pem"
-key-path = "/path/to/tikv-server-key.pem"
-```
+| 组件                | 默认端口  | 说明                                              |
+|:----------------- |:----- |:----------------------------------------------- |
+| TiDB              | 4000  | 应用及 DBA 工具访问通信端口                                |
+| TiDB              | 10080 | TiDB 状态信息上报通信端口                                 |
+| TiKV              | 20160 | TiKV 通信端口                                       |
+| PD                | 2379  | 提供 TiDB 和 PD 通信端口                               |
+| PD                | 2380  | PD 集群节点间通信端口                                    |
+| Pump              | 8250  | Pump 通信端口                                       |
+| Drainer           | 8249  | Drainer 通信端口                                    |
+| Prometheus        | 9090  | Prometheus 服务通信端口                               |
+| Pushgateway       | 9091  | TiDB，TiKV，PD 监控聚合和上报端口                          |
+| Node_exporter     | 9100  | TiDB 集群每个节点的系统信息上报通信端口                          |
+| Blackbox_exporter | 9115  | Blackbox_exporter 通信端口，用于 TiDB 集群端口监控           |
+| Grafana           | 3000  | Web 监控服务对外服务和客户端(浏览器)访问端口                       |
+| Grafana           | 8686  | grafana_collector 通信端口，用于将 Dashboard 导出为 PDF 格式 |
+| Kafka_exporter    | 9308  | Kafka_exporter 通信端口，用于监控 binlog kafka 集群        |
 
-##### PD
+## 客户端 Web 浏览器要求
 
-在 config 文件或命令行参数中设置，并设置相应 url 为 https：
-
-```toml
-[security]
-# Path of file that contains list of trusted SSL CAs. if set, following four settings shouldn't be empty
-cacert-path = "/path/to/ca.pem"
-# Path of file that contains X509 certificate in PEM format.
-cert-path = "/path/to/pd-server.pem"
-# Path of file that contains X509 key in PEM format.
-key-path = "/path/to/pd-server-key.pem"
-```
-
-此时 TiDB 集群各个组件间便开启了双向验证。
-
-在使用客户端连接时，需要指定 client 证书，示例：
-
-```bash
-./pd-ctl -u https://127.0.0.1:2379 --cacert /path/to/ca.pem --cert /path/to/client.pem --key /path/to/client-key.pem
-
-./tikv-ctl --host="127.0.0.1:20160" --ca-path="/path/to/ca.pem" --cert-path="/path/to/client.pem" --key-path="/path/to/clinet-key.pem"
-```
-
-## MySQL 与 TiDB 间开启 TLS
-
-请参考 [使用加密连接](../sql/encrypted-connections.md)。
-
+TiDB 提供了基于 Prometheus 和 Grafana 技术平台作为 TiDB 分布式数据库集群的可视化监控数据展现方案。建议用户采用高版本的微软 IE，Google Chrome，Mozilla Firefox 访问 Grafana 监控入口。
