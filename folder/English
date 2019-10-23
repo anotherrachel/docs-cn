@@ -1,144 +1,271 @@
 ---
-title: 使用加密连接
+title: 数据操作语言
 category: user guide
 ---
 
-# 使用加密连接
+# TiDB 数据操作语言
 
-TiDB 服务端默认采用非加密连接，因而具备监视信道流量能力的第三方可以知悉 TiDB 服务端与客户端之间发送和接受的数据，包括但不限于查询语句内容、查询结果等。若信道是不可信的，例如客户端是通过公网连接到 TiDB 服务端的，则非加密连接容易造成信息泄露，建议使用加密连接确保安全性。
+数据操作语言（Data Manipulation Language， DML）用于帮助用户实现对数据库的基本操作，比如查询、写入、删除和修改数据库中的数据。
 
-TiDB 服务端支持启用基于 TLS（传输层安全）协议的加密连接，协议与 MySQL 加密连接一致，现有 MySQL 客户端如 MySQL 运维工具和 MySQL 驱动等能直接支持。TLS 的前身是 SSL，因而 TLS 有时也被称为 SSL，但由于 SSL 协议有已知安全漏洞，TiDB 实际上并未支持。TiDB 支持的 TLS/SSL 协议版本为 TLS 1.0、TLS 1.1、TLS 1.2。
+TiDB 支持的数据操作语言包括 Select ，Insert, Delete, Update，和 Replace。
 
-使用加密连接后，连接将具有以下安全性质：
+## Select 语句
 
-- 保密性：流量明文无法被窃听；
-- 完整性：流量明文无法被篡改；
-- 身份验证（可选）：客户端和服务端能验证双方身份，避免中间人攻击。
+Select 语句用于从数据库中查询数据。
 
-TiDB 的加密连接支持默认是关闭的，必须在 TiDB 服务端通过配置开启加密连接的支持后，才能在客户端中使用加密连接。另外，与 MySQL 一致，TiDB 加密连接是以单个连接为单位的，并且是可选的，因而对于开启了加密连接支持的 TiDB 服务端，客户端既可以选择通过加密连接安全地连接到该 TiDB 服务端，也可以选择使用普通的非加密连接。大部分 MySQL 客户端默认不采用加密连接，因此一般还要显式地要求客户端使用加密连接。
+### 语法定义
 
-简单来说，要使用加密连接必须同时满足以下两个条件：
-
-1. TiDB 服务端配置开启加密连接的支持
-2. 客户端指定使用加密连接
-
-## 配置 TiDB 启用加密连接支持
-
-在启动 TiDB 时，至少需要在配置文件中同时指定 `ssl-cert` 和 `ssl-key` 参数，才能使 TiDB 服务端接受加密连接。还可以指定 `ssl-ca` 参数进行客户端身份验证（请参见[配置启用身份验证](#配置启用身份验证)章节）。
-
-- [`ssl-cert`](server-command-option.md#ssl-cert)：指定 SSL 证书文件路径
-- [`ssl-key`](server-command-option.md#ssl-key)：指定证书文件对应的私钥
-- [`ssl-ca`](server-command-option.md#ssl-ca)：可选，指定受信任的 CA 证书文件路径
-
-参数指定的文件都为 PEM 格式。另外目前 TiDB 尚不支持加载有密码保护的私钥，因此必须提供一个没有密码的私钥文件。若提供的证书或私钥无效，则 TiDB 服务端将照常启动，但并不支持客户端加密连接到 TiDB 服务端。
-
-上述证书及密钥可以使用 OpenSSL 签发和生成，也可以使用 MySQL 自带的工具 `mysql_ssl_rsa_setup` 快捷生成：
-
-```bash
-mysql_ssl_rsa_setup --datadir=./certs
+```sql
+SELECT
+    [ALL | DISTINCT | DISTINCTROW ]
+      [HIGH_PRIORITY]
+      [SQL_CACHE | SQL_NO_CACHE] [SQL_CALC_FOUND_ROWS]
+    select_expr [, select_expr ...]
+    [FROM table_references
+    [WHERE where_condition]
+    [GROUP BY {col_name | expr | position}
+      [ASC | DESC], ...]
+    [HAVING where_condition]
+    [ORDER BY {col_name | expr | position}
+      [ASC | DESC], ...]
+    [LIMIT {[offset,] row_count | row_count OFFSET offset}]
+    [FOR UPDATE | LOCK IN SHARE MODE]]
 ```
 
-以上命令将在 `certs` 目录下生成以下文件：
+### 语法元素说明
 
-```
-certs
-├── ca-key.pem
-├── ca.pem
-├── client-cert.pem
-├── client-key.pem
-├── private_key.pem
-├── public_key.pem
-├── server-cert.pem
-└── server-key.pem
-```
+| 语法元素                                             | 说明                                                                                                                                                                                                                            |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ALL`、`DISTINCT`、`DISTINCTROW`                   | 查询结果集中可能会包含重复值。指定 DISTINCT/DISTINCTROW 则在查询结果中过滤掉重复的行；指定 ALL 则列出所有的行。默认为 ALL。                                                                                                                                                 |
+| `HIGH_PRIORITY`                                  | 该语句为高优先级语句，TiDB 在执行阶段会优先处理这条语句                                                                                                                                                                                                |
+| `SQL_CACHE`、`SQL_NO_CACHE`、`SQL_CALC_FOUND_ROWS` | TiDB 出于兼容性解析这三个语法，但是不做任何处理                                                                                                                                                                                                    |
+| `select_expr`                                    | 投影操作列表，一般包括列名、表达式，或者是用 '\*' 表示全部列                                                                                                                                                                                           |
+| `FROM table_references`                          | 表示数据来源，数据来源可以是一个表（`select * from t;`）或者是多个表 (`select * from t1 join t2;`) 或者是0个表 (`select 1+1 from dual;`, 等价于 `select 1+1;`)                                                                                                 |
+| `WHERE where_condition`                          | Where 子句用于设置过滤条件，查询结果中只会包含满足条件的数据                                                                                                                                                                                             |
+| `GROUP BY`                                       | GroupBy 子句用于对查询结果集进行分组                                                                                                                                                                                                        |
+| `HAVING where_condition`                         | Having 子句与 Where 子句作用类似，Having 子句可以让过滤 GroupBy 后的各种数据，Where 子句用于在聚合前过滤记录。                                                                                                                                                     |
+| `ORDER BY`                                       | OrderBy 子句用于指定结果排序顺序，可以按照列、表达式或者是 `select_expr` 列表中某个位置的字段进行排序。                                                                                                                                                               |
+| `LIMIT`                                          | Limit 子句用于限制结果条数。Limit 接受一个或两个数字参数，如果只有一个参数，那么表示返回数据的最大行数；如果是两个参数，那么第一个参数表示返回数据的第一行的偏移量（第一行数据的偏移量是 0），第二个参数指定返回数据的最大条目数。                                                                                                      |
+| `FOR UPDATE`                                     | 对查询结果集所有数据上读锁（对于在查询条件内，但是不在结果集的数据，将不会加锁，如事务启动后由其他事务写入的数据），以监测其他事务对这些的并发修改。TiDB 使用[乐观事务模型](mysql-compatibility.md#事务)在语句执行期间不会检测锁冲突，在事务的提交阶段才会检测事务冲突，如果执行 Select For Update 期间，有其他事务修改相关的数据，那么包含 Select For Update 语句的事务会提交失败。 |
+| `LOCK IN SHARE MODE`                             | TiDB 出于兼容性解析这个语法，但是不做任何处理                                                                                                                                                                                                     |
 
-对应的 TiDB 配置文件参数为：
+## Insert 语句
 
-```toml
-[security]
-ssl-cert = "certs/server-cert.pem"
-ssl-key = "certs/server-key.pem"
-```
+Insert 语句用于向数据库中插入数据，TiDB 兼容 MySQL Insert 语句的所有语法。
 
-若证书参数无误，则 TiDB 在启动时将会输出 `Secure connection is enabled`，否则 TiDB 会输出 `Secure connection is NOT ENABLED`。
+### 语法定义
 
-## 配置 MySQL 客户端使用加密连接
+```sql
+InsertStatement:
+INSERT [LOW_PRIORITY | DELAYED | HIGH_PRIORITY] [IGNORE]
+    [INTO] tbl_name
+    insert_values
+    [ON DUPLICATE KEY UPDATE assignment_list]
 
-MySQL 5.7 及以上版本自带的客户端默认尝试使用安全连接，若服务端不支持安全连接则自动退回到使用非安全连接；MySQL 5.7 以下版本自带的客户端默认采用非安全连接。
+insert_values:
+    [(col_name [, col_name] ...)]
+    {VALUES | VALUE} (expr_list) [, (expr_list)] ...
+|   SET assignment_list
+|   [(col_name [, col_name] ...)]
+    SELECT ...
 
-可以通过命令行参数修改客户端的连接行为，包括：
+expr_list:
+    expr [, expr] ...
 
-- 强制使用安全连接，若服务端不支持安全连接则连接失败 (`--ssl-mode=REQUIRED`)
-- 尝试使用安全连接，若服务端不支持安全连接则退回使用不安全连接
-- 使用不安全连接 (`--ssl-mode=DISABLED`)
+assignment:
+    col_name = expr
 
-详细信息请参阅 MySQL 文档中关于[客户端配置安全连接](https://dev.mysql.com/doc/refman/5.7/en/using-encrypted-connections.html#using-encrypted-connections-client-side-configuration)的部分。
-
-## 配置启用身份验证
-
-若在 TiDB 服务端或 MySQL 客户端中未指定 `ssl-ca` 参数，则默认不会进行客户端或服务端身份验证，无法抵御中间人攻击，例如客户端可能会“安全地”连接到了一个伪装的服务端。可以在服务端和客户端中配置 `ssl-ca` 参数进行身份验证。一般情况下只需验证服务端身份，但也可以验证客户端身份进一步增强安全性。
-
-- 若要使 MySQL 客户端验证 TiDB 服务端身份，TiDB 服务端需至少配置 `ssl-cert` 和 `ssl-key` 参数，客户端需至少指定 `--ssl-ca` 参数，且 `--ssl-mode` 至少为 `VERIFY_IDENTITY`。必须确保 TiDB 服务端配置的证书（`ssl-cert`）是由客户端 `--ssl-ca` 参数所指定的 CA 所签发的，否则身份验证失败。
-- 若要使 TiDB 服务端验证 MySQL 客户端身份，TiDB 服务端需配置 `ssl-cert`、`ssl-key`、`ssl-ca` 参数，客户端需至少指定 `--ssl-cert`、`--ssl-key` 参数。必须确保服务端配置的证书和客户端配置的证书都是由服务端配置指定的 `ssl-ca` 签发的。
-- 若要进行双向身份验证，请同时满足上述要求。
-
-注：目前 TiDB 尚不支持强制验证客户端身份，即服务端对客户端的身份验证是可选的。若客户端在 TLS 握手时未出示自己的身份证书，也能正常建立 TLS 连接。
-
-## 检查当前连接是否是加密连接
-
-可以通过 `SHOW STATUS LIKE "%Ssl%";` 了解当前连接的详细情况，包括是否使用了安全连接、安全连接采用的加密协议、TLS 版本号等。
-
-以下是一个安全连接中执行该语句的结果。由于客户端支持的 TLS 版本号和加密协议会有所不同，执行结果相应地也会有所变化。
-
-```
-mysql> SHOW STATUS LIKE "%Ssl%";
-......
-| Ssl_verify_mode | 5                            |
-| Ssl_version     | TLSv1.2                      |
-| Ssl_cipher      | ECDHE-RSA-AES128-GCM-SHA256  |
-......
+assignment_list:
+    assignment [, assignment] ...
 ```
 
-除此以外，对于 MySQL 自带客户端，还可以使用 `STATUS` 或 `\s` 语句查看连接情况：
+### 语法元素说明
 
+| 语法元素                                      | 说明                                                    |
+| ----------------------------------------- | ----------------------------------------------------- |
+| `LOW_PRIORITY`                            | 该语句为低优先级语句，TiDB 在执行阶段会降低这条语句的优先级                      |
+| `DELAYED`                                 | TiDB 出于兼容性解析这个语法，但是不做任何处理                             |
+| `HIGH_PRIORITY`                           | 该语句为高优先级语句，TiDB 在执行阶段会优先处理这条语句                        |
+| `IGNORE`                                  | 如果发生 Uniq Key 冲突，则忽略插入的数据，不报错                         |
+| `tbl_name`                                | 要插入的表名                                                |
+| `insert_values`                           | 待插入的数据，下面一节会详细描述                                      |
+| `ON DUPLICATE KEY UPDATE assignment_list` | 如果发生 Uniq Key 冲突，则舍弃要插入的数据，改用 assignment_list 更新已存在的行 |
+
+### insert_values
+
+待插入的数据集，可以用以下三种方式指定：
+
+* Value List
+
+将被插入的数据值写入列表中，例如：
+
+```sql
+CREATE TABLE tbl_name (
+    a int,
+    b int,
+    c int
+);
+INSERT INTO tbl_name VALUES(1,2,3),(4,5,6),(7,8,9);
 ```
-mysql> \s
-...
-SSL: Cipher in use is ECDHE-RSA-AES128-GCM-SHA256
-...
+
+上面的例子中，`(1,2,3),(4,5,6),(7,8,9)` 即为 Value List，其中每个括号内部的数据表示一行数据，这个例子中插入了三行数据。Insert 语句也可以只给部分列插入数据，这种情况下，需要在 Value List 之前加上 ColumnName List，如：
+
+```sql
+INSERT INTO tbl_name (a,c) VALUES(1,2),(4,5),(7,8);
 ```
 
-## 支持的 TLS 版本及密钥交换协议和加密算法
+上面的例子中，每行数据只指定了 a 和 c 这两列的值，b 列的值会设为 Null。
 
-TiDB 支持的 TLS 版本及密钥交换协议和加密算法由 Golang 官方库决定。
+* Assignment List
 
-### 支持的 TLS 版本
+通过赋值列表指定插入的数据，例如：
 
-- TLS 1.0
-- TLS 1.1
-- TLS 1.2
+```sql
+INSERT INTO tbl_name SET a=1, b=2, c=3;
+```
 
-### 支持的密钥交换协议及加密算法
+这种方式每次只能插入一行数据，每列的值通过赋值列表指定。
 
-- TLS\_RSA\_WITH\_RC4\_128\_SHA
-- TLS\_RSA\_WITH\_3DES\_EDE\_CBC\_SHA
-- TLS\_RSA\_WITH\_AES\_128\_CBC\_SHA
-- TLS\_RSA\_WITH\_AES\_256\_CBC\_SHA
-- TLS\_RSA\_WITH\_AES\_128\_CBC\_SHA256
-- TLS\_RSA\_WITH\_AES\_128\_GCM\_SHA256
-- TLS\_RSA\_WITH\_AES\_256\_GCM\_SHA384
-- TLS\_ECDHE\_ECDSA\_WITH\_RC4\_128\_SHA
-- TLS\_ECDHE\_ECDSA\_WITH\_AES\_128\_CBC\_SHA
-- TLS\_ECDHE\_ECDSA\_WITH\_AES\_256\_CBC\_SHA
-- TLS\_ECDHE\_RSA\_WITH\_RC4\_128\_SHA
-- TLS\_ECDHE\_RSA\_WITH\_3DES\_EDE\_CBC\_SHA
-- TLS\_ECDHE\_RSA\_WITH\_AES\_128\_CBC\_SHA
-- TLS\_ECDHE\_RSA\_WITH\_AES\_256\_CBC\_SHA
-- TLS\_ECDHE\_ECDSA\_WITH\_AES\_128\_CBC\_SHA256
-- TLS\_ECDHE\_RSA\_WITH\_AES\_128\_CBC\_SHA256
-- TLS\_ECDHE\_RSA\_WITH\_AES\_128\_GCM\_SHA256
-- TLS\_ECDHE\_ECDSA\_WITH\_AES\_128\_GCM\_SHA256
-- TLS\_ECDHE\_RSA\_WITH\_AES\_256\_GCM\_SHA384
-- TLS\_ECDHE\_ECDSA\_WITH\_AES\_256\_GCM\_SHA384
-- TLS\_ECDHE\_RSA\_WITH\_CHACHA20\_POLY1305
-- TLS\_ECDHE\_ECDSA\_WITH\_CHACHA20\_POLY1305
+* Select Statement
+
+待插入的数据集是通过一个 Select 语句获取，要插入的列是通过 Select 语句的 Schema 获得。例如：
+
+```sql
+CREATE TABLE tbl_name1 (
+    a int,
+    b int,
+    c int
+);
+INSERT INTO tbl_name SELECT * from tbl_name1;
+```
+
+上面的例子中，从 `tbl_name1` 中查询出数据，插入 `tbl_name` 中。
+
+## Delete 语句
+
+Delete 语句用于删除数据库中的数据，TiDB 兼容 MySQL Delete 语句除 PARTITION 之外的所有语法。Delete 语句主要分为单表删除和多表删除两种，下面分开描述。
+
+### 单表删除
+
+这种语法用于删除的数据只会涉及一个表的情况。
+
+### 语法定义
+
+```sql
+DELETE [LOW_PRIORITY] [QUICK] [IGNORE] FROM tbl_name
+    [WHERE where_condition]
+    [ORDER BY ...]
+    [LIMIT row_count]
+```
+
+### 多表删除
+
+这种语法用于删除的数据会涉及多张表的情况。一共有两种写法：
+
+```sql
+DELETE [LOW_PRIORITY] [QUICK] [IGNORE]
+    tbl_name[.*] [, tbl_name[.*]] ...
+    FROM table_references
+    [WHERE where_condition]
+
+DELETE [LOW_PRIORITY] [QUICK] [IGNORE]
+    FROM tbl_name[.*] [, tbl_name[.*]] ...
+    USING table_references
+    [WHERE where_condition]
+```
+
+删除多个表的数据的时候，可以用这两种语法。这两种写法都可以指定从多个表查询数据，但只删除其中一些表的数据。在第一种语法中，只会删除 `FROM` 关键字之前的 Table 列表中所列 Table 的表中的数据。对于第二种写法，只会删除 `FROM` 之后 `USING` 之前的 Table 列表中的所列 Table 中的数据。
+
+### 语法元素说明
+
+| 语法元素                    | 说明                               |
+| ----------------------- | -------------------------------- |
+| `LOW_PRIORITY`          | 该语句为低优先级语句，TiDB 在执行阶段会降低这条语句的优先级 |
+| `QUICK`                 | TiDB 出于兼容性解析这个语法，但是不做任何处理        |
+| `IGNORE`                | TiDB 出于兼容性解析这个语法，但是不做任何处理        |
+| `tbl_name`              | 要删除数据的表名                         |
+| `WHERE where_condition` | Where 表达式，只删除满足表达式的那些行           |
+| `ORDER BY`              | 对待删除数据集进行排序                      |
+| `LIMIT row_count`       | 只对待删除数据集中排序前 row_count 行的内容进行删除  |
+
+## Update 语句
+
+Update 语句用于更新表中的数据。
+
+### 语法定义
+
+Update 语句一共有两种语法，分别用于更新单表数据和多表数据。
+
+### 单表 Update
+
+```sql
+UPDATE [LOW_PRIORITY] [IGNORE] table_reference
+    SET assignment_list
+    [WHERE where_condition]
+    [ORDER BY ...]
+    [LIMIT row_count]
+
+assignment:
+    col_name = value
+
+assignment_list:
+    assignment [, assignment] ...
+```
+
+单表 Update 语句会更新 Table 中现有行的指定列。`SET assignment_list` 指定了要更新的列名，以及要赋予地新值。 Where/OrderBy/Limit 子句一起用于从 Table 中查询出待更新的数据。
+
+### 多表 Update
+
+```sql
+UPDATE [LOW_PRIORITY] [IGNORE] table_references
+    SET assignment_list
+    [WHERE where_condition]
+```
+
+多表更新语句用于将 `table_references` 中满足 Where 子句的数据地指定列赋予新的值。
+
+### 语法元素说明
+
+| 语法元素                    | 说明                               |
+| ----------------------- | -------------------------------- |
+| `LOW_PRIORITY`          | 该语句为低优先级语句，TiDB 在执行阶段会降低这条语句的优先级 |
+| `IGNORE`                | TiDB 出于兼容性解析这个语法，但是不做任何处理        |
+| `table_reference`       | 待更新的 Table 名称                    |
+| `table_references`      | 待更新的 Table 名称列表                  |
+| `SET assignment_list`   | 待更新的列名以及目标值                      |
+| `WHERE where_condition` | Where 表达式，只更新满足表达式的那些行           |
+| `ORDER BY`              | 对待更新数据集进行排序                      |
+| `LIMIT row_count`       | 只对待更新数据集中排序前 row_count 行的内容进行更新  |
+
+## Replace 语句
+
+Replace 语句是 MySQL 对标准 SQL 语法的扩展，其行为和 Insert 语句一样，但是当现有数据中有和待插入数据在 PRIMARY KEY 或者 UNIQUE KEY 冲突的情况下，会先删除旧数据，再插入新数据。
+
+### 语法定义
+
+```sql
+REPLACE [LOW_PRIORITY | DELAYED]
+    [INTO] tbl_name
+    [(col_name [, col_name] ...)]
+    {VALUES | VALUE} (value_list) [, (value_list)] ...
+
+REPLACE [LOW_PRIORITY | DELAYED]
+    [INTO] tbl_name
+    SET assignment_list
+
+REPLACE [LOW_PRIORITY | DELAYED]
+    [INTO] tbl_name
+    [(col_name [, col_name] ...)]
+    SELECT ...
+```
+
+### 语法元素说明
+
+| 语法元素                  | 说明                               |
+| --------------------- | -------------------------------- |
+| `LOW_PRIORITY`        | 该语句为低优先级语句，TiDB 在执行阶段会降低这条语句的优先级 |
+| `DELAYED`             | TiDB 出于兼容性解析这个语法，但是不做任何处理        |
+| `tbl_name`            | 待更新的 Table 名称                    |
+| `value_list`          | 待插入的数据                           |
+| `SET assignment_list` | 待更新的列名以及目标值                      |
+| `SELECT ...`          | 待插入的数据集，该数据集来自于一个 `Select` 语句    |
