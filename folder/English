@@ -1,12 +1,18 @@
-# Created by .ignore support plugin (hsz.mobi)
-### Example user template template
-### Example user template
+---
+title: 支持资源
+category: resources
+aliases:
+  - '/docs-cn/support/'
+  - '/docs-cn/support-resources/'
+---
 
-# IntelliJ project files
-.idea/
-*.iml
-out
-gen
-.DS_Store
+# 支持资源
 
-/node_modules/
+您可以通过以下任何一种方式找到我们的社区成员：
+
++ Slack Channel: [https://pingcap.com/tidbslack](https://pingcap.com/tidbslack)
++ Stack Overflow: [https://stackoverflow.com/questions/tagged/tidb](https://stackoverflow.com/questions/tagged/tidb)
++ Reddit: [https://www.reddit.com/r/TiDB](https://www.reddit.com/r/TiDB)
++ GitHub: [https://github.com/pingcap/tidb/issues](https://github.com/pingcap/tidb/issues)
+
+有关企业支持合作的信息，请[联系我们](mailto:info@pingcap.com)。
