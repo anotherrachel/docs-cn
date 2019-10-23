@@ -1,108 +1,148 @@
 ---
-title: CREATE DATABASE
-summary: TiDB 数据库中 CREATE DATABASE 的使用概况。
+title: CREATE INDEX
+summary: CREATE INDEX 在 TiDB 中的使用概况
 category: reference
 ---
 
-# CREATE DATABASE
+# CREATE INDEX
 
-`CREATE DATABASE` 语句用于在 TiDB 上创建新数据库。按照 SQL 标准，“数据库” 一词在 MySQL 术语中最接近 “schema”。
+`CREATE INDEX` 语句用于在已有表中添加新索引，功能等同于 `ALTER TABLE .. ADD INDEX`。包含该语句提供了 MySQL 兼容性。
 
 ## 语法图
 
-**CreateDatabaseStmt:**
+**CreateIndexStmt:**
 
-![CreateDatabaseStmt](/media/sqlgram/CreateDatabaseStmt.png)
+![CreateIndexStmt](/media/sqlgram/CreateIndexStmt.png)
 
-**DatabaseSym:**
+**CreateIndexStmtUnique:**
 
-![DatabaseSym](/media/sqlgram/DatabaseSym.png)
+![CreateIndexStmtUnique](/media/sqlgram/CreateIndexStmtUnique.png)
 
-**IfNotExists:**
+**Identifier:**
 
-![IfNotExists](/media/sqlgram/IfNotExists.png)
+![Identifier](/media/sqlgram/Identifier.png)
 
-**DBName:**
+**IndexTypeOpt:**
 
-![DBName](/media/sqlgram/DBName.png)
+![IndexTypeOpt](/media/sqlgram/IndexTypeOpt.png)
 
-**DatabaseOptionListOpt:**
+**TableName:**
 
-![DatabaseOptionListOpt](/media/sqlgram/DatabaseOptionListOpt.png)
+![TableName](/media/sqlgram/TableName.png)
 
-## 语法说明
+**IndexColNameList:**
 
-`CREATE DATABASE` 用于创建数据库，并可以指定数据库的默认属性（如数据库默认字符集、排序规则）。`CREATE SCHEMA` 跟 `CREATE DATABASE` 操作效果一样。
+![IndexColNameList](/media/sqlgram/IndexColNameList.png)
 
-{{< copyable "sql" >}}
+**IndexOptionList:**
 
-```sql
-CREATE {DATABASE | SCHEMA} [IF NOT EXISTS] db_name
-    [create_specification] ...
+![IndexOptionList](/media/sqlgram/IndexOptionList.png)
 
-create_specification:
-    [DEFAULT] CHARACTER SET [=] charset_name
-  | [DEFAULT] COLLATE [=] collation_name
-```
+**IndexOption:**
 
-当创建已存在的数据库且不指定使用 `IF NOT EXISTS` 时会报错。
-
-`create_specification` 选项用于指定数据库具体的 `CHARACTER SET` 和 `COLLATE`。目前 TiDB 只支持部分的字符集和排序规则，请参照[字符集支持](/dev/reference/sql/character-set.md)。
+![IndexOption](/media/sqlgram/IndexOption.png)
 
 ## 示例
 
 {{< copyable "sql" >}}
 
 ```sql
-CREATE DATABASE mynewdatabase;
+CREATE TABLE t1 (id INT NOT NULL PRIMARY KEY auto_increment, c1 INT NOT NULL);
 ```
 
 ```
-Query OK, 0 rows affected (0.09 sec)
-```
-
-{{< copyable "sql" >}}
-
-```sql
-USE mynewdatabase;
-```
-
-```
-Database changed
+Query OK, 0 rows affected (0.10 sec)
 ```
 
 {{< copyable "sql" >}}
 
 ```sql
-CREATE TABLE t1 (a int);
+INSERT INTO t1 (c1) VALUES (1),(2),(3),(4),(5);
 ```
 
 ```
-Query OK, 0 rows affected (0.11 sec)
+Query OK, 5 rows affected (0.02 sec)
+Records: 5  Duplicates: 0  Warnings: 0
 ```
 
 {{< copyable "sql" >}}
 
 ```sql
-SHOW TABLES;
+EXPLAIN SELECT * FROM t1 WHERE c1 = 3;
 ```
 
 ```
-+-------------------------+
-| Tables_in_mynewdatabase |
-+-------------------------+
-| t1                      |
-+-------------------------+
-1 row in set (0.00 sec)
++---------------------+----------+------+-------------------------------------------------------------+
+| id                  | count    | task | operator info                                               |
++---------------------+----------+------+-------------------------------------------------------------+
+| TableReader_7       | 10.00    | root | data:Selection_6                                            |
+| └─Selection_6       | 10.00    | cop  | eq(test.t1.c1, 3)                                           |
+|   └─TableScan_5     | 10000.00 | cop  | table:t1, range:[-inf,+inf], keep order:false, stats:pseudo |
++---------------------+----------+------+-------------------------------------------------------------+
+3 rows in set (0.00 sec)
 ```
+
+{{< copyable "sql" >}}
+
+```sql
+CREATE INDEX c1 ON t1 (c1);
+```
+
+```
+Query OK, 0 rows affected (0.30 sec)
+```
+
+{{< copyable "sql" >}}
+
+```sql
+EXPLAIN SELECT * FROM t1 WHERE c1 = 3;
+```
+
+```
++-------------------+-------+------+-----------------------------------------------------------------+
+| id                | count | task | operator info                                                   |
++-------------------+-------+------+-----------------------------------------------------------------+
+| IndexReader_6     | 10.00 | root | index:IndexScan_5                                               |
+| └─IndexScan_5     | 10.00 | cop  | table:t1, index:c1, range:[3,3], keep order:false, stats:pseudo |
++-------------------+-------+------+-----------------------------------------------------------------+
+2 rows in set (0.00 sec)
+```
+
+{{< copyable "sql" >}}
+
+```sql
+ALTER TABLE t1 DROP INDEX c1;
+```
+
+```
+Query OK, 0 rows affected (0.30 sec)
+```
+
+{{< copyable "sql" >}}
+
+```sql
+CREATE UNIQUE INDEX c1 ON t1 (c1);
+```
+
+```
+Query OK, 0 rows affected (0.31 sec)
+```
+
+## 相关 session 变量
+
+和 `CREATE INDEX` 语句相关的全局变量有 `tidb_ddl_reorg_worker_cnt`，`tidb_ddl_reorg_batch_size` 和 `tidb_ddl_reorg_priority`，具体可以参考 [TiDB 特定系统变量](/dev/reference/configuration/tidb-server/tidb-specific-variables.md#tidb_ddl_reorg_worker_cnt)。
 
 ## MySQL 兼容性
 
-`CREATE DATABASE` 语句与 MySQL 完全兼容。如有任何兼容性差异，请在 GitHub 上提交 [issue](/dev/report-issue.md)。
+* 不支持 `FULLTEXT`，`HASH` 和 `SPATIAL` 索引。
+* 不支持降序索引 （类似于 MySQL 5.7）。
+* 无法向表中添加 `PRIMARY KEY`。
 
 ## 另请参阅
 
-* [USE](/dev/reference/sql/statements/use.md)
-* [ALTER DATABASE](/dev/reference/sql/statements/alter-database.md)
-* [DROP DATABASE](/dev/reference/sql/statements/drop-database.md)
-* [SHOW DATABASES](/dev/reference/sql/statements/show-databases.md)
+* [ADD INDEX](/dev/reference/sql/statements/add-index.md)
+* [DROP INDEX](/dev/reference/sql/statements/drop-index.md)
+* [RENAME INDEX](/dev/reference/sql/statements/rename-index.md)
+* [ADD COLUMN](/dev/reference/sql/statements/add-column.md)
+* [CREATE TABLE](/dev/reference/sql/statements/create-table.md)
+* [EXPLAIN](/dev/reference/sql/statements/explain.md)
