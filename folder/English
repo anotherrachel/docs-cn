@@ -1,129 +1,247 @@
 ---
-title: ADD COLUMN
-summary: TiDB 数据库中 ADD COLUMN 的使用概况。
+title: 用户自定义变量
 category: reference
+aliases:
+  - '/docs-cn/sql/user-defined-variables/'
 ---
 
-# ADD COLUMN
+# 用户自定义变量
 
-`ALTER TABLE.. ADD COLUMN` 语句用于在已有表中添加列。在 TiDB 中，`ADD COLUMN` 为在线操作，不会阻塞表中的数据读写。
+用户自定义变量格式为 `@var_name`。`var_name` 目前只支持字母，数字，`_$`组成。用户自定义变量是大小写不敏感的。
 
-## 语法图
+用户自定义变量是跟 session 绑定的，也就是说只有当前连接可以看见设置的用户变量，其他客户端连接无法查看到。
 
-**AlterTableStmt:**
-
-![AlterTableStmt](/media/sqlgram/AlterTableStmt.png)
-
-**AlterTableSpec:**
-
-![AlterTableSpec](/media/sqlgram/AlterTableSpec.png)
-
-**ColumnKeywordOpt:**
-
-![ColumnKeywordOpt](/media/sqlgram/ColumnKeywordOpt.png)
-
-**ColumnDef:**
-
-![ColumnDef](/media/sqlgram/ColumnDef.png)
-
-**ColumnPosition:**
-
-![ColumnPosition](/media/sqlgram/ColumnPosition.png)
-
-## 示例
+用 `SET` 语句可以设置用户自定义变量：
 
 {{< copyable "sql" >}}
 
 ```sql
-CREATE TABLE t1 (id INT NOT NULL PRIMARY KEY auto_increment);
+SET @var_name = expr [, @var_name = expr] ...;
 ```
 
+或
+
+{{< copyable "sql" >}}
+
+```sql
+SET @var_name := expr;
 ```
-Query OK, 0 rows affected (0.11 sec)
+
+对于 `SET` 语句，赋值操作符可以是 `=` 也可以是 `:=`
+
+例：
+
+{{< copyable "sql" >}}
+
+```sql
+SET @a1=1, @a2=2, @a3:=4;
 ```
 
 {{< copyable "sql" >}}
 
 ```sql
-INSERT INTO t1 VALUES (NULL);
+SELECT @a1, @a2, @t3, @a4 := @a1+@a2+@a3;
 ```
 
 ```
-Query OK, 1 row affected (0.02 sec)
++------+------+------+--------------------+
+| @a1  | @a2  | @a3  | @a4 := @a1+@a2+@a3 |
++------+------+------+--------------------+
+|    1 |    2 |    4 |                  7 |
++------+------+------+--------------------+
 ```
+
+如果设置用户变量用了 `HEX` 或者 `BIT` 值，TiDB会把它当成二进制字符串。如果你要将其设置成数字，那么需要手动加上 `CAST转换`: `CAST(.. AS UNSIGNED)`：
 
 {{< copyable "sql" >}}
 
 ```sql
-SELECT * FROM t1;
+SELECT @v1, @v2, @v3;
 ```
 
 ```
-+----+
-| id |
-+----+
-|  1 |
-+----+
++------+------+------+
+| @v1  | @v2  | @v3  |
++------+------+------+
+| A    | 65   | 65   |
++------+------+------+
 1 row in set (0.00 sec)
 ```
 
 {{< copyable "sql" >}}
 
 ```sql
-ALTER TABLE t1 ADD COLUMN c1 INT NOT NULL;
+SET @v1 = b'1000001';
 ```
 
 ```
-Query OK, 0 rows affected (0.28 sec)
+Query OK, 0 rows affected (0.00 sec)
 ```
 
 {{< copyable "sql" >}}
 
 ```sql
-SELECT * FROM t1;
+SET @v2 = b'1000001'+0;
 ```
 
 ```
-+----+----+
-| id | c1 |
-+----+----+
-|  1 |  0 |
-+----+----+
+Query OK, 0 rows affected (0.00 sec)
+```
+
+{{< copyable "sql" >}}
+
+```sql
+SET @v3 = CAST(b'1000001' AS UNSIGNED);
+```
+
+```
+Query OK, 0 rows affected (0.00 sec)
+```
+
+{{< copyable "sql" >}}
+
+```sql
+SELECT @v1, @v2, @v3;
+```
+
+```
++------+------+------+
+| @v1  | @v2  | @v3  |
++------+------+------+
+| A    | 65   | 65   |
++------+------+------+
+1 row in set (0.00 sec)
+```
+
+如果获取一个没有设置过的变量，会返回一个 NULL：
+
+{{< copyable "sql" >}}
+
+```sql
+select @not_exist;
+```
+
+```
++------------+
+| @not_exist |
++------------+
+| NULL       |
++------------+
+1 row in set (0.00 sec)
+```
+
+用户自定义变量不能直接在 SQL 语句中被当成 identifier，例：
+
+{{< copyable "sql" >}}
+
+```sql
+select * from t;
+```
+
+```
++------+
+| a    |
++------+
+|    1 |
++------+
 1 row in set (0.00 sec)
 ```
 
 {{< copyable "sql" >}}
 
 ```sql
-ALTER TABLE t1 ADD c2 INT NOT NULL AFTER c1;
+SET @col = "a";
 ```
 
 ```
-Query OK, 0 rows affected (0.28 sec)
+Query OK, 0 rows affected (0.00 sec)
 ```
 
 {{< copyable "sql" >}}
 
 ```sql
-SELECT * FROM t1;
+SELECT @col FROM t;
 ```
 
 ```
-+----+----+----+
-| id | c1 | c2 |
-+----+----+----+
-|  1 |  0 |  0 |
-+----+----+----+
++------+
+| @col |
++------+
+| a    |
++------+
 1 row in set (0.00 sec)
 ```
 
-## MySQL 兼容性
+{{< copyable "sql" >}}
 
-* 不支持同时添加多列。
-* 不支持将新添加的列设为 `PRIMARY KEY`。
-* 不支持将新添加的列设为 `AUTO_INCREMENT`。
+```sql
+SELECT `@col` FROM t;
+```
 
-## 另请参阅
+```
+ERROR 1054 (42S22): Unknown column '@col' in 'field list'
+```
 
-* [ADD INDEX](/v3.0/reference/sql/statements/add-index.md)
-* [CREATE TABLE](/v3.0/reference/sql/statements/create-table.md)
+{{< copyable "sql" >}}
+
+```sql
+SET @col = "`a`";
+```
+
+```
+Query OK, 0 rows affected (0.00 sec)
+```
+
+{{< copyable "sql" >}}
+
+```sql
+SELECT @col FROM t;
+```
+
+```
++------+
+| @col |
++------+
+| `a`  |
++------+
+1 row in set (0.01 sec)
+```
+
+但是有一个例外是如果你在 PREPARE 语句中使用它，是可以的：
+
+{{< copyable "sql" >}}
+
+```sql
+PREPARE stmt FROM "SELECT @c FROM t";
+```
+
+```
+Query OK, 0 rows affected (0.00 sec)
+```
+
+{{< copyable "sql" >}}
+
+```sql
+EXECUTE stmt;
+```
+
+```
++------+
+| @c   |
++------+
+| a    |
++------+
+1 row in set (0.01 sec)
+```
+
+{{< copyable "sql" >}}
+
+```sql
+DEALLOCATE PREPARE stmt;
+```
+
+```
+Query OK, 0 rows affected (0.00 sec)
+```
+
+更多[细节](https://dev.mysql.com/doc/refman/5.7/en/user-variables.html)。
