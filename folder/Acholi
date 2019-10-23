@@ -1,140 +1,51 @@
 ---
-title: crwdns198820:0crwdne198820:0
-category: crwdns198822:0crwdne198822:0
+title: crwdns198766:0crwdne198766:0
+category: crwdns198768:0crwdne198768:0
 aliases:
-  - 'crwdns198824:0crwdne198824:0'
+  - 'crwdns198770:0crwdne198770:0'
 ---
 
-# crwdns198826:0crwdne198826:0
+# crwdns198772:0crwdne198772:0
 
-crwdns198828:0crwdne198828:0
+crwdns198774:0crwdne198774:0
 
-## crwdns198830:0crwdne198830:0
+crwdns198776:0crwdne198776:0
 
-crwdns198832:0crwdne198832:0
+crwdns198778:0crwdne198778:0
 
-- crwdns198834:0crwdne198834:0
-- crwdns198836:0crwdne198836:0
-- crwdns198838:0[options]crwdne198838:0
+- crwdns198780:0crwdne198780:0
 
-crwdns198840:0crwdne198840:0
+    - crwdns198782:0[rocksdb.defaultcf]crwdne198782:0
+    - crwdns198784:0[rocksdb.writecf]crwdne198784:0
+    - crwdns198786:0crwdne198786:0
 
-## crwdns198842:0crwdne198842:0
+- crwdns198788:0crwdne198788:0
 
-crwdns198844:0crwdne198844:0
+    - crwdns198790:0[raftdb.defaultcf]crwdne198790:0
 
-| crwdns198846:0crwdne198846:0 | crwdns198848:0crwdne198848:0 |
-|:---------------------------- |:---------------------------- |
-| crwdns198850:0crwdne198850:0 | crwdns198852:0crwdne198852:0 |
-| crwdns198854:0crwdne198854:0 | crwdns198856:0crwdne198856:0 |
-| crwdns198858:0crwdne198858:0 | crwdns198860:0crwdne198860:0 |
-| crwdns198862:0crwdne198862:0 | crwdns198864:0crwdne198864:0 |
+crwdns198792:0[storage.block-cache]crwdnd198792:0[storage.block-cache]crwdnd198792:0[rocksdb.writecf]crwdne198792:0
 
-## crwdns198866:0crwdne198866:0
+> **crwdns198794:0crwdne198794:0**
+> 
+> crwdns198796:0crwdne198796:0
 
-crwdns198868:0crwdne198868:0
+crwdns198798:0crwdne198798:0
 
-* crwdns198870:0crwdne198870:0
-* crwdns198872:0crwdne198872:0
-* crwdns198874:0crwdne198874:0
+## crwdns198800:0crwdne198800:0
 
-### crwdns198876:0crwdne198876:0
-
-crwdns198878:0crwdne198878:0
-
-crwdns198880:0crwdne198880:0
-
-```sql
-crwdns198882:0crwdne198882:0
+```toml
+crwdns198802:0[server]crwdnd198802:0[storage]crwdnd198802:0[storage.block-cache]crwdnd198802:0[pd]crwdnd198802:0[metric]crwdnd198802:0[raftstore]crwdnd198802:0[storage.data-dir]crwdnd198802:0[rocksdb]crwdnd198802:0%3Fcrwdnd198802:0[rocksdb.defaultcf]crwdnd198802:0%ucrwdnd198802:0[rocksdb.writecf]crwdnd198802:0[raftdb]crwdnd198802:0[raftdb.defaultcf]crwdne198802:0
 ```
 
-```
-crwdns198884:0crwdne198884:0
-```
+## crwdns198804:0crwdne198804:0
 
-crwdns198886:0crwdne198886:0
+crwdns198806:0crwdne198806:0
 
-crwdns198888:0crwdne198888:0
+1. crwdns198808:0crwdne198808:0
+2. crwdns198810:0crwdne198810:0
 
-crwdns198890:0crwdne198890:0
+## crwdns198812:0crwdne198812:0
 
-```sql
-crwdns198892:0crwdne198892:0
-```
-
-crwdns198894:0crwdne198894:0
-
-```sql
-crwdns198896:0crwdne198896:0
-```
-
-```
-crwdns198898:0crwdne198898:0
-```
-
-crwdns198900:0crwdne198900:0
-
-## `crwdns198902:0crwdne198902:0`
-
-crwdns198904:0crwdne198904:0
-
-- crwdns198906:0crwdne198906:0
-- crwdns198908:0crwdne198908:0
-
-## crwdns198910:0crwdne198910:0
-
-### crwdns198912:0crwdne198912:0
-
-crwdns198914:0crwdne198914:0
-
-crwdns198916:0crwdne198916:0
-
-### crwdns198918:0crwdne198918:0
-
-crwdns198920:0crwdne198920:0
-
-crwdns198922:0crwdne198922:0
-
-### crwdns198924:0crwdne198924:0
-
-crwdns198926:0crwdne198926:0
-
-crwdns198928:0crwdne198928:0
-
-crwdns198930:0crwdne198930:0
-
-## crwdns198932:0crwdne198932:0
-
-### crwdns198934:0crwdne198934:0
-
-crwdns198936:0crwdne198936:0
-
-### crwdns198938:0crwdne198938:0
-
-crwdns198940:0crwdne198940:0
-
-crwdns198942:0crwdne198942:0
-
-### crwdns198944:0crwdne198944:0
-
-crwdns198946:0crwdne198946:0
-
-### crwdns198948:0crwdne198948:0
-
-crwdns198950:0crwdne198950:0
-
-### crwdns198952:0crwdne198952:0
-
-crwdns198954:0crwdne198954:0
-
-### crwdns198956:0crwdne198956:0
-
-crwdns198958:0crwdne198958:0
-
-crwdns198960:0crwdne198960:0
-
-### crwdns198962:0crwdne198962:0
-
-crwdns198964:0crwdne198964:0
-
-crwdns198966:0crwdne198966:0
+1. crwdns198814:0crwdne198814:0
+2. crwdns198816:0crwdne198816:0
+3. crwdns198818:0crwdne198818:0
