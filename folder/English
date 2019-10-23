@@ -1,147 +1,186 @@
 ---
-title: 离线 TiDB-Ansible 部署方案
-category: deployment
+title: TiDB 集群监控
+category: monitoring
 ---
 
-# 离线 TiDB-Ansible 部署方案
+# TiDB 集群监控
 
-## 准备机器
+TiDB 集群状态监控目前有两种接口，第一种是通过 HTTP 接口对外汇报组件的信息，我们称之为组件的状态接口；第二种是使用 prometheus 记录组件中各种操作的详细信息，我们称之为 metrics 接口。
 
-1. 下载机一台
+## 组件状态接口
 
-    - 该机器需开放外网访问，用于下载 TiDB-Ansible、TiDB 及相关软件安装包。
-    - 推荐安装 CentOS 7.3 及以上版本 Linux 操作系统。
+这类接口可以获取组件的一些基本信息，并且可以作为 keepalive 监测接口。另外 PD 的接口可以看到整个 TiKV 集群的详细信息。
 
-2. 部署目标机器若干及部署中控机一台
+### TiDB Server
 
-    - 系统要求及配置参考[准备机器](../op-guide/ansible-deployment.md#准备机器)。
-    - 可以无法访问外网。
+TiDB API 地址：`http://${host}:${port}`。
 
-## 在中控机上安装系统依赖包
+其中 port 默认为 10080，各类 `api_name` 详细信息参见 [TiDB API Doc](https://github.com/pingcap/tidb/blob/master/docs/tidb_http_api.md)。
 
-> 下载[系统依赖离线安装包](https://download.pingcap.org/ansible-system-rpms.el7.tar.gz)，上传至中控机。该离线包仅支持 CentOS 7 系统，包含 `pip` 及 `sshpass`。
+下面示例中，通过访问 `http://${host}:${port}/status` 获取当前 TiDB Server 的状态，以及判断是否存活。返回结果为 **Json** 格式：
 
 ```bash
-# tar -xzvf ansible-system-rpms.el7.tar.gz
-# cd ansible-system-rpms.el7
-# chmod u+x install_ansible_system_rpms.sh
-# ./install_ansible_system_rpms.sh
+curl http://127.0.0.1:10080/status
+{
+    connections: 0,
+    version: "5.5.31-TiDB-1.0",
+    git_hash: "b99521846ff6f71f06e2d49a3f98fa1c1d93d91b"
+}
 ```
 
-安装完成后，可通过 `pip -V` 验证 pip 是否安装成功：
++ `connections`：当前 TiDB Server 上的客户端连接数
+ + `version`：TiDB 版本号
+ + `git_hash`：TiDB 当前代码的 Git Hash
+
+### PD Server
+
+PD API 地址：`http://${host}:${port}/pd/api/v1/${api_name}`。
+
+其中 port 默认为 2379，各类 api_name 详细信息参见 [PD API Doc](https://download.pingcap.com/pd-api-v1.html)。
+
+通过这个接口可以获取当前所有 TiKV 的状态以及负载均衡信息。其中最重要也是最常用的接口获取 TiKV 集群所有节点状态的接口，下面以一个单个 TiKV 构成的集群为例，说明一些用户需要了解的信息：
 
 ```bash
-# pip -V
- pip 8.1.2 from /usr/lib/python2.7/site-packages (python 2.7)
+curl http://127.0.0.1:2379/pd/api/v1/stores
+{
+  "count": 1,  TiKV 节点数量
+  "stores": [  // TiKV 节点的列表
+   // 下面列出的是这个集群中单个 TiKV 节点的信息
+   {
+      "store": {
+        "id": 1,
+        "address": "127.0.0.1:22161",
+        "state": 0
+      },
+      "status": {
+        "store_id": 1,               // 节点的 ID
+        "capacity": 1968874332160,   // 存储总容量
+        "available": 1264847716352,  // 存储剩余容量
+        "region_count": 1,           // 该节点上存放的  Region 数量
+        "sending_snap_count": 0,
+        "receiving_snap_count": 0,
+        "start_ts": "2016-10-24T19:54:00.110728339+08:00",            // 启动时间
+        "last_heartbeat_ts": "2016-10-25T10:52:54.973669928+08:00",   // 最后一次心跳时间
+        "total_region_count": 1,           // 总 Region 数量
+        "leader_region_count": 1,        // Leader Region 数量
+        "uptime": "14h58m54.862941589s"
+      },
+      "scores": [
+        100,
+        35
+      ]
+    }
+  ]
+}
 ```
 
-> 如果你的系统已安装 pip，请确认版本 >= 8.1.2，否则离线安装 ansible 及其依赖时，会有兼容问题。
+## Metrics 监控
 
-## 在中控机上创建 tidb 用户，并生成 ssh key
+这部分主要对整个集群的状态、性能做监控，通过 Prometheus+Grafana 展现 metrics 数据，在下面一节会介绍如何搭建监控系统。
 
-参考[在中控机上创建 tidb 用户，并生成 ssh key](../op-guide/ansible-deployment.md#在中控机上创建-tidb-用户-并生成-ssh-key) 即可。
+### TiDB Server
 
-## 在中控机器上离线安装 Ansible 及其依赖
++ query 处理时间，可以看到延迟和吞吐
++ ddl 过程监控
++ TiKV client 相关的监控
++ PD client 相关的监控
 
-以下是 CentOS 7 系统 Ansible 离线安装方式：
+### PD Server
 
-目前 release-2.0 及 master 版本兼容 Ansible 2.5 版本，Ansible 及相关依赖版本记录在 `tidb-ansible/requirements.txt` 文件中，请下载 Ansible 2.5 离线安装包上传至中控机。
++ 命令执行的总次数
++ 某个命令执行失败的总次数
++ 某个命令执行成功的耗时统计
++ 某个命令执行失败的耗时统计
++ 某个命令执行完成并返回结果的耗时统计
 
-> 下载 [Ansible 2.5 离线安装包](https://download.pingcap.org/ansible-2.5.0-pip.tar.gz)
+### TiKV Server
 
-下面以安装 Ansible 2.5 为例：
++ GC 监控
++ 执行 KV 命令的总次数
++ Scheduler 执行命令的耗时统计
++ Raft propose 命令的总次数
++ Raft 执行命令的耗时统计
++ Raft 执行命令失败的总次数
++ Raft 处理 ready 状态的总次数
 
+## 使用 Prometheus+Grafana
+
+### 部署架构
+
+整个架构如下图所示，在 TiDB/PD/TiKV 三个组件的启动参数中添加 Prometheus Pushgateway 地址:
+
+![Deployment Architecture](../media/monitor-architecture.png)
+
+### 搭建监控系统
+
+- Prometheus Push Gateway 参考：https://github.com/prometheus/pushgateway
+- Prometheus Server 参考：https://github.com/prometheus/prometheus#install
+- Grafana 参考：http://docs.grafana.org
+
+### 配置
+
+#### TiDB/PD/TiKV 配置
+
++   TiDB
+
+    设置 \-\-metrics-addr 和 \-\-metrics-interval 两个参数，其中 metrics-addr 设为 Push Gateway 的地址，metrics-interval 为 push 的频率，单位为秒，默认值为 15
+
++   PD
+
+    修改 toml 配置文件，填写 Push Gateway 的地址和推送频率
+
+    ```toml
+    [metric]
+    # prometheus client push interval, set "0s" to disable prometheus.
+    interval = "15s"
+    # prometheus pushgateway address, leaves it empty will disable prometheus.
+    address = "host:port"
+    ```
+
++   TiKV
+
+    修改 toml 配置文件，填写 Push Gateway 的地址和推送频率，job 字段一般设为“tikv”。
+
+    ```toml
+    [metric]
+    # the Prometheus client push interval. Setting the value to 0s stops Prometheus client from pushing.
+    interval = "15s"
+    # the Prometheus pushgateway address. Leaving it empty stops Prometheus client from pushing.
+    address = "host:port"
+    # the Prometheus client push job name. Note: A node id will automatically append, e.g., "tikv_1".
+    job = "tikv"
+    ```
+
+#### PushServer 配置
+
+一般无需特殊配置，使用默认端口 9091 即可
+
+#### Prometheus 配置
+
+在 yaml 配置文件中添加 Push Gateway 地址：
+
+```yaml
+ scrape_configs:
+# The job name is added as a label `job=<job_name>` to any timeseries scraped from this config.
+- job_name: 'TiDB'
+
+  # Override the global default and scrape targets from this job every 5 seconds.
+  scrape_interval: 5s
+
+  honor_labels: true
+
+  static_configs:
+ - targets: ['host:port'] # use the Push Gateway address
+labels:
+  group: 'production'
 ```
-# tar -xzvf ansible-2.5.0-pip.tar.gz
-# cd ansible-2.5.0-pip/
-# chmod u+x install_ansible.sh
-# ./install_ansible.sh
-```
 
-安装完成后，可通过 `ansible --version` 查看版本：
+#### Grafana 配置
 
-```bash
-# ansible --version
- ansible 2.5.0
-```
++   进入 Grafana Web 界面（默认地址: http://localhost:3000 ，默认账号: admin 密码: admin）
 
-## 在下载机上下载 TiDB-Ansible 及 TiDB 安装包
+    点击 Grafana Logo -> 点击 Data Sources -> 点击 Add data source -> 填写 data source 信息 ( 注: Type 选 Prometheus，Url 为 Prometheus 地址，其他根据实际情况填写 ）
 
-1. 在下载机上安装 Ansible
++   导入 dashboard 配置文件
 
-    请按以下方式在 CentOS 7 系统的下载机上在线安装 Ansible。安装完成后，可通过 `ansible --version` 查看版本，请务必确认是 **Ansible 2.5.0** 版本，否则会有兼容问题。
-
-    ```bash
-    # yum install epel-release
-    # yum install ansible curl
-    # ansible --version
-      ansible 2.5.0
-    ```
-
-2. 下载 tidb-ansible
-
-    使用以下命令从 Github [TiDB-Ansible 项目](https://github.com/pingcap/tidb-ansible)上下载 TiDB-Ansible 相应版本，默认的文件夹名称为 `tidb-ansible`，以下为各版本下载示例，版本选择可以咨询官方。
-
-    下载 2.0 GA 版本：
-
-    ```
-    git clone -b release-2.0 https://github.com/pingcap/tidb-ansible.git
-    ```
-
-    或
-
-    下载 master 版本：
-
-    ```
-    git clone https://github.com/pingcap/tidb-ansible.git
-    ```
-
-3. 执行 `local_prepare.yml` playbook，联网下载 TiDB binary 到下载机
-
-    ```
-    cd tidb-ansible
-    ansible-playbook local_prepare.yml
-    ```
-
-4. 将执行完以上命令之后的 `tidb-ansible` 文件夹拷贝到中控机 `/home/tidb` 目录下，文件属主权限需是 `tidb` 用户。
-
-## 在中控机上配置部署机器 ssh 互信及 sudo 规则
-
-参考[在中控机上配置部署机器 ssh 互信及 sudo 规则](../op-guide/ansible-deployment.md#在中控机上配置部署机器-ssh-互信及-sudo-规则)即可。
-
-## 在部署目标机器上安装 NTP 服务
-
-> 如果你的部署目标机器时间、时区设置一致，已开启 NTP 服务且在正常同步时间，此步骤可忽略，可参考[如何检测 NTP 服务是否正常](../op-guide/ansible-deployment.md#如何检测-ntp-服务是否正常)。
-
-参考[在部署目标机器上安装 NTP 服务](../op-guide/ansible-deployment.md#在部署目标机器上安装-ntp-服务)即可。
-
-## 在部署目标机器上配置 CPUfreq 调节器模式
-
-参考[在部署目标机器上配置 CPUfreq 调节器模式](../op-guide/ansible-deployment.md#在部署目标机器上配置-cpufreq-调节器模式)即可。
-
-## 在部署目标机器上添加数据盘 ext4 文件系统挂载参数
-
-参考[在部署目标机器上添加数据盘 ext4 文件系统挂载参数](../op-guide/ansible-deployment.md#在部署目标机器上添加数据盘-ext4-文件系统挂载参数)即可。
-
-## 分配机器资源，编辑 inventory.ini 文件
-
-参考[分配机器资源，编辑 inventory.ini 文件](../op-guide/ansible-deployment.md#分配机器资源-编辑-inventory-ini-文件)即可。
-
-## 部署任务
-
-1. `ansible-playbook local_prepare.yml` 该 playbook 不需要再执行。
-
-2. Grafana Dashboard 上的 Report 按钮可用来生成 PDF 文件，此功能依赖 `fontconfig` 包及英文字体，如需使用该功能，请下载 [font 离线安装包](https://download.pingcap.org/grafana-font-rpms.el7.tar.gz)上传至 **grafana_servers** 机器上安装。该离线包仅支持 CentOS 7 系统，包含 `fontconfig` 及 `open-sans-fonts`。
-
-    ```
-    $ tar -xzvf grafana-font-rpms.el7.tar.gz
-    $ cd grafana-font-rpms.el7
-    $ chmod u+x install_grafana_font_rpms.sh
-    $ ./install_grafana_font_rpms.sh
-    ```
-
-3. 参考[部署任务](../op-guide/ansible-deployment.md#部署任务)即可。
-
-## 测试集群
-
-参考[测试集群](../op-guide/ansible-deployment.md#测试集群)即可。
+    点击 Grafana Logo -> 点击 Dashboards -> 点击 Import -> 选择需要的 Dashboard [配置文件](https://grafana.com/tidb)上传 -> 选择对应的 data source
