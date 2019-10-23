@@ -1,305 +1,203 @@
 ---
-title: 开发 Java 应用使用 TiDB 的最佳实践
+title: TiDB 高并发写入场景最佳实践
+summary: 了解 TiDB 在高并发写入场景下的最佳实践。
 category: reference
-aliases:
-  - '/docs-cn/v3.0/reference/best-practices/using-tidb-in-java/'
 ---
 
-# 开发 Java 应用使用 TiDB 的最佳实践
+# TiDB 高并发写入场景最佳实践
 
-本文主要介绍如何开发 Java 应用程序以更好地使用 TiDB，包括开发中的常见问题与最佳实践。
+在 TiDB 的使用过程中，一个典型场景是高并发批量写入数据到 TiDB。本文阐述了该场景中的常见问题，旨在给出一个业务的最佳实践，帮助读者避免因使用 TiDB 不当而影响业务开发。
 
-## Java 应用中的数据库相关组件
+## 目标读者
 
-通常 Java 应用中和数据库相关的常用组件有：
+本文假设你已对 TiDB 有一定的了解，推荐先阅读 TiDB 原理相关的三篇文章（[讲存储](https://pingcap.com/blog-cn/tidb-internal-1/)，[说计算](https://pingcap.com/blog-cn/tidb-internal-2/)，[谈调度](https://pingcap.com/blog-cn/tidb-internal-3/)），以及 [TiDB Best Practice](https://pingcap.com/blog-cn/tidb-best-practice/)。
 
-- 网络协议：客户端通过标准 [MySQL 协议](https://dev.mysql.com/doc/internals/en/client-server-protocol.html)和 TiDB 进行网络交互。
-- JDBC API 及实现：Java 应用通常使用 [JDBC (Java Database Connectivity)](https://docs.oracle.com/javase/8/docs/technotes/guides/jdbc/) 来访问数据库。JDBC 定义了访问数据库 API，而 JDBC 实现完成标准 API 到 MySQL 协议的转换，常见的 JDBC 实现是 [MySQL Connector/J](https://github.com/mysql/mysql-connector-j)，此外有些用户可能使用 [MariaDB Connector/J](https://mariadb.com/kb/en/library/about-mariadb-connector-j/#about-mariadb-connectorj)。
-- 数据库连接池：为了避免每次创建连接，通常应用会选择使用数据库连接池来复用连接，JDBC [DataSource](https://docs.oracle.com/javase/8/docs/api/javax/sql/DataSource.html) 定义了连接池 API，开发者可根据实际需求选择使用某种开源连接池实现。
-- 数据访问框架：应用通常选择通过数据访问框架 ([MyBatis](http://www.mybatis.org/mybatis-3/zh/index.html), [Hibernate](https://hibernate.org/)) 的封装来进一步简化和管理数据库访问操作。
-- 业务实现：业务逻辑控制着何时发送和发送什么指令到数据库，其中有些业务会使用 [Spring Transaction](https://docs.spring.io/spring/docs/4.2.x/spring-framework-reference/html/transaction.html) 切面来控制管理事务的开始和提交逻辑。
+## 高并发批量插入场景
 
-![Java Component](/media/java-practice-1.png)
+高并发批量插入的场景通常产出现在业务系统中的批量任务中，例如清算以及结算等业务。此类场景存在以下特点：
 
-如上图所示，应用可能使用 Spring Transaction 来管理控制事务非手工启停，通过类似 MyBatis 的数据访问框架管理生成和执行 SQL，通过连接池获取已池化的长连接，最后通过 JDBC 接口调用实现通过 MySQL 协议和 TiDB 完成交互。
+- 数据量大
+- 需要短时间内将历史数据入库
+- 需要短时间内读取大量数据
 
-接下来将分别介绍使用各个组件时可能需要关注的问题。
+这就对 TiDB 提出了以下挑战：
 
-## JDBC
+- 写入/读取能力是否可以线性水平扩展
+- 随着数据持续大并发写入，数据库性能是否稳定不衰减
 
-Java 应用尽管可以选择在不同的框架中封装，但在最底层一般会通过调用 JDBC 来与数据库服务器进行交互。对于 JDBC，需要关注的主要有：API 的使用选择和 API Implementer 的参数配置。
+对于分布式数据库来说，除了本身的基础性能外，最重要的就是充分利用所有节点能力，避免让单个节点成为瓶颈。
 
-### JDBC API
+## TiDB 数据分布原理
 
-对于基本的 JDBC API 使用可以参考 [JDBC 官方教程](https://docs.oracle.com/javase/tutorial/jdbc/)，本文主要强调几个比较重要的 API 选择。
+如果要解决以上挑战，需要从 TiDB 数据切分以及调度的原理开始讲起。这里只作简单说明，详情可参阅[谈调度](https://pingcap.com/blog-cn/tidb-internal-3/)。
 
-#### 使用 Prepare API
+TiDB 以 Region 为单位对数据进行切分，每个 Region 有大小限制（默认 96M）。Region 的切分方式是范围切分。每个 Region 会有多副本，每一组副本，称为一个 Raft Group。每个 Raft Group 中由 Leader 负责执行这块数据的读 & 写（TiDB 即将支持 [Follower-Read](https://zhuanlan.zhihu.com/p/78164196)）。Leader 会自动地被 PD 组件均匀调度在不同的物理节点上，用以均分读写压力。
 
-对于 OLTP 场景，程序发送给数据库的 SQL 语句在去除参数变化后都是可穷举的某几类，因此建议使用[预处理语句 (Prepared Statements)](https://docs.oracle.com/javase/tutorial/jdbc/basics/prepared.html) 代替普通的[文本执行](https://docs.oracle.com/javase/tutorial/jdbc/basics/processingsqlstatements.html#executing_queries)，并复用 Prepared Statements 来直接执行，从而避免 TiDB 重复解析和生成 SQL 执行计划的开销。
+![TiDB 数据概览](/media/best-practices/tidb-data-overview.png)
 
-目前多数上层框架都会调用 Prepare API 进行 SQL 执行，如果直接使用 JDBC API 进行开发，注意选择使用 Prepare API。
+只要业务的写入没有 `AUTO_INCREMENT` 的主键，或没有单调递增的索引（即没有业务上的写入热点，更多细节可参阅 [TiDB 正确使用方式](https://zhuanlan.zhihu.com/p/25574778)），从原理上来说，TiDB 依靠这个架构可具备线性扩展的读写能力，并且可以充分利用分布式资源。从这一点看，TiDB 尤其适合高并发批量写入场景的业务。
 
-另外需要注意 MySQL Connector/J 实现中默认只会做客户端的语句预处理，会将 `?` 在客户端替换后以文本形式发送到客户端，所以除了要使用 Prepare API，还需要在 JDBC 连接参数中配置 `useServerPrepStmts = true`，才能在 TiDB 服务器端进行语句预处理（下面参数配置章节有详细介绍）。
+但理论场景和实际情况往往存在不同。以下实例说明了热点是如何产生的。
 
-#### 使用 Batch 批量插入更新
+## 热点产生的实例
 
-对于批量插入更新，如果插入记录较多，可以选择使用 [addBatch/executeBatch API](https://www.tutorialspoint.com/jdbc/jdbc-batch-processing)。通过 addBatch 的方式将多条 SQL 的插入更新记录先缓存在客户端，然后在 executeBatch 时一起发送到数据库服务器。
+以下为一张示例表：
+
+```sql
+CREATE TABLE IF NOT EXISTS TEST_HOTSPOT(
+      id         BIGINT PRIMARY KEY,
+      age        INT,
+      user_name  VARCHAR(32),
+      email      VARCHAR(128)
+)
+```
+
+这个表的结构非常简单，除了 `id` 为主键以外，没有额外的二级索引。将数据写入该表的语句如下，`id` 通过随机数离散生成：
+
+{{< copyable "sql" >}}
+
+```sql
+INSERT INTO TEST_HOTSPOT(id, age, user_name, email) values(%v, %v, '%v', '%v');
+```
+
+负载是短时间内密集地执行以上写入语句。
+
+以上操作看似符合理论场景中的 TiDB 最佳实践，业务上没有热点产生。只要有足够的机器，就可以充分利用 TiDB 的分布式能力。要验证是否真的符合最佳实践，可以在实验环境中进行测试。
+
+部署拓扑 2 个 TiDB 节点，3 个 PD 节点，6 个 TiKV 节点。请忽略 QPS，因为测试只是为了阐述原理，并非 benchmark。
+
+![QPS1](/media/best-practices/QPS1.png)
+
+客户端在短时间内发起了“密集”的写入，TiDB 收到的请求是 3K QPS。理论上，压力应该均摊给 6 个 TiKV 节点。但是从 TiKV 节点的 CPU 使用情况上看，存在明显的写入倾斜（tikv - 3 节点是写入热点）：
+
+![QPS2](/media/best-practices/QPS2.png)
+
+![QPS3](/media/best-practices/QPS3.png)
+
+[Raft store CPU](/v3.0/reference/key-monitoring-metrics/tikv-dashboard.md) 为 `raftstore` 线程的 CPU 使用率，通常代表写入的负载。在这个场景下 tikv-3 为 Raft Leader，tikv-0 和 tikv-1 是 Raft 的 Follower，其他的 TiKV 节点的负载几乎为空。
+
+从 PD 的监控中也可以证明热点的产生：
+
+![QPS4](/media/best-practices/QPS4.png)
+
+## 热点问题产生的原因
+
+以上测试并未达到理论场景中最佳实践，因为刚创建表的时候，这个表在 TiKV 中只会对应为一个 Region，范围是：
+
+```
+[CommonPrefix + TableID, CommonPrefix + TableID + 1)
+```
+
+短时间内大量数据会持续写入到同一个 Region 上。
+
+![TiKV Region 分裂流程](/media/best-practices/tikv-Region-split.png)
+
+上图简单描述了这个过程，随着数据持续写入，TiKV 会将一个 Region 切分为多个。但因为首先发起选举的是原 Leader 所在的 Store，所以新切分好的两个 Region 的 Leader 很可能还会在原 Store 上。新切分好的 Region 2，3 上，也会重复之前发生在 Region 1 上的过程。也就是压力会密集地集中在 TiKV-Node 1 上。
+
+在持续写入的过程中，PD 发现 Node 1 中产生了热点，会将 Leader 均分到其他的 Node 上。如果 TiKV 的节点数多于副本数的话，TiKV 会尽可能将 Region 迁移到空闲的节点上。这两个操作在数据插入的过程中，也能在 PD 监控中得到印证：
+
+![QPS5](/media/best-practices/QPS5.png)
+
+在持续写入一段时间后，整个集群会被 PD 自动地调度成一个压力均匀的状态，到那个时候整个集群的能力才会真正被利用起来。在大多数情况下，以上热点产生的过程是没有问题的，这个阶段属于表 Region 的预热阶段。
+
+但是对于高并发批量密集写入场景来说，应该避免这个阶段。
+
+## 热点问题的规避方法
+
+为了达到场景理论中的最佳性能，一种方法是跳过这个预热阶段，直接将 Region 切分为预期的数量，提前调度到集群的各个节点中。
+
+TiDB 在 v3.0.x 以及 v2.1.13 后支持一个叫 [Split Region](/v3.0/reference/sql/statements/split-region.md) 的新特性。这个特性提供了新的语法：
+
+{{< copyable "sql" >}}
+
+```sql
+SPLIT TABLE table_name [INDEX index_name] BETWEEN (lower_value) AND (upper_value) REGIONS region_num
+```
+
+{{< copyable "sql" >}}
+
+```sql
+SPLIT TABLE table_name [INDEX index_name] BY (value_list) [, (value_list)]
+```
+
+但是 TiDB 并不会自动提前完成这个切分操作。原因如下：
+
+![Table Region Range](/media/best-practices/table-Region-range.png)
+
+从图 3 可知，Table 行数据 key 的编码中，行数据唯一可变的是行 ID (rowID)。在 TiDB 中，rowID 是一个 Int64 整形。但是用户不一定能将 Int64 整形范围均匀切分成需要的份数，然后均匀分布在不同的节点上，还需要结合实际情况。
+
+如果行 ID 的写入是完全离散的，那么上述方式是可行的。如果行 ID 或者索引有固定的范围或者前缀（例如，只在 `[2000w, 5000w)` 的范围内离散插入数据），这种写入依然在业务上不产生热点，但是如果按上面的方式进行切分，那么有可能一开始数据仍只写入到某个 Region 上。
+
+作为一款通用数据库，TiDB 并不对数据的分布作假设，所以开始只用一个 Region 来对应一个表。等到真实数据插入进来以后，TiDB 自动根据数据的分布来作切分。这种方式是较通用的。
+
+所以 TiDB 提供了 Split Region 语法，专门针对短时批量写入场景作优化。基于以上案例，下面尝试用 Split Region 语法提前切散 Region，再观察负载情况。
+
+由于测试的写入数据在正数范围内完全离散，所以用以下语句，在 Int64 空间内提前将表切分为 128 个 Region：
+
+{{< copyable "sql" >}}
+
+```
+SPLIT TABLE TEST_HOTSPOT BETWEEN (0) AND (9223372036854775807) REGIONS 128;
+```
+
+切分完成以后，可以通过 `SHOW TABLE test_hotspot REGIONS;` 语句查看打散的情况。如果 `SCATTERING` 列值全部为 `0`，代表调度成功。
+
+也可以通过 [table-regions.py](https://github.com/pingcap/tidb-ansible/blob/dabf60baba5e740a4bee9faf95e77563d8084be1/scripts/table-regions.py) 脚本，查看 Region 的分布。目前分布已经比较均匀了：
+
+```
+[root@172.16.4.4 scripts]# python table-regions.py --host 172.16.4.3 --port 31453 test test_hotspot
+[RECORD - test.test_hotspot] - Leaders Distribution:
+  total leader count: 127
+  store: 1, num_leaders: 21, percentage: 16.54%
+  store: 4, num_leaders: 20, percentage: 15.75%
+  store: 6, num_leaders: 21, percentage: 16.54%
+  store: 46, num_leaders: 21, percentage: 16.54%
+  store: 82, num_leaders: 23, percentage: 18.11%
+  store: 62, num_leaders: 21, percentage: 16.54%
+```
+
+再重新运行写入负载：
+
+![QPS6](/media/best-practices/QPS6.png)
+
+![QPS7](/media/best-practices/QPS7.png)
+
+![QPS8](/media/best-practices/QPS8.png)
+
+可以看到已经消除了明显的热点问题了。
+
+本示例仅为一个简单的表，还有索引热点的问题需要考虑。读者可参阅 [Split Region](/v3.0/reference/sql/statements/split-region.md) 文档来了解如何预先切散索引相关的 Region。
+
+### 更复杂的热点问题
+
+如果表没有主键或者主键不是 Int 类型，而且用户也不想自己生成一个随机分布的主键 ID 的话，TiDB 内部有一个隐式的 `_tidb_rowid` 列作为行 ID。在不使用 `SHARD_ROW_ID_BITS` 的情况下，`_tidb_rowid` 列的值基本也为单调递增，此时也会有写热点存在（参阅 [`SHARD_ROW_ID_BITS` 的详细说明](/v3.0/reference/configuration/tidb-server/tidb-specific-variables.md#shard_row_id_bits)）。
+
+要避免由 `_tidb_rowid` 带来的写入热点问题，可以在建表时，使用 `SHARD_ROW_ID_BITS` 和 `PRE_SPLIT_REGIONS` 这两个建表选项（参阅 [`PRE_SPLIT_REGIONS` 的详细说明](/v3.0/reference/sql/statements/split-region.md#pre_split_regions)）。
+
+`SHARD_ROW_ID_BITS` 用于将 `_tidb_rowid` 列生成的行 ID 随机打散。`pre_split_regions` 用于在建完表后预先进行 Split region。
 
 > **注意：**
 > 
-> 对于 MySQL Connector/J 实现，默认 Batch 只是将多次 addBatch 的 SQL 发送时机延迟到调用 executeBatch 的时候，但实际网络发送还是会一条条的发送，通常不会降低与数据库服务器的网络交互次数。
-> 
-> 如果希望 Batch 网络发送，需要在 JDBC 连接参数中配置 `rewriteBatchedStatements=true`（下面参数配置章节有详细介绍）。
+> `pre_split_regions` 必须小于或等于 `shard_row_id_bits`。
 
-#### 使用 StreamingResult 流式获取执行结果
-
-一般情况下，为提升执行效率，JDBC 会默认提前获取查询结果并将其保存在客户端内存中。但在查询返回超大结果集的场景中，客户端会希望数据库服务器减少向客户端一次返回的记录数，等客户端在有限内存处理完一部分后再去向服务器要下一批。
-
-在 JDBC 中通常有以下两种处理方式：
-
-- 设置 [`FetchSize` 为 `Integer.MIN_VALUE`](https://dev.mysql.com/doc/connector-j/5.1/en/connector-j-reference-implementation-notes.html#ResultSet) 让客户端不缓存，客户端通过 StreamingResult 的方式从网络连接上流式读取执行结果。
-- 使用 Cursor Fetch 首先需[设置 `FetchSize`](http://makejavafaster.blogspot.com/2015/06/jdbc-fetch-size-performance.html) 为正整数且在 JDBC URL 中配置 `useCursorFetch=true`。
-
-TiDB 中同时支持两种方式，但更推荐使用第一种将 `FetchSize` 设置为 `Integer.MIN_VALUE` 的方式，比第二种功能实现更简单且执行效率更高。
-
-### MySQL JDBC 参数
-
-JDBC 实现通常通过 JDBC URL 参数的形式来提供实现相关的配置。这里以 MySQL 官方的 Connector/J 来介绍[参数配置](https://dev.mysql.com/doc/connector-j/5.1/en/connector-j-reference-configuration-properties.html)（如果使用的是 MariaDB，可以参考 [MariaDB 的类似配置](https://mariadb.com/kb/en/library/about-mariadb-connector-j/#optional-url-parameters)）。因为配置项较多，这里主要关注几个可能影响到性能的参数。
-
-#### Prepare 相关参数
-
-##### `useServerPrepStmts`
-
-默认情况下，`useServerPrepStmts` 为 `false`，即尽管使用了 Prepare API，也只会在客户端做 “prepare”。因此为了避免服务器重复解析的开销，如果同一条 SQL 语句需要多次使用 Prepare API，则建议设置该选项为 `true`。
-
-在 TiDB 监控中可以通过 **Query Summary** > **QPS By Instance** 查看请求命令类型，如果请求中 `COM_QUERY` 被 `COM_STMT_EXECUTE` 或 `COM_STMT_PREPARE` 代替即生效。
-
-##### `cachePrepStmts`
-
-虽然 `useServerPrepStmts=true` 能让服务端执行 prepare 语句，但默认情况下客户端每次执行完后会 close prepared 的语句，并不会复用，这样 prepare 效率甚至不如文本执行。所以建议开启 `useServerPrepStmts=true` 后同时配置 `cachePrepStmts=true`，这会让客户端缓存 prepare 语句。
-
-在 TiDB 监控中可以通过 **Query Summary** > **QPS By Instance** 查看请求命令类型，如果类似下图，请求中 `COM_STMT_EXECUTE` 数目远远多于 `COM_STMT_PREPARE` 即生效。
-
-![QPS By Instance](/media/java-practice-2.png)
-
-另外，通过 `useConfigs=maxPerformance` 配置会同时配置多个参数，其中也包括 `cachePrepStmts=true`。
-
-##### `prepStmtCacheSqlLimit`
-
-在配置 `cachePrepStmts` 后还需要注意 `prepStmtCacheSqlLimit` 配置（默认为 `256`），该配置控制客户端缓存 prepare 语句的最大长度，超过该长度将不会被缓存。
-
-在一些场景 SQL 的长度可能超过该配置，导致 prepared SQL 不能复用，建议根据应用 SQL 长度情况决定是否需要调大该值。
-
-在 TiDB 监控中通过 **Query Summary** > **QPS by Instance** 查看请求命令类型，如果已经配置了 `cachePrepStmts=true`，但 `COM_STMT_PREPARE` 还是和 `COM_STMT_EXECUTE` 基本相等且有 `COM_STMT_CLOSE`，需要检查这个配置项是否设置得太小。
-
-##### `prepStmtCacheSize`
-
-`prepStmtCacheSize` 控制缓存的 prepare 语句数目（默认为 `25`），如果应用需要 prepare 的 SQL 种类很多且希望复用 prepare 语句，可以调大该值。
-
-和上一条类似，在监控中通过 **Query Summary** > **QPS by Instance** 查看请求中 `COM_STMT_EXECUTE` 数目是否远远多于 `COM_STMT_PREPARE` 来确认是否正常。
-
-#### Batch 相关参数
-
-在进行 batch 写入处理时推荐配置 `rewriteBatchedStatements=true`，在已经使用 `addBatch` 或 `executeBatch` 后默认 JDBC 还是会一条条 SQL 发送，例如：
-
-```java
-pstmt = prepare(“insert into t (a) values(?)”);
-pstmt.setInt(1, 10);
-pstmt.addBatch();
-pstmt.setInt(1, 11);
-pstmt.addBatch();
-pstmt.setInt(1, 12);
-pstmt.executeBatch();
-```
-
-虽然使用了 batch 但发送到 TiDB 语句还是单独的多条 insert：
+示例：
 
 {{< copyable "sql" >}}
 
 ```sql
-insert into t(a) values(10);
-insert into t(a) values(11);
-insert into t(a) values(12);
+create table t (a int, b int) shard_row_id_bits = 4 pre_split_regions=·3;
 ```
 
-如果设置 `rewriteBatchedStatements=true`，发送到 TiDB 的 SQL 将是：
+- `SHARD_ROW_ID_BITS = 4` 表示 tidb_rowid 的值会随机分布成 16 （16=2^4） 个范围区间。
+- `pre_split_regions=3` 表示建完表后提前切分出 8 (2^3) 个 Region。
 
-{{< copyable "sql" >}}
+开始写数据进表 t 后，数据会被写入提前切分好的 8 个 Region 中，这样也避免了刚开始建表完后因为只有一个 Region 而存在的写热点问题。
 
-```sql
-insert into t(a) values(10),(11),(12);
-```
+## 参数配置
 
-批量更新时如果有 3 处或 3 处以上更新，则 SQL 语句会改写为 multiple-queries 的形式并发送，这样可以有效减少客户端到服务器的请求开销，但副作用是会产生较大的 SQL 语句，例如这样：
-
-{{< copyable "sql" >}}
-
-```sql
-update t set a = 10 where id = 1; update t set a = 11 where id = 2; update t set a = 12 where id = 3;
-```
-
-另外因为一个[客户端 bug](https://bugs.mysql.com/bug.php?id=96623)，批量更新时如果要配置 `rewriteBatchedStatements=true` 和 `useServerPrepStmts=true`，推荐同时配置 `allowMultiQueries=true` 参数来避免这个 bug。
-
-#### 执行前检查参数
-
-通过监控可能会发现，虽然业务只向集群进行 insert 操作，却看到有很多多余的 select 语句。通常这是因为 JDBC 发送了一些查询设置类的 SQL 语句（例如 `select @@session.transaction_read_only`）。这些 SQL 对 TiDB 无用，推荐配置 `useConfigs=maxPerformance` 来避免额外开销。
-
-`useConfigs=maxPerformance` 会包含一组配置：
-
-```ini
-cacheServerConfiguration=true
-useLocalSessionState=true
-elideSetAutoCommits=true
-alwaysSendSetIsolation=false
-enableQueryTimeouts=false
-```
-
-配置后查看监控可以看到多余语句减少。
-
-## 连接池
-
-TiDB (MySQL) 连接建立是比较昂贵的操作（至少对于 OLTP），除了建立 TCP 连接外还需要进行连接鉴权操作，所以客户端通常会把 TiDB (MySQL) 连接保存到连接池中进行复用。
-
-Java 的连接池实现很多 ([HikariCP](https://github.com/brettwooldridge/HikariCP), [tomcat-jdbc](https://tomcat.apache.org/tomcat-7.0-doc/jdbc-pool.html), [durid](https://github.com/alibaba/druid), [c3p0](https://www.mchange.com/projects/c3p0/), [dbcp](https://commons.apache.org/proper/commons-dbcp/))，TiDB 不会限定使用的连接池，应用可以根据业务特点自行选择连接池实现。
-
-### 连接数配置
-
-比较常见的是应用需要根据自身情况配置合适的连接池大小，以 HikariCP 为例：
-
-- `maximumPoolSize`：连接池最大连接数，配置过大会导致 TiDB 消耗资源维护无用连接，配置过小则会导致应用获取连接变慢，所以需根据应用自身特点配置合适的值，可参考[这篇文章](https://github.com/brettwooldridge/HikariCP/wiki/About-Pool-Sizing)。
-- `minimumIdle`：连接池最大空闲连接数，主要用于在应用空闲时存留一些连接以应对突发请求，同样是需要根据业务情况进行配置。
-
-应用在使用连接池时需要注意连接使用完成后归还连接，推荐应用使用对应的连接池相关监控（如 `metricRegistry`），通过监控能及时定位连接池问题。
-
-### 探活配置
-
-连接池维护到 TiDB 的长连接，TiDB 默认不会主动关闭客户端连接（除非报错），但一般客户端到 TiDB 之间还会有 LVS 或 HAProxy 之类的网络代理，它们通常会在连接空闲一定时间后主动清理连接。除了注意代理的 idle 配置外，连接池还需要进行保活或探测连接。
-
-如果常在 Java 应用中看到以下错误：
+TiDB 2.1 版本中在 SQL 层引入了 [latch 机制](/v3.0/reference/configuration/tidb-server/configuration-file.md#txn-local-latches)，用于在写入冲突比较频繁的场景中提前发现事务冲突，减少 TiDB 和 TiKV 事务提交时写写冲突导致的重试。通常，跑批场景使用的是存量数据，所以并不存在事务的写入冲突。可以把 TiDB 的 latch 功能关闭，以减少细小内存对象的分配：
 
 ```
-The last packet sent successfully to the server was 3600000 milliseconds ago. The driver has not received any packets from the server. com.mysql.jdbc.exceptions.jdbc4.CommunicationsException: Communications link failure
+[txn-local-latches]
+enabled = false
 ```
-
-如果 `n milliseconds ago` 中的 `n` 如果是 0 或很小的值，则通常是执行的 SQL 导致 TiDB 异常退出引起的报错，推荐查看 TiDB stderr 日志；如果 n 是一个非常大的值（比如这里的 3600000），很可能是因为这个连接空闲太久然后被中间 proxy 关闭了，通常解决方式除了调大 proxy 的 idle 配置，还可以让连接池：
-
-- 每次使用连接前检查连接是否可用
-- 使用单独线程定期检查连接是否可用
-- 定期发送 test query 保活连接
-
-不同的连接池实现可能会支持其中一种或多种方式，可以查看所使用的连接池文档来寻找对应配置。
-
-## 数据访问框架
-
-业务应用通常会使用某种数据访问框架来简化数据库的访问。
-
-### MyBatis
-
-[MyBatis](http://www.mybatis.org/mybatis-3/) 是目前比较流行的 Java 数据访问框架，主要用于管理 SQL 并完成结果集和 Java 对象的来回映射工作。MyBatis 和 TiDB 兼容性很好，从历史 issue 可以看出 MyBatis 很少出现问题。这里主要关注如下几个配置。
-
-#### Mapper 参数
-
-MyBatis 的 Mapper 中支持两种参数：
-
-- `select 1 from t where id = #{param1}` 会作为 prepare 语句转换为 `select 1 from t where id = ?` 进行 prepare， 并使用实际参数来复用执行，通过配合前面的 Prepare 连接参数能获得最佳性能
-- `select 1 from t where id = ${param2}` 会做文本替换为 `select 1 from t where id = 1` 执行，如果这条语句被 prepare 成了不同参数，可能会导致 TiDB 缓存大量的 prepare 语句，并且这种方式执行 SQL 有注入安全风险
-
-#### 动态 SQL Batch
-
-[动态 SQL - foreach](http://www.mybatis.org/mybatis-3/dynamic-sql.html#foreach)
-
-要支持将多条 insert 语句自动重写为 `insert ... values(...), (...), ...` 的形式，除了前面所说的在 JDBC 配置 `rewriteBatchedStatements=true` 外，MyBatis 还可以使用动态 SQL 来半自动生成 batch insert。比如下面的 mapper:
-
-```xml
-<insert id="insertTestBatch" parameterType="java.util.List" fetchSize="1">
-  insert into test
-   (id, v1, v2)
-  values
-  <foreach item="item" index="index" collection="list" separator=",">
-  (
-   #{item.id}, #{item.v1}, #{item.v2}
-  )
-  </foreach>
-  on duplicate key update v2 = v1 + values(v1)
-</insert>
-```
-
-会生成一个 `insert on duplicate key update` 语句，values 后面的 `(?, ?, ?)` 数目是根据传入的 list 个数决定，最终效果和使用 `rewriteBatchStatements=true` 类似，可以有效减少客户端和 TiDB 的网络交互次数，同样需要注意 prepare 后超过 `prepStmtCacheSqlLimit` 限制导致不缓存 prepare 语句的问题。
-
-#### Streaming 结果
-
-前面介绍了在 JDBC 中如何使用流式读取结果，除了 JDBC 相应的配置外，在 MyBatis 中如果希望读取超大结果集合也需要注意：
-
-- 可以通过在 mapper 配置中对单独一条 SQL 设置 `fetchSize`（见上一段代码段），效果等同于调用 JDBC `setFetchSize`
-- 可以使用带 `ResultHandler` 的查询接口来避免一次获取整个结果集
-- 可以使用 `Cursor` 类来进行流式读取
-
-对于使用 xml 配置映射，可以通过在映射 `<select>` 部分配置 `fetchSize="-2147483648"`(`Integer.MIN_VALUE`) 来流式读取结果。
-
-```xml
-<select id="getAll" resultMap="postResultMap" fetchSize="-2147483648">
-  select * from post;
-</select>
-```
-
-而使用代码配置映射，则可以使用 `@Options(fetchSize = Integer.MIN_VALUE)` 并返回 `Cursor` 从而让 SQL 结果能被流式读取。
-
-```java
-@Select("select * from post")
-@Options(fetchSize = Integer.MIN_VALUE)
-Cursor<Post> queryAllPost();
-```
-
-### `ExecutorType`
-
-在 `openSession` 的时候可以选择 `ExecutorType`，MyBatis 支持三种 executor：
-
-- Simple：每次执行都会向 JDBC 进行 prepare 语句的调用（如果 JDBC 配置有开启 `cachePrepStmts`，重复的 prepare 语句会复用）
-- Reuse：在 `executor` 中缓存 prepare 语句，这样不用 JDBC 的 `cachePrepStmts` 也能减少重复 prepare 语句的调用
-- Batch：每次更新只有在 `addBatch` 到 query 或 commit 时才会调用 `executeBatch` 执行，如果 JDBC 层开启了 `rewriteBatchStatements`，则会尝试改写，没有开启则会一条条发送
-
-通常默认值是 `Simple`，需要在调用 `openSession` 时改变 `ExecutorType`。如果是 Batch 执行，会遇到事务中前面的 update 或 insert 都非常快，而在读数据或 commit 事务时比较慢的情况，这实际上是正常的，在排查慢 SQL 时需要注意。
-
-## Spring Transaction
-
-在应用代码中业务可能会通过使用 [Spring Transaction](https://docs.spring.io/spring/docs/4.2.x/spring-framework-reference/html/transaction.html) 和 AOP 切面的方式来启停事务。
-
-通过在方法定义上添加 `@Transactional` 注解标记方法，AOP 将会在方法前开启事务，方法返回结果前 commit 事务。如果遇到类似业务，可以通过查找代码 `@Transactional` 来确定事务的开启和关闭时机。需要特别注意有内嵌的情况，如果发生内嵌，Spring 会根据 [Propagation](https://docs.spring.io/spring-framework/docs/current/javadoc-api/org/springframework/transaction/annotation/Propagation.html) 配置使用不同的行为，因为 TiDB 未支持 savepoint，所以不支持嵌套事务。
-
-## 其他
-
-### 排查工具
-
-在 Java 应用发生问题并且不知道业务逻辑情况下，使用 JVM 强大的排查工具会比较有用。这里简单介绍几个常用工具：
-
-#### jstack
-
-[jstack](https://docs.oracle.com/javase/7/docs/technotes/tools/share/jstack.html) 对应于 Go 中的 pprof/goroutine，可以比较方便地排查进程卡死的问题。
-
-通过执行 `jstack pid`，即可输出目标进程中所有线程的线程 id 和堆栈信息。输出中默认只有 Java 堆栈，如果希望同时输出 JVM 中的 C++ 堆栈，需要加 `-m` 选项。
-
-通过多次 jstack 可以方便地发现卡死问题（比如：都通过 Mybatis BatchExecutor flush 调用 update）或死锁问题（比如：测试程序都在抢占应用中某把锁导致没发送 SQL）
-
-另外，`top -p $PID -H` 或者 Java swiss knife 都是常用的查看线程 ID 的方法。通过 `printf "%x\n" pid` 把线程 ID 转换成 16 进制，然后去 jstack 输出结果中找对应线程的栈信息，可以定位”某个线程占用 CPU 比较高，不知道它在执行什么”的问题。
-
-#### jmap & mat
-
-和 Go 中的 pprof/heap 不同，[jmap](https://docs.oracle.com/javase/7/docs/technotes/tools/share/jmap.html) 会将整个进程的内存快照 dump 下来（go 是分配器的采样），然后可以通过另一个工具 [mat](https://www.eclipse.org/mat/) 做分析。
-
-通过 mat 可以看到进程中所有对象的关联信息和属性，还可以观察线程运行的状态。比如：我们可以通过 mat 找到当前应用中有多少 MySQL 连接对象，每个连接对象的地址和状态信息是什么。
-
-需要注意 mat 默认只会处理 reachable objects，如果要排查 young gc 问题可以在 mat 配置中设置查看 unreachable objects。另外对于调查 young gc 问题（或者大量生命周期较短的对象）的内存分配，用 Java Flight Recorder 比较方便。
-
-#### trace
-
-线上应用通常无法修改代码，又希望在 Java 中做动态插桩来定位问题，推荐使用 btrace 或 arthas trace。它们可以在不重启进程的情况下动态插入 trace 代码。
-
-#### 火焰图
-
-Java 应用中获取火焰图较繁琐，可参阅 [Java Flame Graphs Introduction: Fire For Everyone!](http://psy-lob-saw.blogspot.com/2017/02/flamegraphs-intro-fire-for-everyone.html) 来手动获取。
-
-## 总结
-
-本文从常用的和数据库交互的 Java 组件的角度，阐述了开发 Java 应用程序使用 TiDB 的常见问题与解决办法。TiDB 是高度兼容 MySQL 协议的数据库，基于 MySQL 开发的 Java 应用的最佳实践也多适用于 TiDB。
-
-欢迎大家在 [ASK TUG](https://asktug.com/) 踊跃发言，和我们一起分享讨论 Java 应用使用 TiDB 的实践技巧或遇到的问题。
