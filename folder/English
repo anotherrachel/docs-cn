@@ -1,65 +1,66 @@
 ---
-title: TiDB 2.1 RC3 Release Notes
+title: TiDB 2.1 RC5 Release Notes
 category: Releases
 aliases:
-  - '/docs-cn/releases/21rc3/'
+  - '/docs-cn/releases/21rc5/'
 ---
 
-# TiDB 2.1 RC3 Release Notes
+<!-- markdownlint-disable MD032 -->
 
-2018 年 9 月 29 日，TiDB 发布 2.1 RC3 版。相比 2.1 RC2 版本，该版本对系统稳定性、兼容性、优化器以及执行引擎做了很多改进。
+# TiDB 2.1 RC5 Release Notes
+
+2018 年 11 月 12 日，TiDB 发布 2.1 RC5 版。相比 2.1 RC4 版本，该版本对系统稳定性、优化器、统计信息以及执行引擎做了很多改进。
 
 ## TiDB
 
 + SQL 优化器
-    - 修复语句内包含内嵌的 `LEFT OUTER JOIN` 时，结果不正确的问题 [#7689](https://github.com/pingcap/tidb/pull/7689)
-    - 增强 `JOIN` 语句上的 predicate pushdown 优化规则 [#7645](https://github.com/pingcap/tidb/pull/7645)
-    - 修复 `UnionScan` 算子的 predicate pushdown 优化规则 [#7695](https://github.com/pingcap/tidb/pull/7695)
-    - 修复 `Union` 算子的 unique key 属性设置不正确的问题 [#7680](https://github.com/pingcap/tidb/pull/7680)
-    - 增强常量折叠的优化规则 [#7696](https://github.com/pingcap/tidb/pull/7696)
-    - 把常量传播后的 filter 是 null 的 data source 优化成 table dual [#7756](https://github.com/pingcap/tidb/pull/7756)
-+ SQL 执行引擎
-    - 优化事务内读请求的性能 [#7717](https://github.com/pingcap/tidb/pull/7717)
-    - 优化部分执行器 Chunk 内存分配的开销 [#7540](https://github.com/pingcap/tidb/pull/7540)
-    - 修复点查全部为 NULL 的列导致数组越界的问题 [#7790](https://github.com/pingcap/tidb/pull/7790)
+    - 修复 `IndexReader` 在某些情况下读取的 handle 不正确的问题 [#8132](https://github.com/pingcap/tidb/pull/8132)
+    - 修复 `IndexScan Prepared` 语句在使用 `Plan Cache` 的时候的问题 [#8055](https://github.com/pingcap/tidb/pull/8055)
+    - 修复 `Union` 语句结果不稳定的问题 [#8165](https://github.com/pingcap/tidb/pull/8165)
++ 执行器
+    - 提升 TiDB 插入和更新宽表的性能 [#8024](https://github.com/pingcap/tidb/pull/8024)
+    - 内建函数 `Truncate` 支持 unsigned `int` 参数 [#8068](https://github.com/pingcap/tidb/pull/8068)
+    - 修复转换 JSON 数据到 decimal 类型出错的问题 [#8109](https://github.com/pingcap/tidb/pull/8109)
+    - 修复 float 类型在 `Update` 时出错的问题 [#8170](https://github.com/pingcap/tidb/pull/8170)
++ 统计信息
+    - 修复点查在某些情况下，统计信息出现错误的问题 [#8035](https://github.com/pingcap/tidb/pull/8035)
+    - 修复统计信息某些情况下在 primary key 的选择率的问题 [#8149](https://github.com/pingcap/tidb/pull/8149)
+    - 修复被删除的表的统计信息长时间没有清理的问题 [#8182](https://github.com/pingcap/tidb/pull/8182)
 + Server
-    - 修复配置文件里内存配额选项不生效的问题 [#7729](https://github.com/pingcap/tidb/pull/7729)
-    - 添加 tidb_force_priority 系统变量用来整体设置语句执行的优先级 [#7694](https://github.com/pingcap/tidb/pull/7694)
-    - 支持使用 `admin show slow` 语句来获取 SLOW QUERY LOG [#7785](https://github.com/pingcap/tidb/pull/7785)
-+ 兼容性
-    - 修复 `information_schema.schemata` 里 `charset/collation` 结果不正确的问题 [#7751](https://github.com/pingcap/tidb/pull/7751)
-    - 修复 `hostname` 系统变量的值为空的问题 [#7750](https://github.com/pingcap/tidb/pull/7750)
-+ 表达式
-    - 内建函数 `AES_ENCRYPT/AES_DECRYPT` 支持 `init_vecter` 参数 [#7425](https://github.com/pingcap/tidb/pull/7425)
-    - 修复部分表达式 `Format` 结果不正确的问题 [#7770](https://github.com/pingcap/tidb/pull/7770)
-    - 支持内建函数 `JSON_LENGTH` [#7739](https://github.com/pingcap/tidb/pull/7739)
-    - 修复 unsigned integer 类型 cast 为 decimal 类型结果不正确的问题 [#7792](https://github.com/pingcap/tidb/pull/7792)
-+ DML
-    - 修复 `INSERT … ON DUPLICATE KEY UPDATE` 语句在 unique key 更新时结果不正确的问题 [#7675](https://github.com/pingcap/tidb/pull/7675)
+    + 提升日志的可读性，完善日志信息
+        - [#8063](https://github.com/pingcap/tidb/pull/8063)
+        - [#8053](https://github.com/pingcap/tidb/pull/8053)
+        - [#8224](https://github.com/pingcap/tidb/pull/8224)
+    - 修复获取 `infoschema.profiling` 表数据出错的问题 [#8096](https://github.com/pingcap/tidb/pull/8096)
+    - 替换 unix socket，使用 pumps client 来写 binlog [#8098](https://github.com/pingcap/tidb/pull/8098)
+    - 增加环境变量 `tidb_slow_log_threshold` 动态设置 slow log 的阈值 [#8094](https://github.com/pingcap/tidb/pull/8094)
+    - 增加环境变量 `tidb_query_log_max_len` 动态设置日志中被截断的原始 SQL 语句的长度 [#8200](https://github.com/pingcap/tidb/pull/8200)
+    - 增加环境变量 `tidb_opt_write_row_id` 来控制是否允许写入 `_tidb_rowid` [#8218](https://github.com/pingcap/tidb/pull/8218)
+    - ticlient `Scan` 命令增加边界，解决数据扫出边界的问题 [#8081](https://github.com/pingcap/tidb/pull/8081)，[#8247](https://github.com/pingcap/tidb/pull/8247)
 + DDL
-    - 修复在新建的 timestamp 类型的列上新建索引时，索引值没有做时区转换的问题 [#7724](https://github.com/pingcap/tidb/pull/7724)
-    - 支持 enum 类型 append 新的值 [#7767](https://github.com/pingcap/tidb/pull/7767)
-    - 快速新建 etcd session，使网络隔离后，集群更快恢复可用 [#7774](https://github.com/pingcap/tidb/pull/7774)
+    - 修复在事务中某些情况下执行 DDL 语句出错的问题 [#8056](https://github.com/pingcap/tidb/pull/8056)
+    - 修复 partition 分区表执行 `truncate table` 没有生效的问题 [#8103](https://github.com/pingcap/tidb/pull/8103)
+    - 修复某些情况下 DDL 操作在被 cancel 之后没有正确回滚的问题 [#8057](https://github.com/pingcap/tidb/pull/8057)
+    - 增加命令 `admin show next_row_id`，返回下一个可用的行 ID [#8268](https://github.com/pingcap/tidb/pull/8268)
 
 ## PD
 
-+ 新特性
-    - 添加获取按大小逆序排序的 Region 列表 API (/size) [#1254](https://github.com/pingcap/pd/pull/1254)
-+ 功能改进
-    - Region API 会返回更详细的信息 [#1252](https://github.com/pingcap/pd/pull/1252)
-+ Bug 修复
-    - 修复 PD 切换 leader 以后 `adjacent-region-scheduler` 可能会导致 crash 的问题 [#1250](https://github.com/pingcap/pd/pull/1250)
++ 修复 `pd-ctl` 读取 Region key 的相关问题
+    - [#1298](https://github.com/pingcap/pd/pull/1298)
+    - [#1299](https://github.com/pingcap/pd/pull/1299)
+    - [#1308](https://github.com/pingcap/pd/pull/1308)
+
+- 修复 `regions/check` API 输出错误的问题 [#1311](https://github.com/pingcap/pd/pull/1311)
+- 修复 PD join 失败后无法重新 join 的问题 [#1279](https://github.com/pingcap/pd/pull/1279)
+- 修复某些情况下 watch leader 会丢失事件的问题 [#1317](https://github.com/pingcap/pd/pull/1317)
 
 ## TiKV
 
-+ 性能优化
-    - 优化函数下推的并发支持 [#3515](https://github.com/tikv/tikv/pull/3515)
-+ 新特性
-    - 添加对 Log 函数的支持 [#3603](https://github.com/tikv/tikv/pull/3603)
-    - 添加对 `sha1` 函数的支持 [#3612](https://github.com/tikv/tikv/pull/3612)
-    - 添加 `truncate_int` 函数的支持 [#3532](https://github.com/tikv/tikv/pull/3532)
-    - 添加 `year` 函数的支持 [#3622](https://github.com/tikv/tikv/pull/3622)
-    - 添加 `truncate_real` 函数的支持 [#3633](https://github.com/tikv/tikv/pull/3633)
-+ Bug 修复
-    - 修正时间函数相关的报错行为 [#3487](https://github.com/tikv/tikv/pull/3487) [#3615](https://github.com/tikv/tikv/pull/3615)
-    - 修复字符串解析成时间与 TiDB 不一致的问题 [#3589](https://github.com/tikv/tikv/pull/3589)
+- 优化 `WriteConflict` 报错信息 [#3750](https://github.com/tikv/tikv/pull/3750)
+- 增加 panic 标记文件 [#3746](https://github.com/tikv/tikv/pull/3746)
+- 降级 grpcio，避免新版本 gRPC 导致的 segment fault 问题 [#3650](https://github.com/tikv/tikv/pull/3650)
+- 增加 `kv_scan` 接口扫描上界的限制 [#3749](https://github.com/tikv/tikv/pull/3749)
+
+## Tools
+
+- TiDB 支持 TiDB Binlog cluster，不兼容旧版本 TiDB Binlog [#8093](https://github.com/pingcap/tidb/pull/8093)，[使用文档](https://github.com/pingcap/docs-cn/blob/master/v2.1/reference/tidb-binlog-overview.md)
