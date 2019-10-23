@@ -1,365 +1,48 @@
 ---
-title: crwdns188522:0crwdne188522:0
-category: crwdns188524:0crwdne188524:0
+title: crwdns187174:0crwdne187174:0
+category: crwdns187176:0crwdne187176:0
 aliases:
-  - 'crwdns188526:0crwdne188526:0'
+  - 'crwdns187178:0crwdne187178:0'
 ---
 
-# crwdns188528:0crwdne188528:0
+# crwdns187180:0crwdne187180:0
 
-crwdns188530:0crwdne188530:0
+## crwdns187182:0crwdne187182:0
 
-crwdns188532:0crwdne188532:0
+crwdns187184:0crwdne187184:0
 
-| crwdns188534:0crwdne188534:0 | crwdns188536:0crwdne188536:0 | crwdns188538:0crwdne188538:0 |
-| ---------------------------- | ---------------------------- | ---------------------------- |
-| crwdns188540:0crwdne188540:0 | crwdns188542:0crwdne188542:0 | crwdns188544:0crwdne188544:0 |
-| crwdns188546:0crwdne188546:0 | crwdns188548:0crwdne188548:0 | crwdns188550:0crwdne188550:0 |
-| crwdns188552:0crwdne188552:0 | crwdns188554:0crwdne188554:0 | crwdns188556:0crwdne188556:0 |
-| crwdns188558:0crwdne188558:0 | crwdns188560:0crwdne188560:0 | crwdns188562:0crwdne188562:0 |
-| crwdns188564:0crwdne188564:0 | crwdns188566:0crwdne188566:0 | crwdns188568:0crwdne188568:0 |
-| crwdns188570:0crwdne188570:0 | crwdns188572:0crwdne188572:0 | crwdns188574:0crwdne188574:0 |
-| crwdns188576:0crwdne188576:0 | crwdns188578:0crwdne188578:0 | crwdns188580:0crwdne188580:0 |
-| crwdns188582:0crwdne188582:0 | crwdns188584:0crwdne188584:0 | crwdns188586:0crwdne188586:0 |
-| crwdns188588:0crwdne188588:0 | crwdns188590:0crwdne188590:0 | crwdns188592:0crwdne188592:0 |
+crwdns187186:0crwdne187186:0
 
-## crwdns188594:0crwdne188594:0
+```bash
+crwdns187188:0crwdne187188:0
+```
 
-crwdns188596:0crwdne188596:0
+## crwdns187190:0crwdne187190:0
 
-1. crwdns188598:0crwdne188598:0
+crwdns187192:0crwdne187192:0
 
-    ```ini
-    crwdns188600:0[tidb_servers]crwdnd188600:0[pd_servers]crwdnd188600:0[tikv_servers]crwdnd188600:0[monitored_servers]crwdnd188600:0[monitoring_servers]crwdnd188600:0[grafana_servers]crwdne188600:0
-    ```
+crwdns187194:0crwdne187194:0
 
-    crwdns188602:0crwdne188602:0
+```bash
+crwdns187196:0crwdne187196:0
+```
 
-    | crwdns188604:0crwdne188604:0     | crwdns188606:0crwdne188606:0     | crwdns188608:0crwdne188608:0     |
-    | -------------------------------- | -------------------------------- | -------------------------------- |
-    | crwdns188610:0crwdne188610:0     | crwdns188612:0crwdne188612:0     | crwdns188614:0crwdne188614:0     |
-    | crwdns188616:0crwdne188616:0     | crwdns188618:0crwdne188618:0     | crwdns188620:0crwdne188620:0     |
-    | crwdns188622:0crwdne188622:0     | crwdns188624:0crwdne188624:0     | crwdns188626:0crwdne188626:0     |
-    | crwdns188628:0crwdne188628:0     | crwdns188630:0crwdne188630:0     | crwdns188632:0crwdne188632:0     |
-    | crwdns188634:0crwdne188634:0     | crwdns188636:0crwdne188636:0     | crwdns188638:0crwdne188638:0     |
-    | **crwdns188640:0crwdne188640:0** | **crwdns188642:0crwdne188642:0** | **crwdns188644:0crwdne188644:0** |
-    | **crwdns188646:0crwdne188646:0** | **crwdns188648:0crwdne188648:0** | **crwdns188650:0crwdne188650:0** |
-    | crwdns188652:0crwdne188652:0     | crwdns188654:0crwdne188654:0     | crwdns188656:0crwdne188656:0     |
-    | crwdns188658:0crwdne188658:0     | crwdns188660:0crwdne188660:0     | crwdns188662:0crwdne188662:0     |
-    | crwdns188664:0crwdne188664:0     | crwdns188666:0crwdne188666:0     | crwdns188668:0crwdne188668:0     |
-    | crwdns188670:0crwdne188670:0     | crwdns188672:0crwdne188672:0     | crwdns188674:0crwdne188674:0     |
+## crwdns187198:0crwdne187198:0
 
-2. crwdns188676:0crwdne188676:0
+crwdns187200:0crwdne187200:0
 
-    crwdns188678:0crwdne188678:0
+crwdns187202:0crwdne187202:0
 
-    ```bash
-    crwdns188680:0crwdne188680:0
-    ```
+```bash
+crwdns187204:0crwdne187204:0
+```
 
-    > **crwdns188682:0crwdne188682:0**
-    > 
-    > crwdns188684:0crwdne188684:0
+## crwdns187206:0crwdne187206:0
 
-3. crwdns188686:0crwdne188686:0
+crwdns187208:0crwdne187208:0
 
-    crwdns188688:0crwdne188688:0
+crwdns187210:0crwdne187210:0
 
-    ```bash
-    crwdns188690:0crwdne188690:0
-    ```
-
-4. crwdns188692:0crwdne188692:0
-
-    crwdns188694:0crwdne188694:0
-
-    ```bash
-    crwdns188696:0crwdne188696:0
-    ```
-
-5. crwdns188698:0crwdne188698:0
-
-    crwdns188700:0crwdne188700:0
-
-    ```bash
-    crwdns188702:0crwdne188702:0
-    ```
-
-6. crwdns188704:0crwdne188704:0
-
-    crwdns188706:0crwdne188706:0
-
-## crwdns188708:0crwdne188708:0
-
-crwdns188710:0crwdne188710:0
-
-1. crwdns188712:0[pd_servers]crwdne188712:0
-
-    ```ini
-    crwdns188714:0[tidb_servers]crwdnd188714:0[pd_servers]crwdnd188714:0[tikv_servers]crwdnd188714:0[monitored_servers]crwdnd188714:0[monitoring_servers]crwdnd188714:0[grafana_servers]crwdne188714:0
-    ```
-
-    crwdns188716:0crwdne188716:0
-
-    | crwdns188718:0crwdne188718:0     | crwdns188720:0crwdne188720:0     | crwdns188722:0crwdne188722:0     |
-    | -------------------------------- | -------------------------------- | -------------------------------- |
-    | crwdns188724:0crwdne188724:0     | crwdns188726:0crwdne188726:0     | crwdns188728:0crwdne188728:0     |
-    | crwdns188730:0crwdne188730:0     | crwdns188732:0crwdne188732:0     | crwdns188734:0crwdne188734:0     |
-    | crwdns188736:0crwdne188736:0     | crwdns188738:0crwdne188738:0     | crwdns188740:0crwdne188740:0     |
-    | **crwdns188742:0crwdne188742:0** | **crwdns188744:0crwdne188744:0** | **crwdns188746:0crwdne188746:0** |
-    | crwdns188748:0crwdne188748:0     | crwdns188750:0crwdne188750:0     | crwdns188752:0crwdne188752:0     |
-    | crwdns188754:0crwdne188754:0     | crwdns188756:0crwdne188756:0     | crwdns188758:0crwdne188758:0     |
-    | crwdns188760:0crwdne188760:0     | crwdns188762:0crwdne188762:0     | crwdns188764:0crwdne188764:0     |
-    | crwdns188766:0crwdne188766:0     | crwdns188768:0crwdne188768:0     | crwdns188770:0crwdne188770:0     |
-    | crwdns188772:0crwdne188772:0     | crwdns188774:0crwdne188774:0     | crwdns188776:0crwdne188776:0     |
-    | crwdns188778:0crwdne188778:0     | crwdns188780:0crwdne188780:0     | crwdns188782:0crwdne188782:0     |
-
-2. crwdns188784:0crwdne188784:0
-
-    crwdns188786:0crwdne188786:0
-
-    ```bash
-    crwdns188788:0crwdne188788:0
-    ```
-
-3. crwdns188790:0crwdne188790:0
-
-    crwdns188792:0crwdne188792:0
-
-    ```bash
-    crwdns188794:0crwdne188794:0
-    ```
-
-4. crwdns188796:0{deploy_dir}crwdne188796:0
-
-    1. crwdns188798:0crwdne188798:0
-
-    2. crwdns188800:0crwdne188800:0
-
-    3. crwdns188802:0crwdne188802:0
-
-        crwdns188804:0crwdne188804:0
-
-        ```bash
-        crwdns188806:0{deploy_dir}crwdne188806:0
-        ```
-
-    4. crwdns188808:0crwdne188808:0
-
-        crwdns188810:0crwdne188810:0
-
-        ```bash
-        crwdns188812:0crwdne188812:0
-        ```
-
-5. crwdns188814:0crwdne188814:0
-
-    crwdns188816:0crwdne188816:0
-
-    ```bash
-    crwdns188818:0crwdne188818:0
-    ```
-
-6. crwdns188820:0crwdne188820:0
-
-    crwdns188822:0crwdne188822:0
-
-    ```bash
-    crwdns188824:0crwdne188824:0
-    ```
-
-7. crwdns188826:0crwdne188826:0
-
-    crwdns188828:0crwdne188828:0
-
-    ```bash
-    crwdns188830:0crwdne188830:0
-    ```
-
-8. crwdns188832:0crwdne188832:0
-
-## crwdns188834:0crwdne188834:0
-
-crwdns188836:0crwdne188836:0
-
-1. crwdns188838:0crwdne188838:0
-
-    crwdns188840:0crwdne188840:0
-
-    ```bash
-    crwdns188842:0crwdne188842:0
-    ```
-
-2. crwdns188844:0crwdne188844:0
-
-    ```ini
-    crwdns188846:0[tidb_servers]crwdnd188846:0[pd_servers]crwdnd188846:0[tikv_servers]crwdnd188846:0[monitored_servers]crwdnd188846:0[monitoring_servers]crwdnd188846:0[grafana_servers]crwdne188846:0
-    ```
-
-    crwdns188848:0crwdne188848:0
-
-    | crwdns188850:0crwdne188850:0     | crwdns188852:0crwdne188852:0     | crwdns188854:0crwdne188854:0     |
-    | -------------------------------- | -------------------------------- | -------------------------------- |
-    | crwdns188856:0crwdne188856:0     | crwdns188858:0crwdne188858:0     | crwdns188860:0crwdne188860:0     |
-    | crwdns188862:0crwdne188862:0     | crwdns188864:0crwdne188864:0     | crwdns188866:0crwdne188866:0     |
-    | crwdns188868:0crwdne188868:0     | crwdns188870:0crwdne188870:0     | crwdns188872:0crwdne188872:0     |
-    | crwdns188874:0crwdne188874:0     | crwdns188876:0crwdne188876:0     | crwdns188878:0crwdne188878:0     |
-    | **crwdns188880:0crwdne188880:0** | **crwdns188882:0crwdne188882:0** | **crwdns188884:0crwdne188884:0** |
-    | crwdns188886:0crwdne188886:0     | crwdns188888:0crwdne188888:0     | crwdns188890:0crwdne188890:0     |
-    | crwdns188892:0crwdne188892:0     | crwdns188894:0crwdne188894:0     | crwdns188896:0crwdne188896:0     |
-    | crwdns188898:0crwdne188898:0     | crwdns188900:0crwdne188900:0     | crwdns188902:0crwdne188902:0     |
-    | crwdns188904:0crwdne188904:0     | crwdns188906:0crwdne188906:0     | crwdns188908:0crwdne188908:0     |
-
-3. crwdns188910:0crwdne188910:0
-
-    crwdns188912:0crwdne188912:0
-
-    ```bash
-    crwdns188914:0crwdne188914:0
-    ```
-
-4. crwdns188916:0crwdne188916:0
-
-## crwdns188918:0crwdne188918:0
-
-crwdns188920:0crwdne188920:0
-
-1. crwdns188922:0crwdne188922:0
-
-    1. crwdns188924:0crwdne188924:0
-
-        crwdns188926:0crwdne188926:0
-
-        ```bash
-        crwdns188928:0crwdne188928:0
-        ```
-
-    2. crwdns188930:0crwdne188930:0
-
-        crwdns188932:0crwdne188932:0
-
-        ```bash
-        crwdns188934:0crwdne188934:0
-        ```
-
-2. crwdns188936:0crwdne188936:0
-
-    crwdns188938:0crwdne188938:0
-
-    ```bash
-    crwdns188940:0crwdne188940:0
-    ```
-
-3. crwdns188942:0crwdne188942:0
-
-    crwdns188944:0crwdne188944:0
-
-    ```bash
-    crwdns188946:0crwdne188946:0
-    ```
-
-4. crwdns188948:0crwdne188948:0
-
-    ```ini
-    crwdns188950:0[tidb_servers]crwdnd188950:0[pd_servers]crwdnd188950:0[tikv_servers]crwdnd188950:0[monitored_servers]crwdnd188950:0[monitoring_servers]crwdnd188950:0[grafana_servers]crwdne188950:0
-    ```
-
-    crwdns188952:0crwdne188952:0
-
-    | crwdns188954:0crwdne188954:0     | crwdns188956:0crwdne188956:0     | crwdns188958:0crwdne188958:0     |
-    | -------------------------------- | -------------------------------- | -------------------------------- |
-    | crwdns188960:0crwdne188960:0     | crwdns188962:0crwdne188962:0     | crwdns188964:0crwdne188964:0     |
-    | crwdns188966:0crwdne188966:0     | crwdns188968:0crwdne188968:0     | crwdns188970:0crwdne188970:0     |
-    | crwdns188972:0crwdne188972:0     | crwdns188974:0crwdne188974:0     | crwdns188976:0crwdne188976:0     |
-    | crwdns188978:0crwdne188978:0     | crwdns188980:0crwdne188980:0     | crwdns188982:0crwdne188982:0     |
-    | crwdns188984:0crwdne188984:0     | crwdns188986:0crwdne188986:0     | crwdns188988:0crwdne188988:0     |
-    | crwdns188990:0crwdne188990:0     | crwdns188992:0crwdne188992:0     | crwdns188994:0crwdne188994:0     |
-    | crwdns188996:0crwdne188996:0     | crwdns188998:0crwdne188998:0     | crwdns189000:0crwdne189000:0     |
-    | crwdns189002:0crwdne189002:0     | crwdns189004:0crwdne189004:0     | crwdns189006:0crwdne189006:0     |
-    | **crwdns189008:0crwdne189008:0** | **crwdns189010:0crwdne189010:0** | **crwdns189012:0crwdne189012:0** |
-
-5. crwdns189014:0crwdne189014:0
-
-    crwdns189016:0crwdne189016:0
-
-    ```bash
-    crwdns189018:0crwdne189018:0
-    ```
-
-6. crwdns189020:0crwdne189020:0
-
-## crwdns189022:0crwdne189022:0
-
-crwdns189024:0crwdne189024:0
-
-1. crwdns189026:0crwdne189026:0
-
-    1. crwdns189028:0crwdne189028:0
-
-        crwdns189030:0crwdne189030:0
-
-        ```bash
-        crwdns189032:0crwdne189032:0
-        ```
-
-    2. crwdns189034:0crwdne189034:0
-
-        crwdns189036:0crwdne189036:0
-
-        ```bash
-        crwdns189038:0crwdne189038:0
-        ```
-
-2. crwdns189040:0crwdne189040:0
-
-    crwdns189042:0crwdne189042:0
-
-    ```bash
-    crwdns189044:0crwdne189044:0
-    ```
-
-3. crwdns189046:0crwdne189046:0
-
-    crwdns189048:0crwdne189048:0
-
-    ```bash
-    crwdns189050:0crwdne189050:0
-    ```
-
-4. crwdns189052:0crwdne189052:0
-
-    ```ini
-    crwdns189054:0[tidb_servers]crwdnd189054:0[pd_servers]crwdnd189054:0[tikv_servers]crwdnd189054:0[monitored_servers]crwdnd189054:0[monitoring_servers]crwdnd189054:0[grafana_servers]crwdne189054:0
-    ```
-
-    crwdns189056:0crwdne189056:0
-
-    | crwdns189058:0crwdne189058:0     | crwdns189060:0crwdne189060:0     | crwdns189062:0crwdne189062:0     |
-    | -------------------------------- | -------------------------------- | -------------------------------- |
-    | crwdns189064:0crwdne189064:0     | crwdns189066:0crwdne189066:0     | crwdns189068:0crwdne189068:0     |
-    | **crwdns189070:0crwdne189070:0** | **crwdns189072:0crwdne189072:0** | **crwdns189074:0crwdne189074:0** |
-    | crwdns189076:0crwdne189076:0     | crwdns189078:0crwdne189078:0     | crwdns189080:0crwdne189080:0     |
-    | crwdns189082:0crwdne189082:0     | crwdns189084:0crwdne189084:0     | crwdns189086:0crwdne189086:0     |
-    | crwdns189088:0crwdne189088:0     | crwdns189090:0crwdne189090:0     | crwdns189092:0crwdne189092:0     |
-    | crwdns189094:0crwdne189094:0     | crwdns189096:0crwdne189096:0     | crwdns189098:0crwdne189098:0     |
-    | crwdns189100:0crwdne189100:0     | crwdns189102:0crwdne189102:0     | crwdns189104:0crwdne189104:0     |
-    | crwdns189106:0crwdne189106:0     | crwdns189108:0crwdne189108:0     | crwdns189110:0crwdne189110:0     |
-    | crwdns189112:0crwdne189112:0     | crwdns189114:0crwdne189114:0     | crwdns189116:0crwdne189116:0     |
-
-5. crwdns189118:0crwdne189118:0
-
-    crwdns189120:0crwdne189120:0
-
-    ```bash
-    crwdns189122:0crwdne189122:0
-    ```
-
-6. crwdns189124:0crwdne189124:0
-
-    crwdns189126:0crwdne189126:0
-
-    ```bash
-    crwdns189128:0crwdne189128:0
-    ```
-
-7. crwdns189130:0crwdne189130:0
+```bash
+crwdns187212:0crwdne187212:0
+```
