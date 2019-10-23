@@ -1,65 +1,117 @@
 ---
-title: Data Migration 故障诊断
+title: 系统变量
 category: reference
 ---
 
-# Data Migration 故障诊断
+# 系统变量
 
-本文总结了在 DM 工具使用过程中一些常见的问题，并提供了相应的解决方案。
+MySQL 系统变量 (System Variables) 是一些系统参数，用于调整数据库运行时的行为，根据变量的作用范围分为全局范围有效（Global Scope）以及会话级别有效（Session Scope）。TiDB 支持 MySQL5.7 的所有系统变量，大部分变量仅仅是为了兼容性而支持，不会影响运行时行为。
 
-如果你在运行 DM 工具时出现了错误，请尝试以下解决方案：
+## 设置系统变量
 
-1. 执行 `query-status` 命令查看任务运行状态以及相关错误输出。
+通过 [`SET` 语句](/v2.1/reference/sql/statements/set-variable.md) 可以修改系统变量的值。进行修改时，还要考虑变量可修改的范围，不是所有的变量都能在全局/会话范围内进行修改。具体的可修改范围参考 [MySQL 动态变量文档](https://dev.mysql.com/doc/refman/5.7/en/dynamic-system-variables.html)。
 
-2. 查看与该错误相关的日志文件。日志文件位于 DM-master、DM-worker 部署节点上。然后查看[常见错误](#常见错误)以寻找相应的解决方案。
+### 全局范围值
 
-3. 如果该错误还没有相应的解决方案，并且你无法通过查询日志或监控指标自行解决此问题，你可以联系相关销售人员进行支持。
+* 在变量名前加 `GLOBAL` 关键词或者是使用 `@@global.` 作为修饰符:
 
-4. 一般情况下，错误处理完成后，只需使用 dmctl 重启任务即可。
-
-    ```bash
-    resume-task ${task name}
+    ```sql
+    SET GLOBAL autocommit = 1;
+    SET @@global.autocommit = 1;
     ```
 
-但在某些情况下，你还需要重置数据同步任务。有关何时需要重置以及如何重置，详见[重置数据同步任务](#重置数据同步任务)。
+### 会话范围值
 
-## 常见错误
+* 在变量名前加 `SESSION` 关键词或者是使用 `@@session.` 作为修饰符，或者是不加任何修饰符:
 
-### 执行 `query-status` 或查看日志时出现 `Access denied for user 'root'@'172.31.43.27' (using password: YES)`
+    ```sql
+    SET SESSION autocommit = 1;
+    SET @@session.autocommit = 1;
+    SET @@autocommit = 1;
+    ```
 
-在所有 DM 配置文件中，数据库相关的密码都必须使用经 dmctl 加密后的密文（若数据库密码为空，则无需加密）。有关如何使用 dmctl 加密明文密码，参见[使用 dmctl 加密上游 MySQL 用户密码](/v2.1/how-to/deploy/data-migration-with-ansible.md#使用-dmctl-加密上游-mysql-用户密码)。
+* `LOCAL` 以及 `@@local.` 是 `SESSION` 以及 `@@session.` 的同义词
 
-此外，在 DM 运行过程中，上下游数据库的用户必须具备相应的读写权限。在启动同步任务过程中，DM 会自动进行相应权限的前置检查，详见[上游 MySQL 实例配置前置检查](/v2.1/reference/tools/data-migration/precheck.md)。
+### 系统变量的作用机制
 
-### 处理不兼容的 DDL 语句
+* 会话范围的系统变量仅仅会在创建会话时才会根据全局范围系统变量初始化自己的值。更改全局范围的系统变量不会改变已经创建的会话正在使用的系统变量的值。
 
-你需要使用 dmctl 手动处理 TiDB 不兼容的 DDL 语句（包括手动跳过该 DDL 语句或使用用户指定的 DDL 语句替换原 DDL 语句，详见[跳过 (skip) 或替代执行 (replace) 异常的 SQL 语句](/v2.1/reference/tools/data-migration/skip-replace-sqls.md)）。
+    ```sql
+    mysql> SELECT @@GLOBAL.autocommit;
+    +---------------------+
+    | @@GLOBAL.autocommit |
+    +---------------------+
+    | ON                  |
+    +---------------------+
+    1 row in set (0.00 sec)
+
+    mysql> SELECT @@SESSION.autocommit;
+    +----------------------+
+    | @@SESSION.autocommit |
+    +----------------------+
+    | ON                   |
+    +----------------------+
+    1 row in set (0.00 sec)
+
+    mysql> SET GLOBAL autocommit = OFF;
+    Query OK, 0 rows affected (0.01 sec)
+
+    mysql> SELECT @@SESSION.autocommit; -- 会话范围的系统变量不会改变，会话中执行的事务依旧是以自动提交的形式来进行。
+    +----------------------+
+    | @@SESSION.autocommit |
+    +----------------------+
+    | ON                   |
+    +----------------------+
+    1 row in set (0.00 sec)
+
+    mysql> SELECT @@GLOBAL.autocommit;
+    +---------------------+
+    | @@GLOBAL.autocommit |
+    +---------------------+
+    | OFF                 |
+    +---------------------+
+    1 row in set (0.00 sec)
+
+    mysql> exit
+    Bye
+    $ mysql -h127.0.0.1 -P4000 -uroot -D test
+    Welcome to the MySQL monitor.  Commands end with ; or \g.
+    Your MySQL connection id is 3
+    Server version: 5.7.25-TiDB-None MySQL Community Server (Apache License 2.0)
+
+    Copyright (c) 2000, 2019, Oracle and/or its affiliates. All rights reserved.
+
+    Oracle is a registered trademark of Oracle Corporation and/or its
+    affiliates. Other names may be trademarks of their respective
+    owners.
+
+    Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
+
+    mysql> SELECT @@SESSION.autocommit; -- 新建的会话会使用新的全局变量。
+    +----------------------+
+    | @@SESSION.autocommit |
+    +----------------------+
+    | OFF                  |
+    +----------------------+
+    1 row in set (0.00 sec)
+    ```
+
+## TiDB 支持的 MySQL 系统变量
+
+下列系统变量是 TiDB 真正支持并且行为和 MySQL 一致：
+
+| 变量名                      | 作用域       | 说明                             |
+| ------------------------ | --------- | ------------------------------ |
+| autocommit               | GLOBAL \ | SESSION | 是否自动 Commit 事务       |
+| sql_mode                 | GLOBAL \ | SESSION | 支持部分 MySQL SQL mode， |
+| time_zone                | GLOBAL \ | SESSION | 数据库所使用的时区            |
+| tx_isolation             | GLOBAL \ | SESSION | 事务隔离级别               |
+| max\_execution\_time | GLOBAL \ | SESSION | 语句超时时间，单位为毫秒         |
 
 > **注意：**
 > 
-> TiDB 目前并不兼容 MySQL 支持的所有 DDL 语句。
+> `max_execution_time` 目前对所有类型的 `statement` 生效，并非只对 `SELECT` 语句生效。实际精度在 100ms 级别，而非更准确的毫秒级别。
 
-## 重置数据同步任务
+## TiDB 特有的系统变量
 
-在以下情况中，你需要重置整个数据同步任务：
-
-- 上游数据库中人为执行了 `RESET MASTER`，造成 relay log 同步出错
-
-- relay log 或上游 binlog event 损坏或者丢失
-
-此时，relay 处理单元通常会发生错误而退出，且无法优雅地自动恢复，因此需要通过手动方式恢复数据同步：
-
-1. 使用 `stop-task` 命令停止当前正在运行的所有同步任务。
-
-2. 使用 Ansible [停止整个 DM 集群](/v2.1/how-to/deploy/data-migration-with-ansible.md#第-10-步关闭-dm-集群)。
-
-3. 手动清理掉与 binlog event 被重置的 MySQL master 相对应的 DM-worker 的 relay log 目录。
-
-    - 如果是使用 Ansible 部署，relay log 目录即 `<deploy_dir>/relay_log` 目录。
-    - 如果是使用二进制文件手动部署，relay log 目录即 relay-dir 参数设置的目录。
-
-4. 清理掉下游已同步的数据。
-
-5. 使用 Ansible [启动整个 DM 集群](/v2.1/how-to/deploy/data-migration-with-ansible.md#第-9-步部署-dm-集群)。
-
-6. 以新的任务名重启数据同步任务，或设置 `remove-meta` 为 `true` 且 `task-mode` 为 `all`。
+参见 [TiDB 专用系统变量](/v2.1/reference/configuration/tidb-server/tidb-specific-variables.md)。
