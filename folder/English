@@ -1,12 +1,17 @@
 ---
-title: 函数和操作符概述
+title: Cast 函数和操作符
 category: user guide
 ---
 
-# 函数和操作符概述
+# Cast 函数和操作符
 
-TiDB 中函数和操作符使用方法与 MySQL 基本一致，详情参见: [Functions and Operators](https://dev.mysql.com/doc/refman/5.7/en/functions.html)。
+Cast 函数和操作符用于将某种数据类型的值转换为另一种数据类型。TiDB 中该函数和操作符的使用方法与 MySQL基本一致，详情参见: [Cast Functions and Operators](https://dev.mysql.com/doc/refman/5.7/en/cast-functions.html).
 
-在 SQL 语句中，表达式可用于诸如 `SELECT` 语句的 `ORDER BY` 或 `HAVING` 子句，`SELECT`/`DELETE`/`UPDATE` 语句的 `WHERE` 子句，或 `SET` 语句之类的地方。
+## Cast 函数和操作符表
 
-可使用字面值，列名，NULL，内置函数，操作符等来书写表达式。
+| 函数和操作符名                                                                                     | 功能描述              |
+| ------------------------------------------------------------------------------------------- | ----------------- |
+| [`BINARY`](https://dev.mysql.com/doc/refman/5.7/en/cast-functions.html#operator_binary)     | 将一个字符串转换成一个二进制字符串 |
+| [`CAST()`](https://dev.mysql.com/doc/refman/5.7/en/cast-functions.html#function_cast)       | 将一个值转换成一个确定类型     |
+| [`CONVERT()`](https://dev.mysql.com/doc/refman/5.7/en/cast-functions.html#function_convert) | 将一个值转换成一个确定类型     |
+
