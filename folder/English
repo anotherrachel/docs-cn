@@ -1,78 +1,47 @@
 ---
-title: TiDB 版本发布历史
-category: release
+title: TiDB RC4 Release Notes
+category: Releases
 ---
 
-# TiDB 版本发布历史
+# TiDB RC4 Release Notes
 
-TiDB 历史版本发布声明如下：
+2017 年 8 月 4 日，TiDB 正式发布 RC4 版。该版本对 MySQL 兼容性、SQL 优化器、系统稳定性、性能做了大量的工作。性能方面重点优化了写入速度，计算任务调度支持优先级，避免分析型大事务影响在线事务。SQL 优化器全新改版，查询代价估算更加准确，且能够自动选择 Join 物理算子。功能方面进一步 MySQL 兼容性。 同时为了更好的支持 OLAP 业务，开源了 TiSpark 项目，可以通过 Spark 读取和分析 TiKV 中的数据。
 
-## 3.0
+## TiDB
 
-- [3.0.4](/dev/releases/3.0.4.md)
-- [3.0.3](/dev/releases/3.0.3.md)
-- [3.0.2](/dev/releases/3.0.2.md)
-- [3.0.1](/dev/releases/3.0.1.md)
-- [3.0 GA](/dev/releases/3.0-ga.md)
-- [3.0.0-rc.3](/dev/releases/3.0.0-rc.3.md)
-- [3.0.0-rc.2](/dev/releases/3.0.0-rc.2.md)
-- [3.0.0-rc.1](/dev/releases/3.0.0-rc.1.md)
-- [3.0.0-beta.1](/dev/releases/3.0.0-beta.1.md)
-- [3.0.0-beta](/dev/releases/3.0beta.md)
++ SQL 查询优化器重构
+    - 更好的支持 TopN 查询
+    - 支持 Join 算子根据代价自动选择
+    - 更完善的 Projection Elimination
++ Schema 版本检查区分 Table，避免 DDL 干扰其他正在执行的事务
++ 支持 BatchIndexJoin
++ 完善 Explain 语句
++ 提升 Index Scan 性能
++ 大量 MySQL 兼容性相关功能
++ 支持 Json 类型及其操作
++ 支持查询优先级、隔离级别的设置
 
-## 2.1
+## PD
 
-- [2.1.17](/dev/releases/2.1.17.md)
-- [2.1.16](/dev/releases/2.1.16.md)
-- [2.1.15](/dev/releases/2.1.15.md)
-- [2.1.14](/dev/releases/2.1.14.md)
-- [2.1.13](/dev/releases/2.1.13.md)
-- [2.1.12](/dev/releases/2.1.12.md)
-- [2.1.11](/dev/releases/2.1.11.md)
-- [2.1.10](/dev/releases/2.1.10.md)
-- [2.1.9](/dev/releases/2.1.9.md)
-- [2.1.8](/dev/releases/2.1.8.md)
-- [2.1.7](/dev/releases/2.1.7.md)
-- [2.1.6](/dev/releases/2.1.6.md)
-- [2.1.5](/dev/releases/2.1.5.md)
-- [2.1.4](/dev/releases/2.1.4.md)
-- [2.1.3](/dev/releases/2.1.3.md)
-- [2.1.2](/dev/releases/2.1.2.md)
-- [2.1.1](/dev/releases/2.1.1.md)
-- [2.1 GA](/dev/releases/2.1ga.md)
-- [2.1 RC5](/dev/releases/21rc5.md)
-- [2.1 RC4](/dev/releases/21rc4.md)
-- [2.1 RC3](/dev/releases/21rc3.md)
-- [2.1 RC2](/dev/releases/21rc2.md)
-- [2.1 RC1](/dev/releases/21rc1.md)
-- [2.1 Beta](/dev/releases/21beta.md)
++ 支持通过 PD 设置 TiKV location labels
++ 调度优化
+    - 支持 PD 主动向 TiKV 下发调度命令
+    - 加快 region heartbeat 响应速度
+    - 优化 balance 算法
++ 优化数据加载，加快 failover 速度
 
-## 2.0
+## TiKV
 
-- [2.0.11](/dev/releases/2.0.11.md)
-- [2.0.10](/dev/releases/2.0.10.md)
-- [2.0.9](/dev/releases/209.md)
-- [2.0.8](/dev/releases/208.md)
-- [2.0.7](/dev/releases/207.md)
-- [2.0.6](/dev/releases/206.md)
-- [2.0.5](/dev/releases/205.md)
-- [2.0.4](/dev/releases/204.md)
-- [2.0.3](/dev/releases/203.md)
-- [2.0.2](/dev/releases/202.md)
-- [2.0.1](/dev/releases/201.md)
-- [2.0](/dev/releases/2.0ga.md)
-- [2.0 RC5](/dev/releases/2rc5.md)
-- [2.0 RC4](/dev/releases/2rc4.md)
-- [2.0 RC3](/dev/releases/2rc3.md)
-- [2.0 RC1](/dev/releases/2rc1.md)
-- [1.1 Beta](/dev/releases/11beta.md)
-- [1.1 Alpha](/dev/releases/11alpha.md)
++ 支持查询优先级设置
++ 支持 RC 隔离级别
++ 完善 Jepsen，提升稳定性
++ 支持 Document Store
++ Coprocessor 支持更多下推函数
++ 提升性能，提升稳定性
 
-## 1.0
+## TiSpark Beta Release
 
-- [1.0](/dev/releases/ga.md)
-- [Pre-GA](/dev/releases/prega.md)
-- [RC4](/dev/releases/rc4.md)
-- [RC3](/dev/releases/rc3.md)
-- [RC2](/dev/releases/rc2.md)
-- [RC1](/dev/releases/rc1.md)
++ 支持谓词下推
++ 支持聚合下推
++ 支持范围裁剪
++ 通过 TPC-H 测试 (除去一个需要 View 的 Query)
