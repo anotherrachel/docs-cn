@@ -1,205 +1,127 @@
 ---
-title: 从 AWS Aurora MySQL 迁移数据
-summary: 使用 DM 从 AWS Aurora MySQL 迁移数据。
+title: Data Migration 错误说明和诊断
 category: reference
 ---
 
-# 从 AWS Aurora MySQL 迁移数据
+# Data Migration 错误说明和诊断
 
-本文介绍如何使用 DM 从 [AWS Aurora MySQL](https://aws.amazon.com/cn/rds/aurora/details/mysql-details/) 迁移数据到 TiDB。
+本文介绍了 Data Migration (DM) 输出错误信息的详细含义、根据错误信息进行诊断的具体方法、常见错误的运维方法。
 
-## 第 1 步：在 Aurora 集群中启用 binlog
+## DM 错误系统
 
-假设有两个 Aurora 集群需要迁移数据到 TiDB，其集群信息如下，其中 Aurora-1 包含一个独立的读取器节点。
+DM 1.0.0-GA 版本中引入了新的错误系统。该系统：
 
-| 集群       | 终端节点                                                          | 端口   | 角色  |
-|:-------- |:------------------------------------------------------------- |:---- |:--- |
-| Aurora-1 | pingcap-1.h8emfqdptyc4.us-east-2.rds.amazonaws.com            | 3306 | 写入器 |
-| Aurora-1 | pingcap-1-us-east-2a.h8emfqdptyc4.us-east-2.rds.amazonaws.com | 3306 | 读取器 |
-| Aurora-2 | pingcap-2.h8emfqdptyc4.us-east-2.rds.amazonaws.com            | 3306 | 写入器 |
++ 增加了错误码机制。
++ 增加了 `class`、`scope`、`level` 等错误信息。
++ 优化了错误描述内容、错误调用链信息和调用堆栈信息。
 
-DM 在增量同步阶段依赖 `ROW` 格式的 binlog，如果未启用 binlog 及设置正确的 binlog 格式，则不能正常使用 DM 进行数据同步，具体可参见[检查内容](/dev/reference/tools/data-migration/precheck.md#检查内容)。
+错误系统的详细设计和实现，可参阅 [RFC 文档: Proposal: Improve Error System](https://github.com/pingcap/dm/blob/master/docs/RFCS/20190722_error_handling.md)。
 
-> **注意：**
-> 
-> Aurora 读取器不能开启 binlog，因此不能作为 DM 数据迁移时的上游 master server。
+## 错误消息说明
 
-如果需要基于 GTID 进行数据迁移，还需要为 Aurora 集群启用 GTID 支持。
+以下是 DM 实际输出的一条错误信息。本文根据这条信息，对各个字段作详细说明。
 
-> **注意：**
-> 
-> 基于 GTID 的数据迁移需要 MySQL 5.7 (Aurora 2.04.1) 或更高版本。
-
-### 为 Aurora 集群修改 binlog 相关参数
-
-在 Aurora 集群中，binlog 相关参数是**集群参数组中的集群级参数**，有关如何为 Aurora 集群启用 binlog 支持，请参考[在复制主实例上启用二进制日志记录](https://docs.aws.amazon.com/zh_cn/AmazonRDS/latest/AuroraUserGuide/AuroraMySQL.Replication.MySQL.html#AuroraMySQL.Replication.MySQL.EnableBinlog)。在使用 DM 进行数据迁移时，需要将 `binlog_format` 参数设置为 `ROW`。
-
-如果需要基于 GTID 进行数据迁移，需要将 `gtid-mode` 与 `enforce_gtid_consistency` 均设置为 `ON`。有关如何为 Aurora 集群启用基于 GTID 的数据迁移支持，请参考 [Configuring GTID-Based Replication for an Aurora MySQL Cluster](https://docs.aws.amazon.com/zh_cn/AmazonRDS/latest/AuroraUserGuide/mysql-replication-gtid.html#mysql-replication-gtid.configuring-aurora)。
-
-> **注意：**
-> 
-> 在 Aurora 管理后台中，`gtid_mode` 参数表示为 `gtid-mode`。
-
-## 第 2 步：部署 DM 集群
-
-目前推荐使用 DM-Ansible 部署 DM 集群，具体部署方法参照[使用 DM-Ansible 部署 DM 集群](/dev/how-to/deploy/data-migration-with-ansible.md)。
-
-> **注意：**
-> 
-> - 在 DM 所有的配置文件中，数据库的密码要使用 dmctl 加密后的密文。如果数据库密码为空，则不需要加密。关于如何使用 dmctl 加密明文密码，参考[使用 dmctl 加密上游 MySQL 用户密码](/dev/how-to/deploy/data-migration-with-ansible.md#使用-dmctl-加密上游-mysql-用户密码)。
-> - 上下游数据库用户必须拥有相应的读写权限。
-
-## 第 3 步：检查集群信息
-
-使用 DM-Ansible 部署 DM 集群后，相关配置信息如下：
-
-- DM 集群相关组件配置信息
-
-    | 组件         | 主机           | 端口   |
-    |:---------- |:------------ |:---- |
-    | dm_worker1 | 172.16.10.72 | 8262 |
-    | dm_worker2 | 172.16.10.73 | 8262 |
-    | dm_master  | 172.16.10.71 | 8261 |
-
-- 上下游数据库实例相关信息
-
-    | 数据库实例       | 主机                                                 | 端口   | 用户名  | 加密密码                             |
-    |:----------- |:-------------------------------------------------- |:---- |:---- |:-------------------------------- |
-    | 上游 Aurora-1 | pingcap-1.h8emfqdptyc4.us-east-2.rds.amazonaws.com | 3306 | root | VjX8cEeTX+qcvZ3bPaO4h0C80pe/1aU= |
-    | 上游 Aurora-2 | pingcap-2.h8emfqdptyc4.us-east-2.rds.amazonaws.com | 3306 | root | VjX8cEeTX+qcvZ3bPaO4h0C80pe/1aU= |
-    | 下游 TiDB     | 172.16.10.83                                       | 4000 | root |                                  |
-
-- dm-master 进程配置文件 `{ansible deploy}/conf/dm-master.toml` 中的配置
-
-    ```toml
-    # Master 配置。
-
-    [[deploy]]
-    source-id = "mysql-replica-01"
-    dm-worker = "172.16.10.72:8262"
-
-    [[deploy]]
-    source-id = "mysql-replica-02"
-    dm-worker = "172.16.10.73:8262"
-    ```
-
-## 第 4 步：配置任务
-
-假设需要将 Aurora-1 和 Aurora-2 实例的 `test_db` 库的 `test_table` 表以**全量+增量**的模式同步到下游 TiDB 的 `test_db` 库的 `test_table` 表。
-
-复制并编辑 `{ansible deploy}/conf/task.yaml.example`，生成如下任务配置文件 `task.yaml`：
-
-```yaml
-# 任务名，多个同时运行的任务不能重名。
-name: "test"
-# 全量+增量 (all) 同步模式。
-task-mode: "all"
-# 下游 TiDB 配置信息。
-target-database:
-  host: "172.16.10.83"
-  port: 4000
-  user: "root"
-  password: ""
-
-# 当前数据同步任务需要的全部上游 MySQL 实例配置。
-mysql-instances:
--
-  # 上游实例或者复制组 ID，参考 `inventory.ini` 的 `source_id` 或者 `dm-master.toml` 的 `source-id 配置`。
-  source-id: "mysql-replica-01"
-  # 需要同步的库名或表名的黑白名单的配置项名称，用于引用全局的黑白名单配置，全局配置见下面的 `black-white-list` 的配置。
-  black-white-list: "global"
-  # Mydumper 的配置项名称，用于引用全局的 Mydumper 配置。
-  mydumper-config-name: "global"
-
--
-  source-id: "mysql-replica-02"
-  black-white-list: "global"
-  mydumper-config-name: "global"
-
-# 黑白名单全局配置，各实例通过配置项名引用。
-black-white-list:
-  global:
-    do-tables:                        # 需要同步的上游表的白名单。
-    - db-name: "test_db"              # 需要同步的表的库名。
-      tbl-name: "test_table"          # 需要同步的表的名称。
-
-# Mydumper 全局配置，各实例通过配置项名引用。
-mydumpers:
-  global:
-    extra-args: "-B test_db -T test_table"  # 只导出 `test_db` 库中的 `test_table` 表，可设置 Mydumper 的任何参数。
+```
+[code=38008:class=dm-master:scope=internal:level=high] grpc request error: rpc error: code = Unavailable desc = all SubConns are in TransientFailure, latest connection error: connection error: desc = "transport: Error while dialing dial tcp 172.17.0.2:8262: connect: connection refused"
+github.com/pingcap/dm/pkg/terror.(*Error).Delegate
+        /root/code/gopath/src/github.com/pingcap/dm/pkg/terror/terror.go:267
+github.com/pingcap/dm/dm/master/workerrpc.callRPC
+        /root/code/gopath/src/github.com/pingcap/dm/dm/master/workerrpc/rawgrpc.go:124
+github.com/pingcap/dm/dm/master/workerrpc.(*GRPCClient).SendRequest
+        /root/code/gopath/src/github.com/pingcap/dm/dm/master/workerrpc/rawgrpc.go:64
+github.com/pingcap/dm/dm/master.(*Server).getStatusFromWorkers.func2
+        /root/code/gopath/src/github.com/pingcap/dm/dm/master/server.go:1125
+github.com/pingcap/dm/dm/master.(*AgentPool).Emit
+        /root/code/gopath/src/github.com/pingcap/dm/dm/master/agent_pool.go:117
+runtime.goexit
+        /root/.gvm/gos/go1.12/src/runtime/asm_amd64.s:1337
 ```
 
-## 第 5 步：启动任务
+DM 中的错误信息均按以下固定格式输出：
 
-1. 进入 dmctl 目录 `/home/tidb/dm-ansible/resources/bin/`
-
-2. 执行以下命令启动 dmctl
-
-    {{< copyable "shell-regular" >}}
-
-    ```bash
-    ./dmctl --master-addr 172.16.10.71:8261
-    ```
-
-3. 执行以下命令启动数据同步任务，其中，`task.yaml` 是之前编辑的配置文件
-
-    {{< copyable "" >}}
-
-    ```bash
-    » start-task ./task.yaml
-    ```
-
-    - 如果执行命令后的返回结果中不包含错误信息，则表明任务已经成功启动
-    - 如果包含以下错误信息，则表明上游 Aurora 用户可能拥有 TiDB 不支持的权限类型
-
-        ```json
-        {
-            "id": 4,
-            "name": "source db dump privilege chcker",
-            "desc": "check dump privileges of source DB",
-            "state": "fail",
-            "errorMsg": "line 1 column 285 near \"LOAD FROM S3, SELECT INTO S3 ON *.* TO 'root'@'%' WITH GRANT OPTION\" ...",
-            "instruction": "",
-            "extra": "address of db instance - pingcap-1.h8emfqdptyc4.us-east-2.rds.amazonaws.com"
-        },
-        {
-            "id": 5,
-            "name": "source db replication privilege chcker",
-            "desc": "check replication privileges of source DB",
-            "state": "fail",
-            "errorMsg": "line 1 column 285 near \"LOAD FROM S3, SELECT INTO S3 ON *.* TO 'root'@'%' WITH GRANT OPTION\" ...",
-            "instruction": "",
-            "extra": "address of db instance - pingcap-1.h8emfqdptyc4.us-east-2.rds.amazonaws.com"
-        }
-        ```
-
-        此时可以选择以下两种处理方法中的任意一种进行处理后，再使用 `start-task` 尝试重新启动任务：
-        1. 为用于进行数据迁移的 Aurora 用户移除不被 TiDB 支持的不必要的权限
-        2. 如果能确保 Aurora 用户拥有 DM 所需要的权限，可以在 `task.yaml` 配置文件中添加如下顶级配置项以跳过启用任务时的前置权限检查
-
-            ```yaml
-            ignore-checking-items: ["dump_privilege", "replication_privilege"]
-            ```
-
-## 第 6 步：查询任务
-
-如需了解 DM 集群中是否存在正在运行的同步任务及任务状态等信息，可在 dmctl 内使用以下命令进行查询：
-
-{{< copyable "" >}}
-
-```bash
-» query-status
+```
+[错误基本信息] + 错误 message 描述 + 错误堆栈信息（可选）
 ```
 
-> **注意：**
-> 
-> 如果查询命令的返回结果中包含以下错误信息，则表明在全量同步的 dump 阶段不能获得相应的 lock：
-> 
-> `bash
-    Couldn't acquire global lock, snapshots will not be consistent: Access denied for user 'root'@'%' (using password: YES)`
-> 
-> 此时如果能接受不使用 FTWL 来确保 dump 文件与 metadata 的一致或上游能暂时停止写入，可以通过为 `mydumpers` 下的 `extra-args` 添加 `--no-locks` 参数来进行绕过，具体方法为：
-> 
-> 1. 使用 `stop-task` 停止当前由于不能正常 dump 而已经转为 paused 的任务
-> 2. 将原 task.yaml 中的 `extra-args: "-B test_db -T test_table"` 更新为 `extra-args: "-B test_db -T test_table --no-locks"`
-> 3. 使用 `start-task` 重新启动任务
+### 错误基本信息
+
+- `code`：错误码，错误唯一标识。
+
+    同一种错误都使用相同的错误码。错误码不随 DM 版本改变。
+
+    在 DM 迭代过程中，部分错误可能会被移除，但错误码不会。新增的错误会使用新的错误码，不会复用已有的错误码。
+
+- `class`：错误分类。
+
+    用于标记出现错误的系统子模块。
+
+    下表展示所有的错误类别、错误对应的系统子模块、错误样例：
+
+    | 错误类别              | 错误对应的系统子模块           | 错误样例                                                                                                                                                                                                                                                                                             |
+    |:----------------- |:-------------------- |:------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+    | `database`        | 执行数据库操作出现错误          | `[code=10003:class=database:scope=downstream:level=medium] database driver: invalid connection`                                                                                                                                                                                                  |
+    | `functional`      | 系统底层的基础函数错误          | `[code=11005:class=functional:scope=internal:level=high] not allowed operation: alter multiple tables in one statement`                                                                                                                                                                          |
+    | `config`          | 配置错误                 | `[code=20005:class=config:scope=internal:level=medium] empty source-id not valid`                                                                                                                                                                                                                |
+    | `binlog-op`       | binlog 操作出现错误        | `[code=22001:class=binlog-op:scope=internal:level=high] empty UUIDs not valid`                                                                                                                                                                                                                   |
+    | `checkpoint`      | checkpoint 相关操作出现错误  | `[code=24002:class=checkpoint:scope=internal:level=high] save point bin.1234 is older than current pos bin.1371`                                                                                                                                                                                 |
+    | `task-check`      | 进行任务检查时出现错误          | `[code=26003:class=task-check:scope=internal:level=medium] new table router error`                                                                                                                                                                                                               |
+    | `relay-event-lib` | 执行 relay 模块基础功能时出现错误 | `[code=28001:class=relay-event-lib:scope=internal:level=high] parse server-uuid.index`                                                                                                                                                                                                           |
+    | `relay-unit`      | relay 处理单元内出现错误      | `[code=30015:class=relay-unit:scope=upstream:level=high] TCPReader get event: ERROR 1236 (HY000): Could not open log file`                                                                                                                                                                       |
+    | `dump-unit`       | dump 处理单元内出现错误       | `[code=32001:class=dump-unit:scope=internal:level=high] mydumper runs with error: CRITICAL **: 15:12:17.559: Error connecting to database: Access denied for user 'root'@'172.17.0.1' (using password: NO)`                                                                                      |
+    | `load-unit`       | load 处理单元内出现错误       | `[code=34002:class=load-unit:scope=internal:level=high] corresponding ending of sql: ')' not found`                                                                                                                                                                                              |
+    | `sync-unit`       | sync 处理单元内出现错误       | `[code=36027:class=sync-unit:scope=internal:level=high] Column count doesn't match value count: 9 (columns) vs 10 (values)`                                                                                                                                                                      |
+    | `dm-master`       | DM-master 服务内部出现错误   | `[code=38008:class=dm-master:scope=internal:level=high] grpc request error: rpc error: code = Unavailable desc = all SubConns are in TransientFailure, latest connection error: connection error: desc = "transport: Error while dialing dial tcp 172.17.0.2:8262: connect: connection refused"` |
+    | `dm-worker`       | DM-worker 服务内部出现错误   | `[code=40066:class=dm-worker:scope=internal:level=high] ExecuteDDL timeout, try use query-status to query whether the DDL is still blocking`                                                                                                                                                     |
+    | `dm-tracer`       | DM-tracer 服务内部出现错误   | `[code=42004:class=dm-tracer:scope=internal:level=medium] trace event test.1 not found`                                                                                                                                                                                                          |
+
+- `scope`：错误作用域。
+
+    用于标识错误发生时 DM 作用对象的范围和来源，包括未设置 (not-set)、上游数据库 (upstream)、下游数据库 (downstream)、内部 (internal) 四种类型。
+
+    如果错误发生的逻辑直接涉及到上下游数据库请求，作用域会设置为 upstream 或 downstream，其他出错场景目前都设置为 internal。
+
+- `level`：错误级别。
+
+    错误的严重级别，包括低级别 (low)、中级别 (medium)、高级别 (high) 三种。
+
+    低级别通常是用户操作、输入错误，不影响正常同步任务；中级别通常是用户配置等错误，会影响部分新启动服务，不影响已有系统同步状态；高级别通常是用户需要关注的一些错误，可能存在同步任务中断等风险，需要用户进行处理。
+
+在上述的错误样例中：
+
+- `code=38008` 表示 gRPC 通信出错的错误码。
+- `class=dm-master`，表示 DM-master 对外发送 gRPC 请求时出错（请求发送至 DM-worker）。
+- `scope=interal` 表示 DM 内部出现错误。
+- `level=high`，表示这是一个高级别错误，需要用户注意。可根据错误 message 和错误堆栈判断出更多错误信息。
+
+### 错误 message 描述
+
+错误 message 使用描述性语言来表示错误的详细信息。对于错误调用链上每一层额外增加的错误 message，采用 [errors.Wrap](https://godoc.org/github.com/pkg/errors#hdr-Adding_context_to_an_error) 的模式来叠加和保存错误 message。wrap 最外层的 message 是 DM 内部对该错误的描述，wrap 最内层的 message 是该错误最底层出错位置的错误描述。
+
+以上述样例错误的 message 为例：
+
+- wrap 最外层 message，`grpc request error` 是 DM 对该错误的描述。
+- wrap 最内层 message，`connection error: desc = "transport: Error while dialing dial tcp 172.17.0.2:8262: connect: connection refused"`，是 gRPC 底层建立连接失败时返回的错误。
+
+通过对基本错误信息和错误 message 进行分析，可以诊断出错误是在 DM-master 向 DM-worker 发送 gRPC 请求建立连接失败时出现的。该错误通常是由 DM-worker 未正常运行引起。
+
+### 错误堆栈信息
+
+DM 根据错误的严重程度和必要性来选择是否输出错误堆栈。错误堆栈记录了错误发生时完整的堆栈调用信息。如果用户通过错误基本信息和错误 message 描述不能完全诊断出错误发生的原因，可以通过错误堆栈进一步跟进出错时代码的运行路径。
+
+## 常见错误码描述及处理
+
+可在 DM 代码仓库[已发布的错误码](https://github.com/pingcap/dm/blob/master/_utils/terror_gen/errors_release.txt) 中查询完整的错误码列表。
+
+## 常见错误说明和解决方法
+
+| 错误码          | 错误说明                                                                                                                         | 解决方法                                                                                                            |
+|:------------ |:---------------------------------------------------------------------------------------------------------------------------- |:--------------------------------------------------------------------------------------------------------------- |
+| `code=10001` | 数据库操作异常                                                                                                                      | 进一步分析错误信息和错误堆栈                                                                                                  |
+| `code=10002` | 数据库底层的 `bad connection` 错误，通常表示 DM 到下游 TiDB 的数据库连接出现了异常（如网络故障、TiDB 重启等）且当前请求的数据暂时未能发送到 TiDB。                                 | DM 提供针对此类错误的自动恢复。如果长时间未恢复，需要用户检查网络或 TiDB 状态。                                                                    |
+| `code=10003` | 数据库底层 `invalid connection` 错误，通常表示 DM 到下游 TiDB 的数据库连接出现了异常（如网络故障、TiDB 重启、TiKV busy 等）且当前请求已有部分数据发送到了 TiDB。                   | DM 提供针对此类错误的自动恢复。如果未能正常恢复，需要用户进一步检查错误信息并根据具体场景进行分析。                                                             |
+| `code=10005` | 数据库查询类语句出错                                                                                                                   |                                                                                                                 |
+| `code=10006` | 数据库 `EXECUTE` 类型语句出错，包括 DDL 和 `INSERT`/`UPDATE`/`DELETE` 类型的 DML。更详细的错误信息可通过错误 message 获取。错误 message 中通常包含操作数据库所返回的错误码和错误信息。 |                                                                                                                 |
+| `code=11006` | DM 内置的 parser 解析不兼容的 DDL 时出错                                                                                                 | 可参考 [Data Migration 故障诊断-处理不兼容的 DDL 语句](/dev/how-to/troubleshoot/data-migration.md#处理不兼容的-ddl-语句) 提供的解决方案       |
+| `code=20010` | 处理任务配置时，解密数据库的密码出错                                                                                                           | 检查任务配置中提供的下游数据库密码是否有[使用 dmctl 正确加密](/dev/how-to/deploy/data-migration-with-ansible.md#使用-dmctl-加密上游-mysql-用户密码) |
+| `code=26002` | 任务检查创建数据库连接失败。更详细的错误信息可通过错误 message 获取。错误 message 中包含操作数据库所返回的错误码和错误信息。                                                      | 检查 DM-master 所在的机器是否有权限访问上游                                                                                     |
+| `code=38008` | DM 组件间的 gRPC 通信出错                                                                                                            | 检查 `class`， 定位错误发生在哪些组件的交互环节，根据错误 message 判断是哪类通信错误。如果是 gRPC 建立连接出错，可检查通信服务端是否运行正常。                             |
