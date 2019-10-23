@@ -1,26 +1,53 @@
 ---
-title: ALTER DATABASE
-summary: TiDB 数据库中 ALTER DATABASE 的使用概况。
+title: DEALLOCATE
+summary: TiDB 数据库中 DEALLOCATE 的使用概况。
 category: reference
 ---
 
-# ALTER DATABASE
+# DEALLOCATE
 
-`ALTER DATABASE` 用于修改指定或当前数据库的默认字符集和排序规则。`ALTER SCHEMA` 跟 `ALTER DATABASE` 操作效果一样。
+`DEALLOCATE` 语句用于为服务器端预处理语句提供 SQL 接口。
+
+## 语法图
+
+**DeallocateStmt:**
+
+![DeallocateStmt](/media/sqlgram/DeallocateStmt.png)
+
+**DeallocateSym:**
+
+![DeallocateSym](/media/sqlgram/DeallocateSym.png)
+
+**Identifier:**
+
+![Identifier](/media/sqlgram/Identifier.png)
 
 ## 示例
 
 ```sql
-ALTER {DATABASE | SCHEMA} [db_name]
-    alter_specification ...
-alter_specification:
-    [DEFAULT] CHARACTER SET [=] charset_name
-  | [DEFAULT] COLLATE [=] collation_name
+mysql> PREPARE mystmt FROM 'SELECT ? as num FROM DUAL';
+Query OK, 0 rows affected (0.00 sec)
+
+mysql> SET @number = 5;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql> EXECUTE mystmt USING @number;
++------+
+| num  |
++------+
+| 5    |
++------+
+1 row in set (0.00 sec)
+
+mysql> DEALLOCATE PREPARE mystmt;
+Query OK, 0 rows affected (0.00 sec)
 ```
 
-`alter_specification` 选项用于指定数据库具体的 `CHARACTER SET` 和 `COLLATE`。目前 TiDB 只支持部分的字符集和排序规则，请参照[字符集支持](/v2.1/reference/sql/character-set.md)。
+## MySQL 兼容性
+
+`DEALLOCATE` 语句与 MySQL 完全兼容。如有任何兼容性差异，请在 GitHub 上提交 [issue](/v2.1/report-issue.md)。
 
 ## 另请参阅
 
-* [CREATE DATABASE](/v2.1/reference/sql/statements/create-database.md)
-* [SHOW DATABASES](/v2.1/reference/sql/statements/show-databases.md)
+* [PREPARE](/v2.1/reference/sql/statements/prepare.md)
+* [EXECUTE](/v2.1/reference/sql/statements/execute.md)
