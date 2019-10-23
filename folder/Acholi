@@ -1,73 +1,34 @@
 ---
-title: crwdns73744:0crwdne73744:0
-category: crwdns73746:0crwdne73746:0
----
-
-# crwdns73748:0crwdne73748:0
-
-## crwdns73750:0crwdne73750:0
-
-crwdns73752:0crwdne73752:0
-
-crwdns73754:0crwdne73754:0
-
-* crwdns73756:0crwdne73756:0
-* crwdns73758:0crwdne73758:0
-* crwdns73760:0crwdne73760:0
-* crwdns73762:0crwdne73762:0
-* crwdns73764:0crwdne73764:0
-* crwdns73766:0crwdne73766:0
-
-crwdns73768:0crwdne73768:0
-
-crwdns73770:0crwdne73770:0
-
-crwdns73772:0crwdne73772:0
-
-- [crwdns73776:0crwdne73776:0](crwdns73774:0crwdne73774:0)
-- [crwdns73780:0crwdne73780:0](crwdns73778:0crwdne73778:0)
-- [crwdns73784:0crwdne73784:0](crwdns73782:0crwdne73782:0)
-
-## crwdns73786:0crwdne73786:0
-
-crwdns73788:0crwdne73788:0
-
-![crwdns73792:0crwdne73792:0](crwdns73790:0crwdne73790:0)
-
-crwdns73794:0crwdne73794:0
-
-### crwdns73796:0crwdne73796:0
-
-crwdns73798:0crwdne73798:0
-
-### crwdns73800:0crwdne73800:0
-
-crwdns73802:0crwdne73802:0
-
-crwdns73804:0crwdne73804:0
-
-### crwdns73806:0crwdne73806:0
-
-crwdns73808:0crwdne73808:0
-
-## crwdns73810:0crwdne73810:0
-
-### crwdns73812:0crwdne73812:0
-
-crwdns73814:0crwdne73814:0
-
-### crwdns73816:0crwdne73816:0
-
-crwdns73818:0crwdne73818:0
-
-+   crwdns73820:0crwdne73820:0
-
-    crwdns73822:0crwdne73822:0
-
-+   crwdns73824:0crwdne73824:0
-
-    crwdns73826:0crwdne73826:0
-
-+   crwdns73828:0crwdne73828:0
-
-    crwdns73830:0crwdne73830:0
+version: 0
+jobs:
+  build:
+    docker:
+      - 
+        image: crwdns70022:0crwdne70022:0
+    working_directory: crwdns70024:0crwdne70024:0
+    steps:
+      - crwdns70026:0crwdne70026:0
+      - 
+        run:
+          name: "crwdns70028:0crwdne70028:0"
+          command: crwdns70030:0crwdne70030:0
+      - 
+        run:
+          name: "crwdns70032:0crwdne70032:0"
+          command: crwdns70034:0crwdne70034:0
+      - 
+        run:
+          name: "crwdns70036:0crwdne70036:0"
+          command: crwdns70038:0crwdne70038:0
+      - 
+        deploy:
+          name: "crwdns70040:0crwdne70040:0"
+          command: |
+            crwdns70042:0${CIRCLE_BRANCH}crwdne70042:0
+      - 
+        run:
+          name: "crwdns70044:0crwdne70044:0"
+          command: crwdns70046:0crwdne70046:0
+      - 
+        store_artifacts:
+          path: crwdns70048:0crwdne70048:0
