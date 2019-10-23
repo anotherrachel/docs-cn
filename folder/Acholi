@@ -1,136 +1,45 @@
 ---
-title: crwdns113480:0crwdne113480:0
-category: crwdns113482:0crwdne113482:0
+title: crwdns113432:0crwdne113432:0
+category: crwdns113434:0crwdne113434:0
 ---
 
-# crwdns113484:0crwdne113484:0
+# crwdns113436:0crwdne113436:0
 
-crwdns113486:0crwdne113486:0
+crwdns113438:0crwdne113438:0
 
-## crwdns113488:0crwdne113488:0
+crwdns113440:0crwdne113440:0
 
-crwdns113490:0crwdne113490:0
+crwdns113442:0crwdne113442:0
 
-crwdns113492:0crwdne113492:0
+- crwdns113444:0crwdne113444:0
 
-1. crwdns113494:0crwdne113494:0
+    - crwdns113446:0[rocksdb.defaultcf]crwdne113446:0
+    - crwdns113448:0[rocksdb.writecf]crwdne113448:0
+    - crwdns113450:0crwdne113450:0
 
-2. crwdns113496:0crwdne113496:0
+- crwdns113452:0crwdne113452:0
 
-### crwdns113498:0crwdne113498:0
+    - crwdns113454:0[raftdb.defaultcf]crwdne113454:0
 
-- crwdns113500:0crwdne113500:0
+crwdns113456:0crwdne113456:0
 
-    ```sql
-    crwdns113502:0crwdne113502:0
-    ```
+crwdns113458:0crwdne113458:0
 
-- crwdns113504:0crwdne113504:0
+## crwdns113460:0crwdne113460:0
 
-    ```sql
-    crwdns113506:0crwdne113506:0
-    ```
-
-crwdns113508:0crwdne113508:0
-
-```sql
-crwdns113510:0crwdne113510:0
+```toml
+crwdns113462:0[server]crwdnd113462:0[storage]crwdnd113462:0[pd]crwdnd113462:0[metric]crwdnd113462:0[raftstore]crwdnd113462:0[storage.data-dir]crwdnd113462:0[rocksdb]crwdnd113462:0%3Fcrwdnd113462:0[rocksdb.defaultcf]crwdnd113462:0%ucrwdnd113462:0[rocksdb.writecf]crwdnd113462:0[raftdb]crwdnd113462:0[raftdb.defaultcf]crwdne113462:0
 ```
 
-- crwdns113512:0crwdne113512:0
+## crwdns113464:0crwdne113464:0
 
-- crwdns113514:0crwdne113514:0
+crwdns113466:0crwdne113466:0
 
-    ```sh
-    crwdns113516:0$IPcrwdne113516:0
-                crwdns113518:0crwdne113518:0
-    crwdns113520:0crwdne113520:0
-    ```
+1. crwdns113468:0crwdne113468:0
+2. crwdns113470:0crwdne113470:0
 
-### crwdns113522:0crwdne113522:0
+## crwdns113472:0crwdne113472:0
 
-- crwdns113524:0crwdne113524:0
-
-    ```sql
-    crwdns113526:0crwdne113526:0
-    ```
-
-    crwdns113528:0crwdne113528:0
-
-- crwdns113530:0crwdne113530:0
-
-    ```sql
-    crwdns113532:0crwdne113532:0
-    ```
-
-crwdns113534:0crwdne113534:0
-
-- crwdns113536:0crwdne113536:0
-
-    ```sql
-    crwdns113538:0crwdne113538:0
-    ```
-
-- crwdns113540:0crwdne113540:0
-
-    ```sql
-    crwdns113542:0crwdne113542:0
-    ```
-
-### crwdns113544:0crwdne113544:0
-
-crwdns113546:0crwdne113546:0
-
-- crwdns113548:0crwdne113548:0
-
-    ```sql
-    crwdns113550:0crwdne113550:0
-    ```
-
-- crwdns113552:0crwdne113552:0
-
-    ```sql
-    crwdns113554:0crwdne113554:0
-    ```
-
-crwdns113556:0crwdne113556:0
-
-- crwdns113558:0crwdne113558:0
-
-    ```sql
-    crwdns113560:0crwdne113560:0
-    ```
-
-- crwdns113562:0crwdne113562:0
-
-    ```sql
-    crwdns113564:0crwdne113564:0
-    ```
-
-    crwdns113566:0crwdne113566:0
-
-    crwdns113568:0crwdne113568:0
-
-    crwdns113570:0crwdne113570:0
-
-    * crwdns113572:0crwdne113572:0
-
-        ```sh
-        crwdns113574:0crwdne113574:0
-        crwdns113576:0{TiDBIP}crwdne113576:0
-        crwdns113578:0{TiDBIP}crwdne113578:0
-        ```
-
-    * crwdns113580:0crwdne113580:0
-
-        ```sql
-        crwdns113582:0crwdne113582:0
-        crwdns113584:0crwdne113584:0
-        crwdns113586:0crwdne113586:0
-        ```
-
-- crwdns113588:0crwdne113588:0
-
-    > **crwdns113590:0crwdne113590:0**
-    > 
-    > crwdns113592:0crwdne113592:0
+1. crwdns113474:0crwdne113474:0
+2. crwdns113476:0crwdne113476:0
+3. crwdns113478:0crwdne113478:0
