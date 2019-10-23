@@ -1,179 +1,542 @@
 ---
-title: 分库分表合并同步
+title: 手动处理 Sharding DDL Lock
 category: reference
 aliases:
-  - '/docs-cn/tools/dm/shard-merge/'
+  - '/docs-cn/tools/dm/manually-handling-sharding-ddl-locks/'
 ---
 
-# 分库分表合并同步
+# 手动处理 Sharding DDL Lock
 
-本文介绍了 DM 提供的分库分表合并同步功能。此功能用于将上游 MySQL/MariaDB 实例中结构相同的表同步到下游 TiDB 的同一个表中。DM 不仅支持同步上游的 DML 数据，也支持协调同步多个上游分表的 DDL 表结构变更。
+DM (Data Migration) 使用 sharding DDL lock 来确保分库分表的 DDL 操作可以正确执行。绝大多数情况下，该锁定机制可自动完成；但在部分异常情况发生时，需要使用 `unlock-ddl-lock`/`break-ddl-lock` 手动处理异常的 DDL lock。
 
 > **注意：**
 > 
-> 要执行分库分表合并同步任务，必须在任务配置文件中设置 `is-sharding: true`。
+> - 不要轻易使用 `unlock-ddl-lock`/`break-ddl-lock` 命令，除非完全明确当前场景下使用这些命令可能会造成的影响，并能接受这些影响。
+> - 在手动处理异常的 DDL lock 前，请确保已经了解 DM 的[分库分表合并同步原理](/v3.0/reference/tools/data-migration/usage-scenarios/shard-merge.md#实现原理)。
 
-## 使用限制
+## 命令介绍
 
-DM 进行分表 DDL 的同步有以下几点使用限制：
+### `show-ddl-locks`
 
-- 在一个逻辑 sharding group（需要合并同步到下游同一个表的所有分表组成的 group）内，所有上游分表必须以相同的顺序执行相同的 DDL 语句（库名和表名可以不同），并且只有在所有分表执行完当前一条 DDL 语句后，下一条 DDL 语句才能执行。
+该命令用于查询当前 DM-master 上存在的 DDL lock 信息。
 
-    - 比如，如果在 table_1 表中先增加列 a 后再增加列 b，则在 table_2 表中就不能先增加列 b 后再增加列 a，因为 DM 不支持以不同的顺序来执行相同的 DDL 语句。
+#### 命令示例
 
-- 对于每个逻辑 sharding group，推荐使用一个独立的任务进行同步。
+{{< copyable "" >}}
 
-    - 如果一个任务内存在多个 sharding group，则必须等待一个 sharding group 的 DDL 语句同步完成后，才能开始对其他 sharding group 执行 DDL 语句。
+```bash
+show-ddl-locks [--worker=127.0.0.1:8262] [task-name]
+```
 
-- 在一个逻辑 sharding group 内，所有上游分表都应该执行对应的 DDL 语句。
+#### 参数解释
 
-    - 比如，若 DM-worker-2 对应的一个或多个上游分表未执行 DDL 语句，则其他已执行 DDL 语句的 DM-worker 都会暂停同步任务，直到等到 DM-worker-2 收到上游对应的 DDL 语句。
++ `worker`：
+    - flag 参数，string，`--worker`，可选
+    - 不指定时，查询所有 DM-worker 相关的 lock 信息；指定时，仅查询与这组 DM-worker 相关的 lock 信息，可重复多次指定
 
-- sharding group 数据同步任务不支持 `DROP DATABASE/TABLE` 语句。
++ `task-name`：
+    - 非 flag 参数，string，可选
+    - 不指定时，查询与所有任务相关的 lock 信息；指定时，仅查询特定任务相关的 lock 信息
 
-    - DM-worker 中的 binlog 同步单元（sync）会自动忽略掉上游分表的 `DROP DATABASE` 和 `DROP TABLE` 语句。
+#### 返回结果示例
 
-- sharding group 数据同步任务支持 `RENAME TABLE` 语句，但有如下限制（online DDL 中的 `RENAME` 有特殊方案进行支持）：
+{{< copyable "" >}}
 
-    - 只支持 `RENAME TABLE` 到一个不存在的表。
-    - 一条 `RENAME TABLE` 语句只能包含一个 `RENAME` 操作。
+```bash
+» show-ddl-locks test
+```
 
-- 增量同步任务需要确认开始同步的 binlog position 上各分表的表结构必须一致，才能确保来自不同分表的 DML 语句能够同步到表结构确定的下游，并且后续各分表的 DDL 语句能够正确匹配与同步。
+```
+{
+    "result": true,                                        # 查询 lock 操作本身是否成功
+    "msg": "",                                             # 查询 lock 操作失败时的原因或其它描述信息（如不存在任务 lock）
+    "locks": [                                             # DM-master 上存在的 lock 信息列表
+        {
+            "ID": "test-`shard_db`.`shard_table`",         # lock 的 ID 标识，当前由任务名与 DDL 对应的 schema/table 信息组成
+            "task": "test",                                # lock 所属的任务名
+            "owner": "127.0.0.1:8262",                     # lock 的 owner（第一个遇到该 DDL 的 DM-worker）
+            "DDLs": [                                      # lock 对应的 DDL 列表
+                "USE `shard_db`; ALTER TABLE `shard_db`.`shard_table` DROP COLUMN `c2`;"
+            ],
+            "synced": [                                    # 已经收到对应 MySQL 实例内所有分表 DDL 的 DM-worker 列表
+                "127.0.0.1:8262"
+            ],
+            "unsynced": [                                  # 尚未收到对应 MySQL 实例内所有分表 DDL 的 DM-worker 列表
+                "127.0.0.1:8263"
+            ]
+        }
+    ]
+}
+```
 
-- 如果需要变更 [table routing 规则](/v3.0/reference/tools/data-migration/features/overview.md#table-routing)，必须先等所有 sharding DDL 语句同步完成。
+### `unlock-ddl-lock`
 
-    - 在 sharding DDL 语句同步过程中，使用 dmctl 尝试变更 router-rules 会报错。
+该命令用于主动请求 DM-master 解除指定的 DDL lock，包括的操作：请求 owner 执行 DDL 操作，请求其他非 owner 的 DM-worker 跳过 DDL 操作，移除 DM-master 上的 lock 信息。
 
-- 如果需要创建新表加入到一个正在执行 DDL 语句的 sharding group 中，则必须保持新表结构和最新更改的表结构一致。
+#### 命令示例
 
-    - 比如，原 table_1, table_2 表初始时有 (a, b) 两列，sharding DDL 语句执行后有 (a, b, c) 三列，则同步完成后新创建的表也应当有 (a, b, c) 三列。
+{{< copyable "" >}}
 
-- 由于已经收到 DDL 语句的 DM-worker 会暂停任务以等待其他 DM-worker 收到对应的 DDL 语句，因此数据同步延迟会增加。
+```bash
+» unlock-ddl-lock [--worker=127.0.0.1:8262] [--owner] [--force-remove] <lock-ID>
+```
 
-## 背景
+#### 参数解释
 
-目前，DM 使用 ROW 格式的 binlog 进行数据同步，且 binlog 中不包含表结构信息。在 ROW 格式的 binlog 同步过程中，如果不需要将多个上游表合并同步到下游的同一个表，则只存在一个上游表的 DDL 语句会更新对应下游表结构。ROW 格式的 binlog 可以认为是具有 self-description 属性。
++ `worker`：
+    - flag 参数，string，`--worker`，可选
+    - 不指定时，对所有已经在等待该 lock 的 DM-worker 发起跳过 DDL 操作请求；指定时，仅对这组 DM-worker 发起跳过 DDL 操作请求，可重复多次指定
 
-分库分表合并同步过程中，可以根据 column values 及下游的表结构构造出相应的 DML 语句，但此时若上游的分表执行 DDL 语句进行了表结构变更，则必须对该 DDL 语句进行额外同步处理，以避免因为表结构和 binlog 数据不一致而造成同步出错的问题。
++ `owner`：
+    - flag 参数，string，`--owner`，可选
+    - 不指定时，请求默认的 owner（`show-ddl-locks` 返回结果中的 `owner`）执行 DDL 操作；指定时，请求该 DM-worker（替代默认的 owner）执行 DDL 操作
 
-以下是一个简化后的例子：
++ `force-remove`：
+    - flag 参数，boolean，`--force-remove`，可选
+    - 不指定时，仅在 owner 执行 DDL 成功时移除 lock 信息；指定时，即使 owner 执行 DDL 失败也强制移除 lock 信息（此后将无法再次查询或操作该 lock）
 
-![shard-ddl-example-1](/media/shard-ddl-example-1.png)
++ `lock-ID`：
+    - 非 flag 参数，string，必选
+    - 指定需要执行 unlock 操作的 DDL lock ID（即 `show-ddl-locks` 返回结果中的 `ID`）
 
-在上图的例子中，分表的合库合表过程简化成了上游只有两个 MySQL 实例，每个实例内只有一个表。假设在数据同步开始时，将两个分表的表结构版本记为 schema V1，将 DDL 语句执行完后的表结构版本记为 schema V2。
+#### 返回结果示例
 
-现在，假设数据同步过程中，DM-worker 内的 binlog 同步单元（sync）从两个上游分表收到的 binlog 数据有如下时序：
+{{< copyable "" >}}
 
-1. 开始同步时，sync 从两个分表收到的都是 schema V1 版本的 DML 语句。
+```bash
+» unlock-ddl-lock test-`shard_db`.`shard_table`
+```
 
-2. 在 t1 时刻，sync 收到实例 1 上分表的 DDL 语句。
+```
+{
+    "result": true,                                        # unlock lock 操作是否成功
+    "msg": "",                                             # unlock lock 操作失败时的原因
+    "workers": [                                           # 各 DM-worker 执行/跳过 DDL 操作结果信息列表
+        {
+            "result": true,                                # 该 DM-worker 执行/跳过 DDL 操作是否成功
+            "worker": "127.0.0.1:8262",                    # DM-worker 地址 (DM-worker ID)
+            "msg": ""                                      # DM-worker 执行/跳过 DDL 失败时的原因
+        }
+    ]
+}
+```
 
-3. 从 t2 时刻开始，sync 从实例 1 收到的是 schema V2 版本的 DML 语句；但从实例 2 收到的仍是 schema V1 版本的 DML 语句。
+### break-ddl-lock
 
-4. 在 t3 时刻，sync 收到实例 2 上分表的 DDL 语句。
+该命令用于主动请求 DM-worker 强制打破当前正在等待 unlock 的 DDL lock，包括请求 DM-worker 执行或跳过 DDL 操作、移除该 DM-worker 上的 DDL lock 信息。
 
-5. 从 t4 时刻开始，sync 从实例 2 收到的也是 schema V2 版本的 DML 语句。
+#### 命令示例
 
-假设在数据同步过程中，不对分表的 DDL 语句进行额外处理。当实例 1 的 DDL 语句同步到下游后，下游的表结构会变更成为 schema V2 版本。但在 t2 到 t3 这段时间内，sync 从实例 2 上收到的仍是 schema V1 版本的 DML 语句。当尝试把这些 schema V1 版本的 DML 语句同步到下游时，就会由于 DML 语句与表结构的不一致而发生错误，从而无法正确同步数据。
+{{< copyable "" >}}
 
-## 实现原理
+```bash
+» break-ddl-lock <--worker=127.0.0.1:8262> [--remove-id] [--exec] [--skip] <task-name>
+```
 
-基于上述例子，本部分介绍了 DM 在合库合表过程中进行 DDL 同步的实现原理。
+#### 参数解释
 
-![shard-ddl-flow](/media/shard-ddl-flow.png)
++ `worker`：
+    - flag 参数，string，`--worker`，必选
+    - 指定需要执行 break 操作的 DM-worker
 
-在这个例子中，DM-worker-1 负责同步来自 MySQL 实例 1 的数据，DM-worker-2 负责同步来自 MySQL 实例 2 的数据，DM-master 负责协调多个 DM-worker 间的 DDL 同步。
++ `remove-id`：已废弃
 
-从 DM-worker-1 收到 DDL 语句开始，简化后的 DDL 同步流程为：
++ `exec`：
+    - flag 参数，boolean，`--exec`，可选
+    - 不可与 `--skip` 参数同时指定
+    - 指定时，请求该 DM-worker 执行（execute）当前 lock 对应的 DDL
 
-1. 在 t1 时刻，DM-worker-1 收到来自 MySQL 实例 1 的 DDL 语句，自身暂停该 DDL 语句对应任务的 DDL 及 DML 数据同步，并将 DDL 相关信息发送给 DM-master。
++ `skip`：
+    - flag 参数，boolean，`--skip`，可选
+    - 不可与 `--exec` 参数同时指定
+    - 指定时，请求该 DM-worker 跳过（skip）当前 lock 对应的 DDL
 
-2. DM-master 根据收到的 DDL 信息判断得知需要协调该 DDL 语句的同步，于是为该 DDL 语句创建一个锁，并将 DDL 锁信息发回给 DM-worker-1，同时将 DM-worker-1 标记为这个锁的 owner。
++ `task-name`：
+    - 非 flag 参数，string，必选
+    - 指定要执行 break 操作的 lock 所在的 task 名称（要查看各 task 上是否存在 lock，可通过 [query-status](/v3.0/reference/tools/data-migration/query-status.md) 获得）
 
-3. DM-worker-2 继续进行 DML 语句的同步，直到在 t3 时刻收到来自 MySQL 实例 2 的 DDL 语句，自身暂停该 DDL 语句对应任务的数据同步，并将 DDL 相关信息发送给 DM-master。
+#### 返回结果示例
 
-4. DM-master 根据收到的 DDL 信息判断得知该 DDL 语句对应的锁信息已经存在，于是直接将对应锁信息发回给 DM-worker-2。
+{{< copyable "" >}}
 
-5. 根据任务启动时的配置信息、上游 MySQL 实例分表信息、部署拓扑信息等，DM-master 判断得知自身已经收到了来自待合表的所有上游分表的 DDL 语句，于是请求 DDL 锁的 owner（DM-worker-1）向下游同步执行该 DDL。
+```bash
+» break-ddl-lock -w 127.0.0.1:8262 --exec test
+```
 
-6. DM-worker-1 根据第二步收到的 DDL 锁信息验证 DDL 语句执行请求；向下游执行 DDL，并将执行结果反馈给 DM-master；若 DDL 语句执行成功，则自身开始继续同步后续的（从 t2 时刻对应的 binlog 开始的）DML 语句。
+```
+{
+    "result": true,                                        # break lock 操作是否成功
+    "msg": "",                                             # break lock 操作失败时的原因
+    "workers": [                                           # 执行 break lock 操作的 DM-worker 列表（当前单次操作仅支持对一个 DM-worker 执行 break lock）
+        {
+            "result": false,                               # 该 DM-worker break lock 操作是否成功
+            "worker": "127.0.0.1:8262",                    # 该 DM-worker 地址 (DM-worker ID)
+            "msg": ""                                      # DM-worker break lock 失败时的原因
+        }
+    ]
+}
+```
 
-7. DM-master 收到来自 owner 执行 DDL 语句成功的响应，于是请求在等待该 DDL 锁的所有其他 DM-worker（DM-worker-2）忽略该 DDL 语句，直接继续同步后续的（从 t4 时刻对应的 binlog 开始的）DML 语句。
+## 支持场景
 
-根据上面的流程，可以归纳出 DM 协调多个 DM-worker 间 sharding DDL 同步的特点：
+目前，使用 `unlock-ddl-lock`/`break-ddl-lock` 命令仅支持处理以下三种 sharding DDL lock 异常情况。
 
-- 根据任务配置与 DM 集群部署拓扑信息，DM-master 内部也会建立一个逻辑 sharding group 来协调 DDL 同步，group 中的成员为负责处理该同步任务拆解后的各子任务的 DM-worker。
+### 场景一：部分 DM-worker 下线
 
-- 各 DM-worker 从 binlog event 中收到 DDL 语句后，会将 DDL 信息发送给 DM-master。
+#### Lock 异常原因
 
-- DM-master 根据来自 DM-worker 的 DDL 信息及 sharding group 信息创建或更新 DDL 锁。
+在 DM-master 尝试自动 unlock sharding DDL lock 之前，需要等待所有 DM-worker 的 sharding DDL events 全部到达（详见[分库分表合并同步原理](/v3.0/reference/tools/data-migration/usage-scenarios/shard-merge.md#实现原理)）。如果 sharding DDL 已经在同步过程中，且有部分 DM-worker 下线，并且不再计划重启它们（按业务需求移除了这部分 DM-worker），则会由于永远无法等齐所有的 DDL 而造成 lock 无法自动 unlock。
 
-- 如果 sharding group 的所有成员都收到了某一条相同的 DDL 语句，则表明上游分表在该 DDL 执行前的 DML 语句都已经同步完成，此时可以执行该 DDL 语句，并继续后续的 DML 同步。
+#### 手动处理示例
 
-- 上游所有分表的 DDL 在经过 [table router](/v3.0/reference/tools/data-migration/features/overview.md#table-routing) 转换后需要保持一致，因此仅需 DDL 锁的 owner 执行一次该 DDL 语句即可，其他 DM-worker 可直接忽略对应的 DDL 语句。
+假设上游有 MySQL-1 和 MySQL-2 两个实例，其中 MySQL-1 中有 `shard_db_1`.`shard_table_1` 和 `shard_db_1`.`shard_table_2` 两个表，MySQL-2 中有 `shard_db_2`.`shard_table_1` 和 `shard_db_2`.`shard_table_2` 两个表。现在需要将这 4 个表合并后同步到下游 TiDB 的 `shard_db`.`shard_table` 表中。
 
-在上面的示例中，每个 DM-worker 对应的上游 MySQL 实例中只有一个待合并的分表。但在实际场景下，一个 MySQL 实例可能有多个分库内的多个分表需要进行合并，这种情况下，sharding DDL 的协调同步过程将更加复杂。
+初始表结构如下：
 
-假设同一个 MySQL 实例中有 table_1 和 table_2 两个分表需要进行合并：
+{{< copyable "sql" >}}
 
-![shard-ddl-example-2](/media/shard-ddl-example-2.png)
+```sql
+SHOW CREATE TABLE shard_db_1.shard_table_1;
+```
+
+```
++---------------+------------------------------------------+
+| Table         | Create Table                             |
++---------------+------------------------------------------+
+| shard_table_1 | CREATE TABLE `shard_table_1` (
+  `c1` int(11) NOT NULL,
+  PRIMARY KEY (`c1`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1 |
++---------------+------------------------------------------+
+```
+
+上游分表将执行以下 DDL 语句变更表结构：
+
+{{< copyable "sql" >}}
+
+```sql
+ALTER TABLE shard_db_*.shard_table_* ADD COLUMN c2 INT;
+```
+
+MySQL 及 DM 操作与处理流程如下：
+
+1. MySQL-1 对应的 DM-worker-1 的两个分表执行了对应的 DDL 操作进行表结构变更。
+
+    {{< copyable "sql" >}}
+
+    ```sql
+    ALTER TABLE shard_db_1.shard_table_1 ADD COLUMN c2 INT;
+    ```
+
+    {{< copyable "sql" >}}
+
+    ```sql
+    ALTER TABLE shard_db_1.shard_table_2 ADD COLUMN c2 INT;
+    ```
+
+2. DM-worker-1 接受到两个分表的 DDL 之后，将对应 MySQL-1 相关的 DDL 信息发送给 DM-master，DM-master 创建相应的 DDL lock。
+3. 使用 `show-ddl-lock` 查看当前的 DDL lock 信息。
+
+    {{< copyable "" >}}
+
+    ```bash
+    » show-ddl-locks test
+    ```
+
+    ```
+    {
+        "result": true,
+        "msg": "",
+        "locks": [
+            {
+                "ID": "test-`shard_db`.`shard_table`",
+                "task": "test",
+                "owner": "127.0.0.1:8262",
+                "DDLs": [
+                    "USE `shard_db`; ALTER TABLE `shard_db`.`shard_table` ADD COLUMN `c2` int(11);"
+                ],
+                "synced": [
+                    "127.0.0.1:8262"
+                ],
+                "unsynced": [
+                    "127.0.0.1:8263"
+                ]
+            }
+        ]
+    }
+    ```
 
-在这个例子中，由于数据来自同一个 MySQL 实例，因此所有数据都是从同一个 binlog 流中获得，时序如下：
+4. 由于业务需要，DM-worker-2 对应的 MySQL-2 的数据不再需要同步到下游 TiDB，对 DM-worker-2 执行了下线处理。
+5. DM-master 上 ID 为 `` test-`shard_db`.`shard_table` `` 的 lock 无法等到 DM-worker-2 的 DDL 操作信息。
 
-1. 开始同步时，DM-worker 内的 sync 从两个分表收到的数据都是 schema V1 版本的 DML 语句。
+    `show-ddl-locks` 返回的 `unsynced` 中一直包含 DM-worker-2 的信息（`127.0.0.1:8263`）。
 
-2. 在 t1 时刻，sync 收到 table_1 分表的 DDL 语句。
+6. 使用 `unlock-dll-lock` 来请求 DM-master 主动 unlock 该 DDL lock。
 
-3. 从 t2 到 t3 时刻，sync 收到的数据同时包含 table_1 的 DML 语句（schema V2 版本）及 table_2 的 DML 语句（schema V1 版本）。
+    - 如果 DDL lock 的 owner 也已经下线，可以使用 `--owner` 参数指定其他 DM-worker 作为新 owner 来执行 DDL。
+    - 当存在任意 DM-worker 报错时，`result` 将为 `false`，此时请仔细检查各 DM-worker 的错误是否是预期可接受的。
+        - 已下线的 DM-worker 会返回 `rpc error: code = Unavailable` 错误属于预期行为，可以忽略。
+        - 如果其它未下线的 DM-worker 返回错误，则需要根据情况额外处理。
 
-4. 在 t3 时刻，sync 收到 table_2 分表的 DDL 语句。
+        {{< copyable "" >}}
 
-5. 从 t4 时刻开始，sync 从两个分表收到的数据都是 schema V2 版本的 DML 语句。
+        ```bash
+        » unlock-ddl-lock test-`shard_db`.`shard_table`
+        ```
 
-假设在数据同步过程中，不对分表的 DDL 语句进行额外处理。当 table_1 的 DDL 语句同步到下游从而变更下游表结构后，table_2 的 DML 语句（schema V1 版本）将无法正常同步。因此，在单个 DM-worker 内部，我们也构造了与 DM-master 内类似的逻辑 sharding group，但 group 的成员是同一个上游 MySQL 实例的不同分表。
+        ```
+        {
+            "result": false,
+           "msg": "github.com/pingcap/tidb-enterprise-tools/dm/master/server.go:1472: DDL lock test-`shard_db`.`shard_table` owner ExecuteDDL successfully, so DDL lock removed. but some dm-workers ExecuteDDL fail, you should to handle dm-worker directly",
+            "workers": [
+                {
+                    "result": true,
+                    "worker": "127.0.0.1:8262",
+                    "msg": ""
+                },
+                {
+                    "result": false,
+                    "worker": "127.0.0.1:8263",
+                    "msg": "rpc error: code = Unavailable desc = all SubConns are in TransientFailure, latest connection error: connection error: desc = \"transport: Error while dialing dial tcp 127.0.0.1:8263: connect: connection refused\""
+                }
+            ]
+        }
+        ```
 
-DM-worker 内协调处理 sharding group 的同步与 DM-master 处理 DM-worker 之间的同步不完全一致，主要原因包括：
+7. 使用 `show-ddl-locks` 确认 DDL lock 是否被成功 unlock。
 
-- 当 DM-worker 收到 table_1 分表的 DDL 语句时，同步不能暂停，需要继续解析 binlog 才能获得后续 table_2 分表的 DDL 语句，即需要从 t2 时刻继续解析直到 t3 时刻。
+    ```bash
+    show-ddl-locks test
+    ```
 
-- 在继续解析 t2 到 t3 时刻的 binlog 的过程中，table_1 分表的 DML 语句（schema V2 版本）不能向下游同步；但当 sharding DDL 同步并执行成功后，这些 DML 语句则需要同步到下游。
+    ```
+    {
+        "result": true,
+        "msg": "no DDL lock exists",
+        "locks": [
+        ]
+    }
+    ```
 
-DM-worker 内部 sharding DDL 同步的简化流程为：
+8. 查看下游 TiDB 中的表结构是否变更成功。
 
-1. 在 t1 时刻，DM-worker 收到 table_1 的 DDL 语句，并记录 DDL 信息及此时的 binlog 位置点信息。
+    {{< copyable "sql" >}}
 
-2. DM-worker 继续向前解析 t2 到 t3 时刻的 binlog。
+    ```sql
+    SHOW CREATE TABLE shard_db.shard_table;
+    ```
 
-3. 对于 table_1 的 DML 语句（schema V2 版本），忽略；对于 table_2 的 DML 语句（schema V1 版本），正常同步到下游。
+    ```
+    +-------------+--------------------------------------------------+
+    | Table       | Create Table                                     |
+    +-------------+--------------------------------------------------+
+    | shard_table | CREATE TABLE `shard_table` (
+      `c1` int(11) NOT NULL,
+      `c2` int(11) DEFAULT NULL,
+      PRIMARY KEY (`c1`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_bin |
+    +-------------+--------------------------------------------------+
+    ```
+
+9. 使用 `query-status` 确认同步任务是否正常。
 
-4. 在 t3 时刻，DM-worker 收到 table_2 的 DDL 语句，并记录 DDL 信息及此时的 binlog 位置点信息。
+#### 手动处理后的影响
 
-5. 根据同步任务配置信息、上游库表信息等，DM-worker 判断得知该 MySQL 实例上所有分表的 DDL 语句都已收到；于是将该 DDL 语句同步到下游执行并变更下游表结构。
+使用 `unlock-ddl-lock` 手动执行 unlock 操作后，由于该任务的配置信息中仍然包含了已下线的 DM-worker，如果不进行处理，则当下次 sharding DDL 到达时，仍会出现 lock 无法自动完成同步的情况。
 
-6. DM-worker 设置 binlog 流的新解析起始位置点为第一步时保存的位置点。
+因此，在手动解锁 DDL lock 后，需要再执行以下操作：
 
-7. DM-worker 重新开始解析从 t2 到 t3 时刻的 binlog。
+1. 使用 `stop-task` 停止运行中的任务。
+2. 更新任务配置文件，将已下线 DM-worker 对应的信息从配置文件中移除。
+3. 使用 `start-task` 及新任务配置文件重新启动任务。
 
-8. 对于 table_1 的 DML 语句（schema V2 版本），正常同步到下游；对于 table_2 的 DML 语句（schema V1 版本），忽略。
+> **注意：**
+> 
+> 在 `unlock-ddl-lock` 之后，如果已下线的 DM-worker 重新上线并尝试对其中的分表进行数据同步，则会由于数据与下游的表结构不匹配而发生错误。
 
-9. 解析到达第四步时保存的 binlog 位置点，可得知在第三步时被忽略的所有 DML 语句都已经重新同步到下游。
+### 场景二：unlock 过程中部分 DM-worker 重启
 
-10. DM-worker 继续从 t4 时刻对应的 binlog 位置点开始正常同步。
+#### Lock 异常原因
 
-综上可知，DM 在处理 sharding DDL 同步时，主要通过两级 sharding group 来进行协调控制，简化的流程为：
+在 DM-master 收到所有 DM-worker 的 DDL 信息后，执行自动 unlock DDL lock 的操作主要包括以下步骤：
 
-1. 各 DM-worker 独立地协调对应上游 MySQL 实例内多个分表组成的 sharding group 的 DDL 同步。
+1. 请求 lock owner 执行 DDL 操作，并更新对应分表的 checkpoint。
+2. 在 owner 执行 DDL 操作成功后，移除 DM-master 上保存的 DDL lock 信息。
+3. 在 owner 执行 DDL 操作成功后，请求其他所有 DM-worker 跳过 DDL 操作并更新对应分表的 checkpoint。
 
-2. 当 DM-worker 收到所有分表的 DDL 语句时，向 DM-master 发送 DDL 相关信息。
+上述 unlock DDL lock 的操作不是原子的，当 owner 执行 DDL 操作成功后，请求其他 DM-worker 跳过 DDL 操作时，如果该 DM-worker 发生了重启，则会造成该 DM-worker 跳过 DDL 操作失败。
 
-3. DM-master 根据 DM-worker 发来的 DDL 信息，协调由各 DM-worker 组成的 sharing group 的 DDL 同步。
+此时 DM-master 上的 lock 信息被移除，但该 DM-worker 重启后将尝试继续重新同步该 DDL 操作。但是，由于其他 DM-worker（包括原 owner）已经同步完该 DDL 操作，并已经在继续后续的同步，该 DM-worker 将永远无法等待该 DDL 操作对应 lock 的自动 unlock。
 
-4. 当 DM-master 收到所有 DM-worker 的 DDL 信息时，请求 DDL 锁的 owner（某个 DM-worker） 执行该 DDL 语句。
+#### 手动处理示例
 
-5. DDL 锁的 owner 执行 DDL 语句，并将结果反馈给 DM-master；自身开始重新同步在内部协调 DDL 同步过程中被忽略的 DML 语句。
+仍然假设是 [部分 DM-worker 下线](#场景一部分-dm-worker-下线) 示例中的上下游表结构及合表同步需求。
 
-6. 当 DM-master 收到 owner 执行 DDL 成功的消息后，请求其他所有 DM-worker 继续开始同步。
+当在 DM-master 自动执行 unlock 操作的过程中，owner (DM-worker-1) 成功执行了 DDL 操作且开始继续进行后续同步，并移除了 DM-master 上的 DDL lock 信息；但在请求 DM-worker-2 跳过 DDL 操作的过程中，由于 DM-worker-2 发生了重启而跳过 DDL 操作失败。
 
-7. 其他所有 DM-worker 各自开始重新同步在内部协调 DDL 同步过程中被忽略的 DML 语句。
+DM-worker-2 重启后，将尝试重新同步重启前已经在等待的 DDL lock。此时将在 DM-master 上创建一个新的 lock，并且该 DM-worker 将成为 lock 的 owner（其他 DM-worker 此时已经执行或跳过 DDL 操作并在进行后续同步）。
 
-8. 在完成被忽略的 DML 语句的重新同步后，所有 DM-worker 继续正常同步。
+处理流程如下：
+
+1. 使用 `show-ddl-locks` 确认 DM-master 上存在该 DDL 操作对应的 lock。
+
+    应该仅有该重启的 DM-worker（`127.0.0.1:8263`）处于 `syned` 状态：
+
+    {{< copyable "" >}}
+
+    ```bash
+    » show-ddl-locks
+    ```
+
+    ```
+    {
+        "result": true,
+        "msg": "",
+        "locks": [
+            {
+                "ID": "test-`shard_db`.`shard_table`",
+                "task": "test",
+                "owner": "127.0.0.1:8263",
+                "DDLs": [
+                    "USE `shard_db`; ALTER TABLE `shard_db`.`shard_table` ADD COLUMN `c2` int(11);"
+                ],
+                "synced": [
+                    "127.0.0.1:8263"
+                ],
+                "unsynced": [
+                    "127.0.0.1:8262"
+                ]
+            }
+        ]
+    }
+    ```
+
+2. 使用 `unlock-ddl-lock` 请求 DM-master unlock 该 lock。
+
+    - 使用 `--worker` 参数限定操作仅针对该重启的 DM-worker（`127.0.0.1:8263`）。
+    - Lock 过程中该 DM-worker 会尝试再次向下游执行该 DDL 操作（重启前的原 owner 已向下游执行过该 DDL 操作），需要确保该 DDL 操作可被多次执行。
+
+        {{< copyable "" >}}
+
+        ```bash
+        » unlock-ddl-lock --worker=127.0.0.1:8263 test-`shard_db`.`shard_table`
+        ```
+
+        ```
+        {
+            "result": true,
+            "msg": "",
+            "workers": [
+                {
+                    "result": true,
+                    "worker": "127.0.0.1:8263",
+                    "msg": ""
+                }
+            ]
+        }
+        ```
+
+3. 使用 `show-ddl-locks` 确认 DDL lock 是否被成功 unlock。
+4. 使用 `query-status` 确认同步任务是否正常。
+
+#### 手动处理后的影响
+
+手动 unlock sharding DDL lock 后，后续的 sharding DDL 将可以自动正常同步。
+
+### 场景三：unlock 过程中部分 DM-worker 临时不可达
+
+#### Lock 异常原因
+
+与 [unlock 过程中部分 DM-worker 重启](#场景二unlock-过程中部分-dm-worker-重启) 造成 lock 异常的原因类似。当请求 DM-worker 跳过 DDL 操作时，如果该 DM-worker 临时不可达，则会造成该 DM-worker 跳过 DDL 操作失败。此时 DM-master 上的 lock 信息被移除，但该 DM-worker 将处于等待一个不再存在的 DDL lock 的状态。
+
+场景三与[场景二](#场景二unlock-过程中部分-dm-worker-重启)的区别在于，场景三中 DM-master 没有 lock，而场景二中 DM-master 有一个新的 lock。
+
+#### 手动处理示例
+
+仍然假设是 [部分 DM-worker 下线](#场景一部分-dm-worker-下线) 示例中的上下游表结构及合表同步需求。
+
+在 DM-master 自动执行 unlock 操作的过程中，owner (DM-worker-1) 成功执行了 DDL 操作且开始继续进行后续同步，并移除了 DM-master 上的 DDL lock 信息，但在请求 DM-worker-2 跳过 DDL 操作的过程中，由于网络原因等临时不可达而跳过 DDL 操作失败。
+
+处理流程如下：
+
+1. 使用 `show-ddl-locks` 确认 DM-master 上不再存在该 DDL 操作对应的 lock。
+2. 使用 `query-status` 确认 DM-worker 仍在等待 lock 同步。
+
+    {{< copyable "" >}}
+
+    ```bash
+    » query-status test
+    ```
+
+    ```
+    {
+        "result": true,
+        "msg": "",
+        "workers": [
+            ...
+            {
+                ...
+                "worker": "127.0.0.1:8263",
+                "subTaskStatus": [
+                    {
+                        ...
+                        "unresolvedDDLLockID": "test-`shard_db`.`shard_table`",
+                        "sync": {
+                            ...
+                            "blockingDDLs": [
+                                "USE `shard_db`; ALTER TABLE `shard_db`.`shard_table` ADD COLUMN `c2` int(11);"
+                            ],
+                            "unresolvedGroups": [
+                                {
+                                    "target": "`shard_db`.`shard_table`",
+                                    "DDLs": [
+                                        "USE `shard_db`; ALTER TABLE `shard_db`.`shard_table` ADD COLUMN `c2` int(11);"
+                                    ],
+                                    "firstPos": "(mysql-bin|000001.000003, 1752)",
+                                    "synced": [
+                                        "`shard_db_2`.`shard_table_1`",
+                                        "`shard_db_2`.`shard_table_2`"
+                                    ],
+                                    "unsynced": [
+                                    ]
+                                }
+                            ],
+                            "synced": false
+                        }
+                    }
+                ]
+                ...
+            }
+        ]
+    }
+    ```
+
+3. 使用 `break-ddl-lock` 请求强制 break 该 DM-worker 当前正在等待的 DDL lock。
+
+    由于 owner 已经向下游执行了 DDL 操作，因此在 break 时使用 `--skip` 参数。
+
+    {{< copyable "" >}}
+
+    ```bash
+    » break-ddl-lock --worker=127.0.0.1:8263 --skip test
+    ```
+
+    ```
+    {
+        "result": true,
+        "msg": "",
+        "workers": [
+            {
+                "result": true,
+                "worker": "127.0.0.1:8263",
+                "msg": ""
+            }
+        ]
+    }
+    ```
+
+4. 使用 `query-status` 确认同步任务是否正常且不再处于等待 lock 的状态。
+
+#### 手动处理后的影响
+
+手动强制 break lock 后，后续 sharding DDL 将可以自动正常同步。
