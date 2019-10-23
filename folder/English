@@ -1,130 +1,79 @@
 ---
-title: TiDB Lightning 表库过滤
-summary: 使用黑白名单把一些表剔出要导入的范围。
+title: 事务模型
 category: reference
 aliases:
-  - '/docs-cn/tools/lightning/filter/'
-  - '/docs-cn/dev/reference/tools/tidb-lightning/filter/'
+  - '/docs-cn/sql/transaction-model/'
 ---
 
-# TiDB Lightning 表库过滤
+# 事务模型
 
-TiDB Lightning 支持使用黑名单和白名单来过滤掉某些数据库和表。这可以用来跳过一些用作暂存、毋须迁移的表，或用来手动切分数据源，让多机同时导入。
+TiDB 使用乐观事务模型，在执行 `UPDATE`、`INSERT`、`DELETE` 等语句时，只有在提交过程中才会检查写写冲突，而不是像 MySQL 一样使用行锁来避免写写冲突。类似的，诸如 `GET_LOCK()` 和 `RELEASE_LOCK()` 等函数以及 `SELECT .. FOR UPDATE` 之类的语句在 TiDB 和 MySQL 中的执行方式并不相同。所以业务端在执行 SQL 语句后，需要注意检查 `COMMIT` 的返回值，即使执行时没有出错，`COMMIT` 的时候也可能会出错。
 
-这些过滤规则与 MySQL 的 `replication-rules-db`/`replication-rules-table` 类似。
+## 与 MySQL 行为及性能对比
 
-## 过滤数据库
+### 事务重试
 
-```toml
-[black-white-list]
-do-dbs = ["pattern1", "pattern2", "pattern3"]
-ignore-dbs = ["pattern4", "pattern5"]
+执行失败的事务默认**不会**自动重试，因为这会导致更新丢失。可通过配置 `tidb_disable_txn_auto_retry = off` 开启该项功能。
+
+## 大事务
+
+由于 TiDB 分布式两阶段提交的要求，修改数据的大事务可能会出现一些问题。因此，TiDB 特意对事务大小设置了一些限制以减少这种影响：
+
+* 单个事务包含的 SQL 语句不超过 5000 条（默认）
+* 每个键值对不超过 6MB
+* 键值对的总数不超过 300,000
+* 键值对的总大小不超过 100MB
+
+## 小事务
+
+由于 TiDB 中的每个事务都需要跟 PD leader 进行两次 round trip，TiDB 中的小事务相比于 MySQL 中的小事务延迟更高。以如下的 query 为例，用显式事务代替 `auto_commit`，可优化该 query 的性能。
+
+使用 auto_commit 的原始版本：
+
+{{< copyable "sql" >}}
+
+```sql
+UPDATE my_table SET a='new_value' WHERE id = 1;
+UPDATE my_table SET a='newer_value' WHERE id = 2;
+UPDATE my_table SET a='newest_value' WHERE id = 3;
 ```
 
-* 如果 `[black-white-list]` 下的 `do-dbs` 列表不为空，
-    * 如数据库名称匹配 `do-dbs` 列表中**任何**一项，则数据库会被导入。
-    * 否则，数据库会被略过。
-* 否则，如果数据库名称匹配 `ignore-dbs` 列表中**任何**一项，数据库会被略过。
-* 如果数据库名称**同时**匹配 `do-dbs` 和 `ignore-dbs` 列表，数据库会被导入。
+优化后的版本：
 
-如果匹配项首字符为 `~`，它会被解析为 [Go 语言的正则表达式](https://golang.org/pkg/regexp/syntax/#hdr-syntax)。否则会视为普通的字串来匹配数据库名称。
+{{< copyable "sql" >}}
 
-## 过滤表
-
-```toml
-[[black-white-list.do-tables]]
-db-name = "db-pattern-1"
-tbl-name = "table-pattern-1"
-
-[[black-white-list.do-tables]]
-db-name = "db-pattern-2"
-tbl-name = "table-pattern-2"
-
-[[black-white-list.do-tables]]
-db-name = "db-pattern-3"
-tbl-name = "table-pattern-3"
-
-[[black-white-list.ignore-tables]]
-db-name = "db-pattern-4"
-tbl-name = "table-pattern-4"
-
-[[black-white-list.ignore-tables]]
-db-name = "db-pattern-5"
-tbl-name = "table-pattern-5"
+```sql
+START TRANSACTION;
+UPDATE my_table SET a='new_value' WHERE id = 1;
+UPDATE my_table SET a='newer_value' WHERE id = 2;
+UPDATE my_table SET a='newest_value' WHERE id = 3;
+COMMIT;
 ```
 
-* 如果 `do-tables` 列表不为空，
-    * 如果表的限定名称匹配 `do-tables` 列表中**任何**一对，则表会被导入。
-    * 否则，表会被略过。
-* 否则，如果表的限定名称匹配 `ignore-tables` 列表中**任何**一对，表会被略过。
-* 如果表的限定名称**同时**匹配 `do-tables` 和 `ignore-tables` 列表，表会被导入。
+### 单线程或时延敏感型 workload
 
-> **注意：**
-> 
-> Lightning 会先执行数据库过滤规则，之后才执行表的过滤规则。所以，如果一个数据库已被 `ignore-dbs` 略过，即使其下的表匹配 `do-tables` 也不会再被导入。
+由于 TiDB 中的 workload 是分布式的，TiDB 中单线程或时延敏感型 workload 的性能相比于单实例部署的 MySQL 较低。这与 TiDB 中的小事务延迟较高的情況类似。
 
-## 例子
+### Load data
 
-以下例子演示过滤规则的操作原理。假设数据源包含这些表：
+* 语法：
 
-```
-`logs`.`messages_2016`
-`logs`.`messages_2017`
-`logs`.`messages_2018`
-`forum`.`users`
-`forum`.`messages`
-`forum_backup_2016`.`messages`
-`forum_backup_2017`.`messages`
-`forum_backup_2018`.`messages`
-`admin`.`secrets`
-```
+    {{< copyable "sql" >}}
 
-我们使用以下设置：
+    ```sql
+    LOAD DATA LOCAL INFILE 'file_name' INTO TABLE table_name
+        {FIELDS | COLUMNS} TERMINATED BY 'string' ENCLOSED BY 'char' ESCAPED BY 'char'
+        LINES STARTING BY 'string' TERMINATED BY 'string'
+        IGNORE n LINES
+        (col_name ...);
+    ```
 
-```toml
-[black-white-list]
-do-dbs = [
-    "forum_backup_2018",            # 规则 A
-    "~^(logs|forum)$",              # 规则 B
-]
-ignore-dbs = [
-    "~^forum_backup_",              # 规则 C
-]
+    其中 ESCAPED BY 目前只支持 '/\/\'。
 
-[[black-white-list.do-tables]]      # 规则 D
-db-name = "logs"
-tbl-name = "~_2018$"
+* 事务的处理：
 
-[[black-white-list.ignore-tables]]  # 规则 E
-db-name = "~.*"
-tbl-name = "~^messages.*"
+    TiDB 在执行 `LOAD DATA` 操作时，默认将每 2 万行记录作为一个事务进行持久化存储。如果一次 `LOAD DATA` 操作插入的数据超过 2 万行，那么会分为多个事务进行提交。如果某个事务出错，这个事务会提交失败，但它前面的事务仍然会提交成功，在这种情况下，一次 `LOAD DATA` 操作会有部分数据插入成功，部分数据插入失败。而 MySQL 中会将一次 `LOAD DATA` 操作视为一个事务，如果其中发生失败情况，将会导致整个 `LOAD DATA` 操作失败。
 
-[[black-white-list.do-tables]]      # 规则 F
-db-name = "~^forum.*"
-tbl-name = "messages"
-```
-
-首先进行数据库过滤：
-
-| 数据库                       | 结果                        |
-| ------------------------- | ------------------------- |
-| `` `logs` ``              | 导入（规则 B）                  |
-| `` `forum` ``             | 导入（规则 B）                  |
-| `` `forum_backup_2016` `` | 略过（规则 C）                  |
-| `` `forum_backup_2017` `` | 略过（规则 C）                  |
-| `` `forum_backup_2018` `` | 导入（规则 A）（不会考虑规则 C）        |
-| `` `admin` ``             | 略过（`do-dbs` 不为空，且没有匹配的项目） |
-
-然后进行表过滤：
-
-| 表                                    | 结果                           |
-| ------------------------------------ | ---------------------------- |
-| `` `logs`.`messages_2016` ``         | 略过（规则 E）                     |
-| `` `logs`.`messages_2017` ``         | 略过（规则 E）                     |
-| `` `logs`.`messages_2018` ``         | 导入（规则 D）（不会考虑规则 E）           |
-| `` `forum`.`users` ``                | 略过（`do-tables` 不为空，且没有匹配的项目） |
-| `` `forum`.`messages` ``             | 导入（规则 F）（不会考虑规则 E）           |
-| `` `forum_backup_2016`.`messages` `` | 略过（数据库已被剔除）                  |
-| `` `forum_backup_2017`.`messages` `` | 略过（数据库已被剔除）                  |
-| `` `forum_backup_2018`.`messages` `` | 导入（规则 F）（不会考虑规则 E）           |
-| `` `admin`.`secrets` ``              | 略过（数据库已被剔除）                  |
+    > **注意：**
+    > 
+    > `LOAD DATA` 在 TiDB 中默认会拆分事务后分批提交，这种拆分事务提交的方式是以打破事务的原子性和隔离性为代价的，使用该特性时，使用者需要保证没有其他对正在处理的表的**任何**操作，并且在出现报错时，需要及时**人工介入，检查数据的一致性和完整性**。不建议在生产环境中使用。
