@@ -1,42 +1,116 @@
 ---
-title: GC 机制简介
+title: GC 配置
 category: reference
-aliases:
-  - '/docs-cn/op-guide/gc/'
 ---
 
-# GC 机制简介
+# GC 配置
 
-TiDB 的事务的实现采用了 MVCC（多版本并发控制）机制，当新写入的数据覆盖旧的数据时，旧的数据不会被替换掉，而是与新写入的数据同时保留，并以时间戳来区分版本。GC 的任务便是清理不再需要的旧数据。
+TiDB 的 GC 相关的配置存储于 `mysql.tidb` 系统表中，可以通过 SQL 语句对这些参数进行查询和更改：
 
-## 整体流程
+{{< copyable "sql" >}}
 
-一个 TiDB 集群中会有一个 TiDB 实例被选举为 GC leader，GC 的运行由 GC leader 来控制。
+```sql
+select VARIABLE_NAME, VARIABLE_VALUE from mysql.tidb;
+```
 
-GC 会被定期触发，默认情况下每 10 分钟一次。每次 GC 时，首先，TiDB 会计算一个称为 safe point 的时间戳（默认为当前时间减去 10 分钟），接下来 TiDB 会在保证 safe point 之后的快照全部拥有正确数据的前提下，删除更早的过期数据。具体而言，分为以下三个步骤：
+```
++--------------------------+----------------------------------------------------------------------------------------------------+
+| VARIABLE_NAME            | VARIABLE_VALUE                                                                                     |
++--------------------------+----------------------------------------------------------------------------------------------------+
+| bootstrapped             | True                                                                                               |
+| tidb_server_version      | 33                                                                                                 |
+| system_tz                | UTC                                                                                                |
+| tikv_gc_leader_uuid      | 5afd54a0ea40005                                                                                    |
+| tikv_gc_leader_desc      | host:tidb-cluster-tidb-0, pid:215, start at 2019-07-15 11:09:14.029668932 +0000 UTC m=+0.463731223 |
+| tikv_gc_leader_lease     | 20190715-12:12:14 +0000                                                                            |
+| tikv_gc_enable           | true                                                                                               |
+| tikv_gc_run_interval     | 10m0s                                                                                              |
+| tikv_gc_life_time        | 10m0s                                                                                              |
+| tikv_gc_last_run_time    | 20190715-12:09:14 +0000                                                                            |
+| tikv_gc_safe_point       | 20190715-11:59:14 +0000                                                                            |
+| tikv_gc_auto_concurrency | true                                                                                               |
+| tikv_gc_mode             | distributed                                                                                        |
++--------------------------+----------------------------------------------------------------------------------------------------+
+13 rows in set (0.00 sec)
+```
 
-1. Resolve Locks
-2. Delete Ranges
-3. Do GC
+例如，如果需要将 GC 调整为保留最近一天以内的数据，只需执行下列语句即可：
 
-### Resolve Locks
+{{< copyable "sql" >}}
 
-TiDB 的事务是基于 [Google Percolator](https://ai.google/research/pubs/pub36726) 模型实现的，事务的提交是一个两阶段提交的过程。第一阶段完成时，所有涉及的 key 会加上一个锁，其中一个锁会被设定为 Primary，其余的锁（Secondary）则会指向 Primary；第二阶段会将 Primary 锁所在的 key 加上一个 Write 记录，并去除锁。这里的 Write 记录就是历史上对该 key 进行写入或删除，或者该 key 上发生事务回滚的记录。Primary 锁被替换为何种 Write 记录标志着该事务提交成功与否。接下来，所有 Secondary 锁也会被依次替换。如果替换这些 Secondary 锁的线程死掉了，锁就残留了下来。
-
-Resolve Locks 这一步的任务即对 safe point 之前的锁进行回滚或提交，取决于其 Primary 是否被提交。如果一个 Primary 锁也残留了下来，那么该事务应当视为超时并进行回滚。这一步是必不可少的，因为如果其 Primary 的 Write 记录由于太老而被 GC 清除掉了，那么就再也无法知道该事务是否成功。如果该事务存在残留的 Secondary 锁，那么也无法知道它应当被回滚还是提交，也就无法保证一致性。
-
-Resolve Locks 的执行方式是由 GC leader 对所有的 Region 发送请求进行处理。从 3.0 起，这个过程默认会并行地执行，并发数量默认与 TiKV 节点个数相同。
-
-## Delete Ranges
-
-在执行 `DROP TABLE/INDEX` 等操作时，会有大量连续的数据被删除。如果对每个 key 都进行删除操作、再对每个 key 进行 GC 的话，那么执行效率和空间回收速度都可能非常的低下。事实上，这种时候 TiDB 并不会对每个 key 进行删除操作，而是将这些待删除的区间及删除操作的时间戳记录下来。Delete Ranges 会将这些时间戳在 safe point 之前的区间进行快速的物理删除。
-
-## Do GC
-
-这一步即删除所有 key 的过期版本。为了保证 safe point 之后的任何时间戳都具有一致的快照，这一步删除 safe point 之前提交的数据，但是会保留 safe point 前的最后一次写入（除非最后一次写入是删除）。
-
-TiDB 2.1 及更早版本使用的 GC 方式是由 GC leader 向所有 Region 发送 GC 请求。从 3.0 起，GC leader 只需将 safe point 上传至 PD。每个 TiKV 节点都会各自从 PD 获取 safe point。当 TiKV 发现 safe point 发生更新时，便会对当前节点上所有作为 leader 的 Region 进行 GC。与此同时，GC leader 可以继续触发下一轮 GC。
+```sql
+update mysql.tidb set VARIABLE_VALUE="24h" where VARIABLE_NAME="tikv_gc_life_time";
+```
 
 > **注意：**
 > 
-> 通过修改配置可以继续使用旧的 GC 方式，详情请参考 [GC 配置](/v3.0/reference/garbage-collection/configuration.md)。
+> `mysql.tidb` 系统表中除了下文将要列出的 GC 的配置以外，还包含一些 TiDB 用于储存部分集群状态（包括 GC 状态）的记录。请勿手动更改这些记录。其中，与 GC 有关的记录如下：
+> 
+> - `tikv_gc_leader_uuid`，`tikv_gc_leader_desc` 和 `tikv_gc_leader_lease` 用于记录 GC leader 的状态
+> - `tikv_gc_last_run_time`：上次 GC 运行时间
+> - `tikv_gc_safe_point`：当前 GC 的 safe point
+
+## `tikv_gc_enable`
+
+- 控制是否启用 GC。
+- 默认值：`true`
+
+## `tikv_gc_run_interval`
+
+- 指定 GC 运行时间间隔。Duration 类型，使用 Go 的 Duration 字符串格式，如 `"1h30m"`，`"15m"` 等。
+- 默认值：`"10m0s"`
+
+## `tikv_gc_life_time`
+
+- 每次 GC 时，保留数据的时限。Duration 类型。每次 GC 时将以当前时间减去该配置的值作为 safe point。
+- 默认值：`"10m0s"`
+
+> **注意：**
+> 
+> - `tikv_gc_life_time` 的值必须大于 TiDB 的配置文件中的 [`max-txn-time-use`](/v3.0/reference/configuration/tidb-server/configuration-file.md#max-txn-time-use) 的值至少 10 秒，且不低于 10 分钟。
+> 
+> - 在数据更新频繁的场景下，如果将 `tikv_gc_life_time` 设置得比较大（如数天甚至数月），可能会有一些潜在的问题，如：
+>     
+>     - 磁盘空间占用较多。
+>     - 大量的历史版本会在一定程度上影响性能，尤其是范围查询（如 `select count(*) from t`）。
+
+## `tikv_gc_mode`
+
+指定 GC 模式。可选值如下：
+
+- `"distributed"`（默认）：分布式 GC 模式。在此模式下，[Do GC](/v3.0/reference/garbage-collection/overview.md#do-gc) 阶段由 TiDB 上的 GC leader 向 PD 发送 safe point，每个 TiKV 节点各自获取该 safe point 并对所有当前节点上作为 leader 的 Region 进行 GC。此模式于 TiDB 3.0 引入。
+
+- `"central"`：集中 GC 模式。在此模式下，[Do GC](/v3.0/reference/garbage-collection/overview.md#do-gc) 阶段由 GC leader 向所有的 Region 发送 GC 请求。TiDB 2.1 及更早版本采用此 GC 模式。
+
+## `tikv_gc_auto_concurrency`
+
+控制是否由 TiDB 自动决定 GC concurrency，即同时进行 GC 的线程数。
+
+当 `tikv_gc_mode` 设为 `"distributed"`，GC concurrency 将应用于 [Resolve Locks](/v3.0/reference/garbage-collection/overview.md#resolve-locks) 阶段。当 [`tikv_gc_mode`](#tikv_gc_mode) 设为 `"central"` 时，GC concurrency 将应用于 Resolve Locks 以及 [Do GC](/v3.0/reference/garbage-collection/overview.md#do-gc) 两个阶段。
+
+- `true`（默认）：自动以 TiKV 节点的个数作为 GC concurrency
+- `false`：使用 [`tikv_gc_concurrency`](#tikv_gc_concurrency) 的值作为 GC 并发数
+
+## `tikv_gc_concurrency`
+
+- 手动设置 GC concurrency。要使用该参数，必须将 [`tikv_gc_auto_concurrency`](#tikv_gc_auto_concurrency) 设为 `false` 。
+- 默认值：2
+
+## 关于 GC 流程的说明
+
+从 TiDB 3.0 版本起，由于对分布式 GC 模式和并行 Resolve Locks 的支持，部分配置选项的作用发生了变化。可根据下表理解不同版本中这些配置的区别：
+
+| 版本/配置                                                                                       | Resolve Locks | Do GC |
+| ------------------------------------------------------------------------------------------- | ------------- | ----- |
+| 2.x                                                                                         | 串行            | 并行    |
+| 3.0 <br/> `tikv_gc_mode = centered` <br/> `tikv_gc_auto_concurrency = false`                | 并行            | 并行    |
+| 3.0 <br/> `tikv_gc_mode = centered` <br/> `tikv_gc_auto_concurrency = true`                 | 自动并行          | 自动并行  |
+| 3.0 <br/> `tikv_gc_mode = distributed` <br/> `tikv_gc_auto_concurrency = false`             | 并行            | 分布式   |
+| 3.0 <br/> `tikv_gc_mode = distributed` <br/> `tikv_gc_auto_concurrency = true` <br/> （默认配置） | 自动并行          | 分布式   |
+
+表格内容说明：
+
+- 串行：由 TiDB 逐个向 Region 发送请求。
+- 并行：使用 `tikv_gc_concurrency` 选项所指定的线程数，并行地向每个 Region 发送请求。
+- 自动并行：使用 TiKV 节点的个数作为线程数，并行地向每个 Region 发送请求。
+- 分布式：无需 TiDB 通过对 TiKV 发送请求的方式来驱动，而是每台 TiKV 自行工作。
