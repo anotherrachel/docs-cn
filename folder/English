@@ -1,218 +1,48 @@
 ---
-title: TiDB Docker 部署方案
-category: deployment
+title: 系统变量
+category: user guide
 ---
 
-# TiDB Docker 部署方案
+# 系统变量
 
-本篇将展示如何在多台主机上使用 Docker 部署一个 TiDB 集群。
+MySQL 系统变量 (System Variables) 是一些系统参数，用于调整数据库运行时的行为，根据变量的作用范围分为全局范围有效（Global Scope）以及会话级别有效（Session Scope）。TiDB 支持 MySQL5.7 的所有系统变量，大部分变量仅仅是为了兼容性而支持，不会影响运行时行为。
 
-阅读本章前，请先确保阅读 [TiDB 整体架构](../overview.md#tidb-整体架构) 及 [部署建议](../op-guide/recommendation.md)。
+## 设置系统变量
 
-## 环境准备
+通过 [`SET` 语句](admin.md#set-语句)可以修改系统变量的值。进行修改时，还要考虑变量可修改的范围，不是所有的变量都能在全局/会话范围内进行修改。具体的可修改范围参考 [MySQL 动态变量文档](https://dev.mysql.com/doc/refman/5.7/en/dynamic-system-variables.html)。
 
-### 安装 Docker
+### 全局范围值
 
-Docker 可以方便地在 Linux / Mac OS / Windows 平台安装，安装方法请参考 [Docker 官方文档](https://www.docker.com/products/docker)。
+* 在变量名前加 `GLOBAL` 关键词或者是使用 `@@global.` 作为修饰符:
 
-### 拉取 TiDB 的 Docker 镜像
-
-部署 TiDB 集群主要包括 3 个服务组件:
-
-- TiDB
-- TiKV
-- PD
-
-对应的最新 Docker 镜像可以通过 [Docker 官方镜像仓库](https://hub.docker.com) 获取：
-
-```bash
-docker pull pingcap/tidb:latest
-docker pull pingcap/tikv:latest
-docker pull pingcap/pd:latest
+```sql
+SET GLOBAL autocommit = 1;
+SET @@global.autocommit = 1;
 ```
 
-## 部署一个多节点集群
+### 会话范围值
 
-假设我们打算在 6 台主机上部署一个 TiDB 集群:
+* 在变量名前加 `SESSION` 关键词或者是使用 `@@session.` 作为修饰符，或者是不加任何修饰符:
 
-| 主机名   | IP            | 部署服务       | 数据盘挂载 |
-| ----- | ------------- | ---------- | ----- |
-| host1 | 192.168.1.101 | PD1 & TiDB | /data |
-| host2 | 192.168.1.102 | PD2        | /data |
-| host3 | 192.168.1.103 | PD3        | /data |
-| host4 | 192.168.1.104 | TiKV1      | /data |
-| host5 | 192.168.1.105 | TiKV2      | /data |
-| host6 | 192.168.1.106 | TiKV3      | /data |
-
-### 启动 PD
-
-登录 **host1** 执行：
-
-```bash
-docker run -d --name pd1 \
-  -p 2379:2379 \
-  -p 2380:2380 \
-  -v /etc/localtime:/etc/localtime:ro \
-  -v /data:/data \
-  pingcap/pd:latest \
-  --name="pd1" \
-  --data-dir="/data/pd1" \
-  --client-urls="http://0.0.0.0:2379" \
-  --advertise-client-urls="http://192.168.1.101:2379" \
-  --peer-urls="http://0.0.0.0:2380" \
-  --advertise-peer-urls="http://192.168.1.101:2380" \
-  --initial-cluster="pd1=http://192.168.1.101:2380,pd2=http://192.168.1.102:2380,pd3=http://192.168.1.103:2380"
+```sql
+SET SESSION autocommit = 1;
+SET @@session.autocommit = 1;
+SET @@autocommit = 1;
 ```
 
-登录 **host2** 执行：
+* `LOCAL` 以及 `@@local.` 是 `SESSION` 以及 `@@session.` 的同义词
 
-```bash
-docker run -d --name pd2 \
-  -p 2379:2379 \
-  -p 2380:2380 \
-  -v /etc/localtime:/etc/localtime:ro \
-  -v /data:/data \
-  pingcap/pd:latest \
-  --name="pd2" \
-  --data-dir="/data/pd2" \
-  --client-urls="http://0.0.0.0:2379" \
-  --advertise-client-urls="http://192.168.1.102:2379" \
-  --peer-urls="http://0.0.0.0:2380" \
-  --advertise-peer-urls="http://192.168.1.102:2380" \
-  --initial-cluster="pd1=http://192.168.1.101:2380,pd2=http://192.168.1.102:2380,pd3=http://192.168.1.103:2380"
-```
+## TiDB 支持的 MySQL 系统变量
 
-登录 **host3** 执行：
+下列系统变量是 TiDB 真正支持并且行为和 MySQL 一致：
 
-```bash
-docker run -d --name pd3 \
-  -p 2379:2379 \
-  -p 2380:2380 \
-  -v /etc/localtime:/etc/localtime:ro \
-  -v /data:/data \
-  pingcap/pd:latest \
-  --name="pd3" \
-  --data-dir="/data/pd3" \
-  --client-urls="http://0.0.0.0:2379" \
-  --advertise-client-urls="http://192.168.1.103:2379" \
-  --peer-urls="http://0.0.0.0:2380" \
-  --advertise-peer-urls="http://192.168.1.103:2380" \
-  --initial-cluster="pd1=http://192.168.1.101:2380,pd2=http://192.168.1.102:2380,pd3=http://192.168.1.103:2380"
-```
+| 变量名          | 作用域       | 说明                             |
+| ------------ | --------- | ------------------------------ |
+| autocommit   | GLOBAL \ | SESSION | 是否自动 Commit 事务       |
+| sql_mode     | GLOBAL \ | SESSION | 支持部分 MySQL SQL mode， |
+| time_zone    | GLOBAL \ | SESSION | 数据库所使用的时区            |
+| tx_isolation | GLOBAL \ | SESSION | 事务隔离级别               |
 
-### 启动 TiKV
+## TiDB 特有的系统变量
 
-登录 **host4** 执行：
-
-```bash
-docker run -d --name tikv1 \
-  -p 20160:20160 \
-  --ulimit nofile=1000000:1000000 \
-  -v /etc/localtime:/etc/localtime:ro \
-  -v /data:/data \
-  pingcap/tikv:latest \
-  --addr="0.0.0.0:20160" \
-  --advertise-addr="192.168.1.104:20160" \
-  --data-dir="/data/tikv1" \
-  --pd="192.168.1.101:2379,192.168.1.102:2379,192.168.1.103:2379"
-```
-
-登录 **host5** 执行：
-
-```bash
-docker run -d --name tikv2 \
-  -p 20160:20160 \
-  --ulimit nofile=1000000:1000000 \
-  -v /etc/localtime:/etc/localtime:ro \
-  -v /data:/data \
-  pingcap/tikv:latest \
-  --addr="0.0.0.0:20160" \
-  --advertise-addr="192.168.1.105:20160" \
-  --data-dir="/data/tikv2" \
-  --pd="192.168.1.101:2379,192.168.1.102:2379,192.168.1.103:2379"
-```
-
-登录 **host6** 执行：
-
-```bash
-docker run -d --name tikv3 \
-  -p 20160:20160 \
-  --ulimit nofile=1000000:1000000 \
-  -v /etc/localtime:/etc/localtime:ro \
-  -v /data:/data \
-  pingcap/tikv:latest \
-  --addr="0.0.0.0:20160" \
-  --advertise-addr="192.168.1.106:20160" \
-  --data-dir="/data/tikv3" \
-  --pd="192.168.1.101:2379,192.168.1.102:2379,192.168.1.103:2379"
-```
-
-### 启动 TiDB
-
-登录 **host1** 执行：
-
-```bash
-docker run -d --name tidb \
-  -p 4000:4000 \
-  -p 10080:10080 \
-  -v /etc/localtime:/etc/localtime:ro \
-  pingcap/tidb:latest \
-  --store=tikv \
-  --path="192.168.1.101:2379,192.168.1.102:2379,192.168.1.103:2379"
-```
-
-### 使用 MySQL 标准客户端连接 TiDB 测试
-
-登录 **host1** 并确保已安装 [MySQL 命令行客户端](http://dev.mysql.com/downloads/mysql/)，执行：
-
-```bash
-$ mysql -h 127.0.0.1 -P 4000 -u root -D test
-mysql> show databases;
-+--------------------+
-| Database           |
-+--------------------+
-| INFORMATION_SCHEMA |
-| PERFORMANCE_SCHEMA |
-| mysql              |
-| test               |
-+--------------------+
-4 rows in set (0.00 sec)
-```
-
-### 如何自定义配置文件
-
-TiKV 和 PD 可以通过指定配置文件的方式来加载更加丰富的启动参数，用于性能调优。
-
-假定配置文件在宿主机上的存放路径 `/path/to/config/pd.toml` 和 `/path/to/config/tikv.toml`。启动 Docker 时需要调整相应的启动参数，以 tikv1 和 pd1 为例：
-
-```bash
-docker run -d --name tikv1 \
-  -p 20160:20160 \
-  -v /etc/localtime:/etc/localtime:ro \
-  -v /data:/data \
-  -v /path/to/config/tikv.toml:/tikv.toml:ro \
-  pingcap/tikv:latest \
-  --addr="0.0.0.0:20160" \
-  --advertise-addr="192.168.1.104:20160" \
-  --data-dir="/data/tikv1" \
-  --pd="192.168.1.101:2379,192.168.1.102:2379,192.168.1.103:2379" \
-  --config="/tikv.toml"
-```
-
-```bash
-docker run -d --name pd1 \
-  -p 2379:2379 \
-  -p 2380:2380 \
-  -v /etc/localtime:/etc/localtime:ro \
-  -v /data:/data \
-  -v /path/to/config/pd.toml:/pd.toml:ro \
-  pingcap/pd:latest \
-  --name="pd1" \
-  --data-dir="/data/pd1" \
-  --client-urls="http://0.0.0.0:2379" \
-  --advertise-client-urls="http://192.168.1.101:2379" \
-  --peer-urls="http://0.0.0.0:2380" \
-  --advertise-peer-urls="http://192.168.1.101:2380" \
-  --initial-cluster="pd1=http://192.168.1.101:2380,pd2=http://192.168.1.102:2380,pd3=http://192.168.1.103:2380" \
-  --config="/pd.toml"
-```
+参见 [TiDB 专用系统变量](tidb-specific.md#tidb-专用系统变量和语法)。
