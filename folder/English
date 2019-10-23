@@ -1,79 +1,74 @@
 ---
-title: TiDB Operator 简介
-category: reference
+title: Kubernetes 上的 TiDB 集群扩缩容
+category: how-to
 aliases:
-  - '/docs-cn/v3.0/reference/tidb-operator-overview/'
+  - '/docs-cn/v3.0/how-to/scale/tidb-in-kubernetes/'
 ---
 
-# TiDB Operator 简介
+# Kubernetes 上的 TiDB 集群扩缩容
 
-TiDB Operator 是 Kubernetes 上的 TiDB 集群自动运维系统，提供包括部署、升级、扩缩容、备份恢复、配置变更的 TiDB 全生命周期管理。借助 TiDB Operator，TiDB 可以无缝运行在公有云或私有部署的 Kubernetes 集群上。
+本文介绍 TiDB 在 Kubernetes 中如何进行水平扩缩容和垂直扩缩容。
+
+## 水平扩缩容
+
+TiDB 水平扩缩容操作指的是通过增加或减少节点的数量，来达到集群扩缩容的目的。扩缩容 TiDB 集群时，会按照填入的 replicas 值，对 PD、TiKV、TiDB 进行顺序扩缩容操作。扩容操作按照节点编号由小到大增加节点，缩容操作按照节点编号由大到小删除节点。
+
+### 水平扩缩容操作
+
+1. 修改集群的 `value.yaml` 文件中的 `pd.replicas`、`tidb.replicas`、`tikv.replicas` 至期望值。
+
+2. 执行 `helm upgrade` 命令进行扩缩容：
+
+    {{< copyable "shell-regular" >}}
+
+    ```shell
+    helm upgrade <release-name> pingcap/tidb-cluster -f values.yaml --version=<chart-version>
+    ```
+
+3. 查看集群水平扩缩容状态：
+
+    {{< copyable "shell-regular" >}}
+
+    ```shell
+    watch kubectl -n <namespace> get pod -o wide
+    ```
+
+    当所有组件的 Pod 数量都达到了预设值，并且都进入  `Running` 状态后，水平扩缩容完成。
 
 > **注意：**
 > 
-> 每个 Kubernetes 集群中只能部署一个 TiDB Operator。
+> - PD、TiKV 组件在滚动升级的过程中不会触发扩缩容操作。
+> - TiKV 组件在缩容过程中会调用 PD 接口将对应 TiKV 标记为下线，然后将其上数据迁移到其它 TiKV 节点，在数据迁移期间 TiKV Pod 依然是 `Running` 状态，数据迁移完成后对应 Pod 才会被删除，缩容时间与待缩容的 TiKV 上的数据量有关，可以通过 `kubectl get tidbcluster -n <namespace> <release-name> -o json | jq '.status.tikv.stores'` 查看 TiKV 是否处于下线 `Offline` 状态。
+> - PD、TiKV 组件在缩容过程中被删除的节点的 PVC 会保留，并且由于 PV 的 `Reclaim Policy` 设置为 `Retain`，即使 PVC 被删除，数据依然可以找回。
+> - TiKV 组件不支持在缩容未完成时进行扩容操作，强制执行此操作可能导致集群状态异常。假如异常已经发生，可以参考 [TiKV Store 异常进入 Tombstone 状态](/v3.0/tidb-in-kubernetes/troubleshoot.md#tikv-store-异常进入-tombstone-状态) 进行解决。
 
-## TiDB Operator 整体架构
+## 垂直扩缩容
 
-![TiDB Operator Overview](/media/tidb-operator-overview.png)
+垂直扩缩容操作指的是通过增加或减少节点的资源限制，来达到集群扩缩容的目的。垂直扩缩容本质上是节点滚动升级的过程。
 
-其中，`TidbCluster` 是由 CRD（`CustomResourceDefinition`）定义的自定义资源，用于描述用户期望的 TiDB 集群状态。TiDB 集群的编排和调度逻辑则由下列组件负责：
+### 垂直扩缩容操作
 
-* `tidb-controller-manager` 是一组 Kubernetes 上的自定义控制器。这些控制器会不断对比 `TidbCluster` 对象中记录的期望状态与 TiDB 集群的实际状态，并调整 Kubernetes 中的资源以驱动 TiDB 集群满足期望状态；
-* `tidb-scheduler` 是一个 Kubernetes 调度器扩展，它为 Kubernetes 调度器注入 TiDB 集群特有的调度逻辑；
+1. 修改 `values.yaml` 文件中的 `tidb.resources`、`tikv.resources`、`pd.resources` 至期望值。
 
-此外，TiDB Operator 还提供了命令行接口 `tkctl` 用于运维集群和诊断集群问题。
+2. 执行 `helm upgrade` 命令进行升级：
 
-![TiDB Operator Control Flow](/media/tidb-operator-control-flow.png)
+    {{< copyable "shell-regular" >}}
 
-上图是 TiDB Operator 的控制流程解析。由于 TiDB 集群还需要监控、初始化、定时备份、Binlog 等组件，TiDB Operator 中使用 Helm Chart 封装了 TiDB 集群定义。整体的控制流程如下：
+    ```shell
+    helm upgrade <release-name> pingcap/tidb-cluster -f values.yaml --version=<chart-version>
+    ```
 
-1. 用户通过 Helm 创建 `TidbCluster` 对象和相应的一系列 Kubernetes 原生对象，比如执行定时备份的 `CronJob`；
-2. TiDB Operator 会 watch `TidbCluster` 以及其它相关对象，基于集群的实际状态不断调整 PD、TiKV、TiDB 的 `StatefulSet` 和 `Service` 对象；
-3. Kubernetes 的原生控制器根据 `StatefulSet`、`Deployment`、`CronJob` 等对象创建更新或删除对应的 `Pod`；
-4. PD、TiKV、TiDB 的 `Pod` 声明中会指定使用 `tidb-scheduler` 调度器，`tidb-scheduler` 会在调度对应 `Pod` 时应用 TiDB 的特定调度逻辑。
+3. 查看升级进度：
 
-基于上述的声明式控制流程，TiDB Operator 能够自动进行集群节点健康检查和故障恢复。部署、升级、扩缩容等操作也可以通过修改 `TidbCluster` 对象声明“一键”完成。
+    {{< copyable "shell-regular" >}}
 
-## 使用 TiDB Operator 管理 TiDB 集群
+    ```shell
+    watch kubectl -n <namespace> get pod -o wide
+    ```
 
-TiDB Operator 提供了多种方式来部署 Kubernetes 上的 TiDB 集群：
+    当所有 Pod 都重建完毕进入 `Running` 状态后，垂直扩缩容完成。
 
-+ 测试环境：
-    - [kind](/v3.0/tidb-in-kubernetes/get-started/deploy-tidb-from-kubernetes-kind.md)：采用 [kind](https://kind.sigs.k8s.io/) 方式在本地 Kubernetes 集群上部署 TiDB 集群；
-    - [DinD](/v3.0/tidb-in-kubernetes/get-started/deploy-tidb-from-kubernetes-dind.md)：使用 TiDB Operator 在本地 DinD 环境部署 TiDB 集群；
-    - [Minikube](/v3.0/tidb-in-kubernetes/get-started/deploy-tidb-from-kubernetes-minikube.md)：使用 TiDB Operator 在本地 Minikube 环境部署 TiDB 集群；
-    - [GKE](/v3.0/tidb-in-kubernetes/get-started/deploy-tidb-from-kubernetes-gke.md)：使用 TiDB Operator 在 GKE 上部署 TiDB 集群。
-
-+ 生产环境：
-
-    - 公有云：参考 [AWS 部署文档](/v3.0/tidb-in-kubernetes/deploy/aws-eks.md)，[GKE 部署文档 (beta)](/v3.0/tidb-in-kubernetes/deploy/gcp-gke.md)，或[阿里云部署文档](/v3.0/tidb-in-kubernetes/deploy/alibaba-cloud.md)在对应的公有云上一键部署生产可用的 TiDB 集群并进行后续的运维管理；
-
-    - 现有 Kubernetes 集群：首先按照[部署 TiDB Operator](/v3.0/tidb-in-kubernetes/deploy/tidb-operator.md)在集群中安装 TiDB Operator，再根据[在标准 Kubernetes 集群上部署 TiDB 集群](/v3.0/tidb-in-kubernetes/deploy/general-kubernetes.md)来部署你的 TiDB 集群。对于生产级 TiDB 集群，你还需要参考 [TiDB 集群环境要求](/v3.0/tidb-in-kubernetes/deploy/prerequisites.md)调整 Kubernetes 集群配置并根据[本地 PV 配置](/v3.0/tidb-in-kubernetes/reference/configuration/storage-class.md#本地-pv-配置)为你的 Kubernetes 集群配置本地 PV，以满足 TiKV 的低延迟本地存储需求。
-
-在任何环境上部署前，都可以参考 [TiDB 集群配置](/v3.0/tidb-in-kubernetes/reference/configuration/tidb-cluster.md)来自定义 TiDB 配置。
-
-部署完成后，你可以参考下面的文档进行 Kubernetes 上 TiDB 集群的使用和运维：
-
-+ [部署 TiDB 集群](/v3.0/tidb-in-kubernetes/deploy/general-kubernetes.md)
-+ [访问 TiDB 集群](/v3.0/tidb-in-kubernetes/deploy/access-tidb.md)
-+ [TiDB 集群扩缩容](/v3.0/tidb-in-kubernetes/scale-in-kubernetes.md)
-+ [TiDB 集群升级](/v3.0/tidb-in-kubernetes/upgrade/tidb-cluster.md#升级-tidb-版本)
-+ [TiDB 集群配置变更](/v3.0/tidb-in-kubernetes/upgrade/tidb-cluster.md#更新-tidb-集群配置)
-+ [TiDB 集群备份恢复](/v3.0/tidb-in-kubernetes/maintain/backup-and-restore.md)
-+ [配置 TiDB 集群故障自动转移](/v3.0/tidb-in-kubernetes/maintain/auto-failover.md)
-+ [监控 TiDB 集群](/v3.0/tidb-in-kubernetes/monitor/tidb-in-kubernetes.md)
-+ [TiDB 集群日志收集](/v3.0/tidb-in-kubernetes/maintain/log-collecting.md)
-+ [维护 TiDB 所在的 Kubernetes 节点](/v3.0/tidb-in-kubernetes/maintain/kubernetes-node.md)
-
-当集群出现问题需要进行诊断时，你可以：
-
-+ 查阅 [Kubernetes 上的 TiDB FAQ](/v3.0/tidb-in-kubernetes/faq.md) 寻找是否存在现成的解决办法；
-+ 参考 [Kubernetes 上的 TiDB 故障诊断](/v3.0/tidb-in-kubernetes/troubleshoot.md)解决故障。
-
-Kubernetes 上的 TiDB 提供了专用的命令行工具 `tkctl` 用于集群管理和辅助诊断，同时，在 Kubernetes 上，TiDB 的部分生态工具的使用方法也有所不同，你可以：
-
-+ 参考 [`tkctl` 使用指南](/v3.0/tidb-in-kubernetes/reference/tools/tkctl.md) 来使用 `tkctl`；
-+ 参考 [Kubernetes 上的 TiDB 相关工具使用指南](/v3.0/tidb-in-kubernetes/reference/tools/in-kubernetes.md)来了解 TiDB 生态工具在 Kubernetes 上的使用方法。
-
-最后，当 TiDB Operator 发布新版本时，你可以参考[升级 TiDB Operator](/v3.0/tidb-in-kubernetes/upgrade/tidb-operator.md) 进行版本更新。
+> **注意：**
+> 
+> - 如果在垂直扩容时修改了资源的 `requests` 字段，由于 PD、TiKV 使用了 `Local PV`，升级后还需要调度回原节点，如果原节点资源不够，则会导致 Pod 一直处于 `Pending` 状态而影响服务。
+> - TiDB 作为一个可水平扩展的数据库，推荐通过增加节点个数发挥 TiDB 集群可水平扩展的优势，而不是类似传统数据库升级节点硬件配置来实现垂直扩容。
