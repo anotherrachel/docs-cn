@@ -1,127 +1,38 @@
 ---
-title: TiDB Lightning 表库过滤
-summary: 使用黑白名单把一些表剔出要导入的范围。
+title: TiDB Lightning 简介
 category: reference
 ---
 
-# TiDB Lightning 表库过滤
+# TiDB Lightning 简介
 
-TiDB Lightning 支持使用黑名单和白名单来过滤掉某些数据库和表。这可以用来跳过一些用作暂存、毋须迁移的表，或用来手动切分数据源，让多机同时导入。
+TiDB Lightning 是一个将全量数据高速导入到 TiDB 集群的工具，有以下两个主要的使用场景：一是大量新数据的快速导入；二是全量数据的备份恢复。目前，支持 Mydumper 或 CSV 输出格式的数据源。您可以在以下两种场景下使用 Lightning：
 
-这些过滤规则与 MySQL 的 `replication-rules-db`/`replication-rules-table` 类似。
+- **迅速**导入**大量新**数据。
+- 备份恢复所有数据。
 
-## 过滤数据库
+## TiDB Lightning 整体架构
 
-```toml
-[black-white-list]
-do-dbs = ["pattern1", "pattern2", "pattern3"]
-ignore-dbs = ["pattern4", "pattern5"]
-```
+TiDB Lightning 主要包含两个部分:
 
-* 如果 `[black-white-list]` 下的 `do-dbs` 列表不为空，
-    * 如数据库名称匹配 `do-dbs` 列表中**任何**一项，则数据库会被导入。
-    * 否则，数据库会被略过。
-* 否则，如果数据库名称匹配 `ignore-dbs` 列表中**任何**一项，数据库会被略过。
-* 如果数据库名称**同时**匹配 `do-dbs` 和 `ignore-dbs` 列表，数据库会被导入。
+- **`tidb-lightning`**（“前端”）：主要完成适配工作，通过读取数据源，在下游 TiDB 集群建表、将数据转换成键/值对 (KV 对) 发送到 `tikv-importer`、检查数据完整性等。
+- **`tikv-importer`**（“后端”）：主要完成将数据导入 TiKV 集群的工作，把 `tidb-lightning` 写入的 KV 对缓存、排序、切分并导入到 TiKV 集群。
 
-如果匹配项首字符为 `~`，它会被解析为 [Go 语言的正则表达式](https://golang.org/pkg/regexp/syntax/#hdr-syntax)。否则会视为普通的字串来匹配数据库名称。
+![TiDB Lightning 其整体架构](/media/tidb-lightning-architecture.png)
 
-## 过滤表
+TiDB Lightning 整体工作原理如下：
 
-```toml
-[[black-white-list.do-tables]]
-db-name = "db-pattern-1"
-tbl-name = "table-pattern-1"
+1. 在导数据之前，`tidb-lightning` 会自动将 TiKV 集群切换为“导入模式” (import mode)，优化写入效率并停止自动压缩 (compaction)。
 
-[[black-white-list.do-tables]]
-db-name = "db-pattern-2"
-tbl-name = "table-pattern-2"
+2. `tidb-lightning` 会在目标数据库建立架构和表，并获取其元数据。
 
-[[black-white-list.do-tables]]
-db-name = "db-pattern-3"
-tbl-name = "table-pattern-3"
+3. 每张表都会被分割为多个连续的**区块**，这样来自大表 (200 GB+) 的数据就可以用增量方式导入。
 
-[[black-white-list.ignore-tables]]
-db-name = "db-pattern-4"
-tbl-name = "table-pattern-4"
+4. `tidb-lightning` 会通过 gRPC 让 `tikv-importer` 为每一个区块准备一个“引擎文件 (engine file)”来处理 KV 对。`tidb-lightning` 会并发读取 SQL dump，将数据源转换成与 TiDB 相同编码的 KV 对，然后发送到 `tikv-importer` 里对应的引擎文件。
 
-[[black-white-list.ignore-tables]]
-db-name = "db-pattern-5"
-tbl-name = "table-pattern-5"
-```
+5. 当一个引擎文件数据写入完毕时，`tikv-importer` 便开始对目标 TiKV 集群数据进行分裂和调度，然后导入数据到 TiKV 集群。
 
-* 如果 `do-tables` 列表不为空，
-    * 如果表的限定名称匹配 `do-tables` 列表中**任何**一对，则表会被导入。
-    * 否则，表会被略过。
-* 否则，如果表的限定名称匹配 `ignore-tables` 列表中**任何**一对，表会被略过。
-* 如果表的限定名称**同时**匹配 `do-tables` 和 `ignore-tables` 列表，表会被导入。
+   引擎文件包含两种：**数据引擎**与**索引引擎**，各自又对应两种 KV 对：行数据和次级索引。通常行数据在数据源里是完全有序的，而次级索引是无序的。因此，数据引擎文件在对应区块写入完成后会被立即上传，而所有的索引引擎文件只有在整张表所有区块编码完成后才会执行导入。
 
-> **注意：**
-> 
-> Lightning 会先执行数据库过滤规则，之后才执行表的过滤规则。所以，如果一个数据库已被 `ignore-dbs` 略过，即使其下的表匹配 `do-tables` 也不会再被导入。
+6. 整张表相关联的所有引擎文件完成导入后，`tidb-lightning` 会对比本地数据源及下游集群的校验和 (checksum)，确保导入的数据无损，以及让 TiDB 分析 (`ANALYZE`) 这些新增的数据，以优化日后的操作。
 
-## 例子
-
-以下例子演示过滤规则的操作原理。假设数据源包含这些表：
-
-```
-`logs`.`messages_2016`
-`logs`.`messages_2017`
-`logs`.`messages_2018`
-`forum`.`users`
-`forum`.`messages`
-`forum_backup_2016`.`messages`
-`forum_backup_2017`.`messages`
-`forum_backup_2018`.`messages`
-`admin`.`secrets`
-```
-
-我们使用以下设置：
-
-```toml
-[black-white-list]
-do-dbs = [
-    "forum_backup_2018",            # 规则 A
-    "~^(logs|forum)$",              # 规则 B
-]
-ignore-dbs = [
-    "~^forum_backup_",              # 规则 C
-]
-
-[[black-white-list.do-tables]]      # 规则 D
-db-name = "logs"
-tbl-name = "~_2018$"
-
-[[black-white-list.ignore-tables]]  # 规则 E
-db-name = "~.*"
-tbl-name = "~^messages.*"
-
-[[black-white-list.do-tables]]      # 规则 F
-db-name = "~^forum.*"
-tbl-name = "messages"
-```
-
-首先进行数据库过滤：
-
-| 数据库                       | 结果                        |
-| ------------------------- | ------------------------- |
-| `` `logs` ``              | 导入（规则 B）                  |
-| `` `forum` ``             | 导入（规则 B）                  |
-| `` `forum_backup_2016` `` | 略过（规则 C）                  |
-| `` `forum_backup_2017` `` | 略过（规则 C）                  |
-| `` `forum_backup_2018` `` | 导入（规则 A）（不会考虑规则 C）        |
-| `` `admin` ``             | 略过（`do-dbs` 不为空，且没有匹配的项目） |
-
-然后进行表过滤：
-
-| 表                                    | 结果                           |
-| ------------------------------------ | ---------------------------- |
-| `` `logs`.`messages_2016` ``         | 略过（规则 E）                     |
-| `` `logs`.`messages_2017` ``         | 略过（规则 E）                     |
-| `` `logs`.`messages_2018` ``         | 导入（规则 D）（不会考虑规则 E）           |
-| `` `forum`.`users` ``                | 略过（`do-tables` 不为空，且没有匹配的项目） |
-| `` `forum`.`messages` ``             | 导入（规则 F）（不会考虑规则 E）           |
-| `` `forum_backup_2016`.`messages` `` | 略过（数据库已被剔除）                  |
-| `` `forum_backup_2017`.`messages` `` | 略过（数据库已被剔除）                  |
-| `` `forum_backup_2018`.`messages` `` | 导入（规则 F）（不会考虑规则 E）           |
-| `` `admin`.`secrets` ``              | 略过（数据库已被剔除）                  |
+7. 在所有步骤完毕后，`tidb-lightning` 自动将 TiKV 切换回“普通模式” (normal mode)，此后 TiDB 集群可以正常对外提供服务。
