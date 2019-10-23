@@ -1,28 +1,38 @@
 ---
-title: crwdns107702:0crwdne107702:0
-category: crwdns107704:0crwdne107704:0
----
-
-# crwdns107706:0crwdne107706:0
-
-crwdns107708:0crwdne107708:0
-
-## crwdns107710:0crwdne107710:0
-
-crwdns107712:0crwdne107712:0
-
-## crwdns107714:0crwdne107714:0
-
-crwdns107716:0crwdne107716:0
-
-- crwdns107718:0crwdne107718:0
-
-    crwdns107720:0crwdne107720:0
-
-- crwdns107722:0crwdne107722:0
-
-    crwdns107724:0crwdne107724:0
-
-- crwdns107726:0crwdne107726:0
-
-    crwdns107728:0crwdne107728:0
+version: 0
+jobs:
+  build:
+    docker:
+      - 
+        image: crwdns107670:0crwdne107670:0
+    working_directory: crwdns107672:0crwdne107672:0
+    branches:
+      only:
+        - crwdns107674:0crwdne107674:0
+        - crwdns107676:0crwdne107676:0
+    steps:
+      - crwdns107678:0crwdne107678:0
+      - 
+        run:
+          name: "crwdns107680:0crwdne107680:0"
+          command: crwdns107682:0crwdne107682:0
+      - 
+        run:
+          name: "crwdns107684:0crwdne107684:0"
+          command: crwdns107686:0crwdne107686:0
+      - 
+        run:
+          name: "crwdns107688:0crwdne107688:0"
+          command: crwdns107690:0crwdne107690:0
+      - 
+        deploy:
+          name: "crwdns107692:0crwdne107692:0"
+          command: |
+            crwdns107694:0${CIRCLE_BRANCH}crwdnd107694:0${CIRCLE_BRANCH}crwdne107694:0
+      - 
+        run:
+          name: "crwdns107696:0crwdne107696:0"
+          command: crwdns107698:0crwdne107698:0
+      - 
+        store_artifacts:
+          path: crwdns107700:0crwdne107700:0
