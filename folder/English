@@ -1,503 +1,470 @@
 ---
-title: 数据同步功能
-summary: DM 提供的功能及其配置介绍
+title: 手动处理 Sharding DDL Lock
 category: reference
 ---
 
-# 数据同步功能
+# 手动处理 Sharding DDL Lock
 
-本文将详细介绍 DM 提供的数据同步功能，以及相关的配置选项。
-
-## Table routing
-
-Table routing 提供将上游 MySQL/MariaDB 实例的某些表同步到下游指定表的功能。
+DM (Data Migration) 使用 sharding DDL lock 来确保分库分表的 DDL 操作可以正确执行。绝大多数情况下，该锁定机制可自动完成；但在部分异常情况发生时，需要使用 `unlock-ddl-lock`/`break-ddl-lock` 手动处理异常的 DDL lock。
 
 > **注意：**
 > 
-> - 不支持对同一个表设置多个不同的路由规则。
-> - Schema 的匹配规则需要单独设置，用来同步 `create/drop schema xx`，例如下面[参数配置](#参数配置)中的 rule-2。
+> - 不要轻易使用 `unlock-ddl-lock`/`break-ddl-lock` 命令，除非完全明确当前场景下使用这些命令可能会造成的影响，并能接受这些影响。
+> - 在手动处理异常的 DDL lock 前，请确保已经了解 DM 的[分库分表合并同步原理](/v2.1/reference/tools/data-migration/usage-scenarios/shard-merge.md#实现原理)。
 
-### 参数配置
+## 命令介绍
 
-```yaml
-routes:
-  rule-1:
-    schema-pattern: "test_*"
-    table-pattern: "t_*"
-    target-schema: "test"
-    target-table: "t"
-  rule-2:
-    schema-pattern: "test_*"
-    target-schema: "test"
+### `show-ddl-locks`
+
+该命令用于查询当前 DM-master 上存在的 DDL lock 信息。
+
+#### 命令示例
+
+```bash
+show-ddl-locks [--worker=127.0.0.1:8262] [task-name]
 ```
 
-### 参数解释
+#### 参数解释
 
-将根据 [`schema-pattern`/`table-pattern`](/v2.1/reference/tools/data-migration/table-selector.md) 匹配上该规则的上游 MySQL/MariaDB 实例的表同步到下游的 `target-schema`/`target-table`。
++ `worker`：
+    - flag 参数，string，`--worker`，可选
+    - 不指定时，查询所有 DM-worker 相关的 lock 信息；指定时，仅查询与这组 DM-worker 相关的 lock 信息，可重复多次指定
 
-### 使用示例
++ `task-name`：
+    - 非 flag 参数，string，可选
+    - 不指定时，查询与所有任务相关的 lock 信息；指定时，仅查询特定任务相关的 lock 信息
 
-下面展示了三个不同场景下的配置示例。
+#### 返回结果示例
 
-#### 分库分表合并
+```bash
+» show-ddl-locks test
+{
+    "result": true,                                        # 查询 lock 操作本身是否成功
+    "msg": "",                                             # 查询 lock 操作失败时的原因或其它描述信息（如不存在任务 lock）
+    "locks": [                                             # DM-master 上存在的 lock 信息列表
+        {
+            "ID": "test-`shard_db`.`shard_table`",         # lock 的 ID 标识，当前由任务名与 DDL 对应的 schema/table 信息组成
+            "task": "test",                                # lock 所属的任务名
+            "owner": "127.0.0.1:8262",                     # lock 的 owner（第一个遇到该 DDL 的 DM-worker）
+            "DDLs": [                                      # lock 对应的 DDL 列表
+                "USE `shard_db`; ALTER TABLE `shard_db`.`shard_table` DROP COLUMN `c2`;"
+            ],
+            "synced": [                                    # 已经收到对应 MySQL 实例内所有分表 DDL 的 DM-worker 列表
+                "127.0.0.1:8262"
+            ],
+            "unsynced": [                                  # 尚未收到对应 MySQL 实例内所有分表 DDL 的 DM-worker 列表
+                "127.0.0.1:8263"
+            ]
+        }
+    ]
+}
+```
 
-假设存在分库分表场景，需要将上游两个 MySQL 实例的表 `test_{1,2,3...}`.`t_{1,2,3...}` 同步到下游 TiDB 的一张表 `test`.`t`。
+### `unlock-ddl-lock`
 
-为了同步到下游实例的表 `test`.`t` 需要创建两个 table routing 规则：
+该命令用于主动请求 DM-master 解除指定的 DDL lock，包括的操作：请求 owner 执行 DDL 操作，请求其他非 owner 的 DM-worker 跳过 DDL 操作，移除 DM-master 上的 lock 信息。
 
-- `rule-1` 用来同步匹配上 `schema-pattern: "test_*"` 和 `table-pattern: "t_*"` 的表的 DML/DDL 语句到下游的 `test`.`t`。
-- `rule-2` 用来同步匹配上 `schema-pattern: "test_*"` 的库的 DDL 语句，例如 `create/drop schema xx`。
+#### 命令示例
+
+```bash
+unlock-ddl-lock [--worker=127.0.0.1:8262] [--owner] [--force-remove] <lock-ID>
+```
+
+#### 参数解释
+
++ `worker`：
+    - flag 参数，string，`--worker`，可选
+    - 不指定时，对所有已经在等待该 lock 的 DM-worker 发起跳过 DDL 操作请求；指定时，仅对这组 DM-worker 发起跳过 DDL 操作请求，可重复多次指定
+
++ `owner`：
+    - flag 参数，string，`--owner`，可选
+    - 不指定时，请求默认的 owner（`show-ddl-locks` 返回结果中的 `owner`）执行 DDL 操作；指定时，请求该 DM-worker（替代默认的 owner）执行 DDL 操作
+
++ `force-remove`：
+    - flag 参数，boolean，`--force-remove`，可选
+    - 不指定时，仅在 owner 执行 DDL 成功时移除 lock 信息；指定时，即使 owner 执行 DDL 失败也强制移除 lock 信息（此后将无法再次查询或操作该 lock）
+
++ `lock-ID`：
+    - 非 flag 参数，string，必选
+    - 指定需要执行 unlock 操作的 DDL lock ID（即 `show-ddl-locks` 返回结果中的 `ID`）
+
+#### 返回结果示例
+
+```bash
+» unlock-ddl-lock test-`shard_db`.`shard_table`
+{
+    "result": true,                                        # unlock lock 操作是否成功
+    "msg": "",                                             # unlock lock 操作失败时的原因
+    "workers": [                                           # 各 DM-worker 执行/跳过 DDL 操作结果信息列表
+        {
+            "result": true,                                # 该 DM-worker 执行/跳过 DDL 操作是否成功
+            "worker": "127.0.0.1:8262",                    # DM-worker 地址 (DM-worker ID)
+            "msg": ""                                      # DM-worker 执行/跳过 DDL 失败时的原因
+        }
+    ]
+}
+```
+
+### break-ddl-lock
+
+该命令用于主动请求 DM-worker 强制打破当前正在等待 unlock 的 DDL lock，包括请求 DM-worker 执行或跳过 DDL 操作、移除该 DM-worker 上的 DDL lock 信息。
+
+#### 命令示例
+
+```bash
+break-ddl-lock <--worker=127.0.0.1:8262> [--remove-id] [--exec] [--skip] <task-name>
+```
+
+#### 参数解释
+
++ `worker`：
+    - flag 参数，string，`--worker`，必选
+    - 指定需要执行 break 操作的 DM-worker
+
++ `remove-id`：已废弃
+
++ `exec`：
+    - flag 参数，boolean，`--exec`，可选
+    - 不可与 `--skip` 参数同时指定
+    - 指定时，请求该 DM-worker 执行（execute）当前 lock 对应的 DDL
+
++ `skip`：
+    - flag 参数，boolean，`--skip`，可选
+    - 不可与 `--exec` 参数同时指定
+    - 指定时，请求该 DM-worker 跳过（skip）当前 lock 对应的 DDL
+
++ `task-name`：
+    - 非 flag 参数，string，必选
+    - 指定要执行 break 操作的 lock 所在的 task 名称（要查看各 task 上是否存在 lock，可通过 [query-status](/v2.1/reference/tools/data-migration/query-status.md) 获得）
+
+#### 返回结果示例
+
+```bash
+» break-ddl-lock -w 127.0.0.1:8262 --exec test
+{
+    "result": true,                                        # break lock 操作是否成功
+    "msg": "",                                             # break lock 操作失败时的原因
+    "workers": [                                           # 执行 break lock 操作的 DM-worker 列表（当前单次操作仅支持对一个 DM-worker 执行 break lock）
+        {
+            "result": false,                               # 该 DM-worker break lock 操作是否成功
+            "worker": "127.0.0.1:8262",                    # 该 DM-worker 地址 (DM-worker ID)
+            "msg": ""                                      # DM-worker break lock 失败时的原因
+        }
+    ]
+}
+```
+
+## 支持场景
+
+目前，使用 `unlock-ddl-lock`/`break-ddl-lock` 命令仅支持处理以下三种 sharding DDL lock 异常情况。
+
+### 场景一：部分 DM-worker 下线
+
+#### Lock 异常原因
+
+在 DM-master 尝试自动 unlock sharding DDL lock 之前，需要等待所有 DM-worker 的 sharding DDL events 全部到达（详见[分库分表合并同步原理](/v2.1/reference/tools/data-migration/usage-scenarios/shard-merge.md#实现原理)）。如果 sharding DDL 已经在同步过程中，且有部分 DM-worker 下线，并且不再计划重启它们（按业务需求移除了这部分 DM-worker），则会由于永远无法等齐所有的 DDL 而造成 lock 无法自动 unlock。
+
+#### 手动处理示例
+
+假设上游有 MySQL-1 和 MySQL-2 两个实例，其中 MySQL-1 中有 `shard_db_1`.`shard_table_1` 和 `shard_db_1`.`shard_table_2` 两个表，MySQL-2 中有 `shard_db_2`.`shard_table_1` 和 `shard_db_2`.`shard_table_2` 两个表。现在需要将这 4 个表合并后同步到下游 TiDB 的 `shard_db`.`shard_table` 表中。
+
+初始表结构如下：
+
+```sql
+mysql> SHOW CREATE TABLE shard_db_1.shard_table_1;
++---------------+------------------------------------------+
+| Table         | Create Table                             |
++---------------+------------------------------------------+
+| shard_table_1 | CREATE TABLE `shard_table_1` (
+  `c1` int(11) NOT NULL,
+  PRIMARY KEY (`c1`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1 |
++---------------+------------------------------------------+
+```
+
+上游分表将执行以下 DDL 语句变更表结构：
+
+```sql
+ALTER TABLE shard_db_*.shard_table_* ADD COLUMN c2 INT;
+```
+
+MySQL 及 DM 操作与处理流程如下：
+
+1. MySQL-1 对应的 DM-worker-1 的两个分表执行了对应的 DDL 操作进行表结构变更。
+
+    ```sql
+    ALTER TABLE shard_db_1.shard_table_1 ADD COLUMN c2 INT;
+    ```
+
+    ```sql
+    ALTER TABLE shard_db_1.shard_table_2 ADD COLUMN c2 INT;
+    ```
+
+2. DM-worker-1 接受到两个分表的 DDL 之后，将对应 MySQL-1 相关的 DDL 信息发送给 DM-master，DM-master 创建相应的 DDL lock。
+3. 使用 `show-ddl-lock` 查看当前的 DDL lock 信息。
+
+    ```bash
+    » show-ddl-locks test
+    {
+        "result": true,
+        "msg": "",
+        "locks": [
+            {
+                "ID": "test-`shard_db`.`shard_table`",
+                "task": "test",
+                "owner": "127.0.0.1:8262",
+                "DDLs": [
+                    "USE `shard_db`; ALTER TABLE `shard_db`.`shard_table` ADD COLUMN `c2` int(11);"
+                ],
+                "synced": [
+                    "127.0.0.1:8262"
+                ],
+                "unsynced": [
+                    "127.0.0.1:8263"
+                ]
+            }
+        ]
+    }
+    ```
+
+4. 由于业务需要，DM-worker-2 对应的 MySQL-2 的数据不再需要同步到下游 TiDB，对 DM-worker-2 执行了下线处理。
+5. DM-master 上 ID 为 `` test-`shard_db`.`shard_table` `` 的 lock 无法等到 DM-worker-2 的 DDL 操作信息。
+
+    `show-ddl-locks` 返回的 `unsynced` 中一直包含 DM-worker-2 的信息（`127.0.0.1:8263`）。
+
+6. 使用 `unlock-dll-lock` 来请求 DM-master 主动 unlock 该 DDL lock。
+
+    - 如果 DDL lock 的 owner 也已经下线，可以使用 `--owner` 参数指定其他 DM-worker 作为新 owner 来执行 DDL。
+    - 当存在任意 DM-worker 报错时，`result` 将为 `false`，此时请仔细检查各 DM-worker 的错误是否是预期可接受的。
+        - 已下线的 DM-worker 会返回 `rpc error: code = Unavailable` 错误属于预期行为，可以忽略。
+        - 如果其它未下线的 DM-worker 返回错误，则需要根据情况额外处理。
+
+        ```bash
+        » unlock-ddl-lock test-`shard_db`.`shard_table`
+        {
+            "result": false,
+           "msg": "github.com/pingcap/tidb-enterprise-tools/dm/master/server.go:1472: DDL lock test-`shard_db`.`shard_table` owner ExecuteDDL successfully, so DDL lock removed. but some dm-workers ExecuteDDL fail, you should to handle dm-worker directly",
+            "workers": [
+                {
+                    "result": true,
+                    "worker": "127.0.0.1:8262",
+                    "msg": ""
+                },
+                {
+                    "result": false,
+                    "worker": "127.0.0.1:8263",
+                    "msg": "rpc error: code = Unavailable desc = all SubConns are in TransientFailure, latest connection error: connection error: desc = \"transport: Error while dialing dial tcp 127.0.0.1:8263: connect: connection refused\""
+                }
+            ]
+        }
+        ```
+
+7. 使用 `show-dd-locks` 确认 DDL lock 是否被成功 unlock。
+
+    ```bash
+    » show-ddl-locks test
+    {
+        "result": true,
+        "msg": "no DDL lock exists",
+        "locks": [
+        ]
+    }
+    ```
+
+8. 查看下游 TiDB 中的表结构是否变更成功。
+
+    ```sql
+    mysql> SHOW CREATE TABLE shard_db.shard_table;
+    +-------------+--------------------------------------------------+
+    | Table       | Create Table                                     |
+    +-------------+--------------------------------------------------+
+    | shard_table | CREATE TABLE `shard_table` (
+      `c1` int(11) NOT NULL,
+      `c2` int(11) DEFAULT NULL,
+      PRIMARY KEY (`c1`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=latin1 COLLATE=latin1_bin |
+    +-------------+--------------------------------------------------+
+    ```
+
+9. 使用 `query-status` 确认同步任务是否正常。
+
+#### 手动处理后的影响
+
+使用 `unlock-ddl-lock` 手动执行 unlock 操作后，由于该任务的配置信息中仍然包含了已下线的 DM-worker，如果不进行处理，则当下次 sharding DDL 到达时，仍会出现 lock 无法自动完成同步的情况。
+
+因此，在手动解锁 DDL lock 后，需要再执行以下操作：
+
+1. 使用 `stop-task` 停止运行中的任务。
+2. 更新任务配置文件，将已下线 DM-worker 对应的信息从配置文件中移除。
+3. 使用 `start-task` 及新任务配置文件重新启动任务。
 
 > **注意：**
 > 
-> - 如果下游 TiDB `schema: test` 已经存在， 并且不会被删除，则可以省略 `rule-2`。
-> - 如果下游 TiDB `schema: test` 不存在，只设置了 `rule_1`，则同步会报错 `schema test doesn't exist`。
-
-```yaml
-  rule-1:
-    schema-pattern: "test_*"
-    table-pattern: "t_*"
-    target-schema: "test"
-    target-table: "t"
-  rule-2:
-    schema-pattern: "test_*"
-    target-schema: "test"
-```
+> 在 `unlock-ddl-lock` 之后，如果已下线的 DM-worker 重新上线并尝试对其中的分表进行数据同步，则会由于数据与下游的表结构不匹配而发生错误。
 
-#### 分库合并
+### 场景二：unlock 过程中部分 DM-worker 重启
 
-假设存在分库场景，将上游两个 MySQL 实例 `test_{1,2,3...}`.`t_{1,2,3...}` 同步到下游 TiDB 的 `test`.`t_{1,2,3...}`，创建一条路由规则即可：
+#### Lock 异常原因
 
-```yaml
-  rule-1:
-    schema-pattern: "test_*"
-    target-schema: "test"
-```
+在 DM-master 收到所有 DM-worker 的 DDL 信息后，执行自动 unlock DDL lock 的操作主要包括以下步骤：
 
-#### 错误的 table routing
+1. 请求 lock owner 执行 DDL 操作，并更新对应分表的 checkpoint。
+2. 在 owner 执行 DDL 操作成功后，移除 DM-master 上保存的 DDL lock 信息。
+3. 在 owner 执行 DDL 操作成功后，请求其他所有 DM-worker 跳过 DDL 操作并更新对应分表的 checkpoint。
 
-假设存在下面两个路由规则，`test_1_bak`.`t_1_bak` 可以匹配上 `rule-1` 和 `rule-2`，违反 table 路由的限制而报错。
+上述 unlock DDL lock 的操作不是原子的，当 owner 执行 DDL 操作成功后，请求其他 DM-worker 跳过 DDL 操作时，如果该 DM-worker 发生了重启，则会造成该 DM-worker 跳过 DDL 操作失败。
 
-```yaml
-  rule-0:
-    schema-pattern: "test_*"
-    target-schema: "test"
-  rule-1:
-    schema-pattern: "test_*"
-    table-pattern: "t_*"
-    target-schema: "test"
-    target-table: "t"
-  rule-2:
-    schema-pattern: "test_1_bak"
-    table-pattern: "t_1_bak"
-    target-schema: "test"
-    target-table: "t_bak"
-```
+此时 DM-master 上的 lock 信息被移除，但该 DM-worker 重启后将尝试继续重新同步该 DDL 操作。但是，由于其他 DM-worker（包括原 owner）已经同步完该 DDL 操作，并已经在继续后续的同步，该 DM-worker 将永远无法等待该 DDL 操作对应 lock 的自动 unlock。
 
-## Black & white table lists
-
-上游数据库实例表的黑白名单过滤规则，可以用来过滤或者只同步某些 `database/table` 的所有操作。
-
-### 参数配置
-
-```yaml
-black-white-list:
-  rule-1:
-    do-dbs: ["~^test.*"]         # 以 ~ 字符开头，表示规则是正则表达式
-​    ignore-dbs: ["mysql"]
-    do-tables:
-    - db-name: "~^test.*"
-      tbl-name: "~^t.*"
-    - db-name: "test"
-      tbl-name: "t"
-    ignore-tables:
-    - db-name: "test"
-      tbl-name: "log"
-```
-
-### 参数解释
-
-- `do-dbs`：要同步的库的白名单，类似于 MySQL 中的 [`replicate-do-db`](https://dev.mysql.com/doc/refman/5.7/en/replication-options-slave.html#option_mysqld_replicate-do-db)。
-- `ignore-dbs`：要同步的库的黑名单，类似于 MySQL 中的 [`replicate-ignore-db`](https://dev.mysql.com/doc/refman/5.7/en/replication-options-slave.html#option_mysqld_replicate-ignore-db)。
-- `do-tables`：要同步的表的白名单，类似于 MySQL 中的 [`replicate-do-table`](https://dev.mysql.com/doc/refman/5.7/en/replication-options-slave.html#option_mysqld_replicate-do-table)。
-- `ignore-tables`：要同步的表的黑名单，类似于 MySQL 中的 [`replicate-ignore-table`](https://dev.mysql.com/doc/refman/5.7/en/replication-options-slave.html#option_mysqld_replicate-ignore-table)。
-
-以上参数值以 `~` 开头时均支持使用[正则表达式](https://golang.org/pkg/regexp/syntax/#hdr-syntax)来匹配库名、表名。
-
-### 过滤规则
-
-`do-dbs` 与 `ignore-dbs` 对应的过滤规则与 MySQL 中的 [Evaluation of Database-Level Replication and Binary Logging Options](https://dev.mysql.com/doc/refman/5.7/en/replication-rules-db-options.html) 类似，`do-tables` 与 `ignore-tables` 对应的过滤规则与 MySQL 中的 [Evaluation of Table-Level Replication Options](https://dev.mysql.com/doc/refman/5.7/en/replication-rules-table-options.html) 类似。
-
-> **注意：**
-> 
-> DM 中黑白名单过滤规则与 MySQL 中相应规则存在以下区别：
-> 
-> - MySQL 中存在 [`replicate-wild-do-table`](https://dev.mysql.com/doc/refman/5.7/en/replication-options-slave.html#option_mysqld_replicate-wild-do-table) 与 [`replicate-wild-ignore-table`](https://dev.mysql.com/doc/refman/5.7/en/replication-options-slave.html#option_mysqld_replicate-wild-ignore-table) 用于支持通配符，DM 中各配置参数直接支持以 `~` 字符开头的正则表达式。
-> - DM 当前只支持 `ROW` 格式的 binlog，不支持 `STATEMENT`/`MIXED` 格式的 binlog，因此应与 MySQL 中 `ROW` 格式下的规则对应。
-> - 对于 DDL，MySQL 仅依据默认的 database 名称（`USE` 语句显式指定的 database）进行判断，而 DM 优先依据 DDL 中的 database 名称部分进行判断，并当 DDL 中不包含 database 名称时再依据 `USE` 部分进行判断。假设需要判断的 SQL 为 `USE test_db_2; CREATE TABLE test_db_1.test_table (c1 INT PRIMARY KEY)`，且 MySQL 配置了 `replicate-do-db=test_db_1`、DM 配置了 `do-dbs: ["test_db_1"]`，则对于 MySQL 该规则不会生效，而对于 DM 该规则会生效。
-
-判断 table `test`.`t` 是否应该被过滤的过滤流程如下：
-
-1. 首先 **schema 过滤判断**
-
-    - 如果 `do-dbs` 不为空，判断 `do-dbs` 中是否存在一个匹配的 schema。
-
-        - 如果存在，则进入 **table 过滤判断**。
-        - 如果不存在，则过滤 `test`.`t`。
-
-    - 如果 `do-dbs` 为空并且 `ignore-dbs` 不为空，判断 `ignore-dbs` 中是否存在一个匹配的 schema。
-
-        - 如果存在，则过滤 `test`.`t`。
-        - 如果不存在，则进入 **table 过滤判断**。
-
-    - 如果 `do-dbs` 和 `ignore-dbs` 都为空，则进入 **table 过滤判断**。
-
-2. 进行 **table 过滤判断**
-
-    1. 如果 `do-tables` 不为空，判断 `do-tables` 中是否存在一个匹配的 table。
-
-        - 如果存在，则同步 `test`.`t`。
-        - 如果不存在，则过滤 `test`.`t`。
-
-    2. 如果 `ignore-tables` 不为空，判断 `ignore-tables` 中是否存在一个匹配的 table。
-
-        - 如果存在，则过滤 `test`.`t`.
-        - 如果不存在，则同步 `test`.`t`。
-
-    3. 如果 `do-tables` 和 `ignore-tables` 都为空，则同步 `test`.`t`。
-
-> **注意：**
-> 
-> 判断 schema `test` 是否被过滤，只进行 **schema 过滤判断**
-
-### 使用示例
-
-假设上游 MySQL 实例包含以下表：
-
-```
-`logs`.`messages_2016`
-`logs`.`messages_2017`
-`logs`.`messages_2018`
-`forum`.`users`
-`forum`.`messages`
-`forum_backup_2016`.`messages`
-`forum_backup_2017`.`messages`
-`forum_backup_2018`.`messages`
-```
-
-配置如下：
-
-```yaml
-black-white-list:
-  bw-rule:
-    do-dbs: ["forum_backup_2018", "forum"]
-    ignore-dbs: ["~^forum_backup_"]
-    do-tables:
-    - db-name: "logs"
-      tbl-name: "~_2018$"
-    - db-name: "~^forum.*"
-​      tbl-name: "messages"
-    ignore-tables:
-    - db-name: "~.*"
-​      tbl-name: "^messages.*"
-```
-
-应用 `bw-rule` 规则后：
-
-| table                          | 是否过滤 | 过滤的原因                                                                                                                                       |
-|:------------------------------ |:---- |:------------------------------------------------------------------------------------------------------------------------------------------- |
-| `logs`.`messages_2016`         | 是    | schema `logs` 没有匹配到 `do-dbs` 任意一项                                                                                                           |
-| `logs`.`messages_2017`         | 是    | schema `logs` 没有匹配到 `do-dbs` 任意一项                                                                                                           |
-| `logs`.`messages_2018`         | 是    | schema `logs` 没有匹配到 `do-dbs` 任意一项                                                                                                           |
-| `forum_backup_2016`.`messages` | 是    | schema `forum_backup_2016` 没有匹配到 `do-dbs` 任意一项                                                                                              |
-| `forum_backup_2017`.`messages` | 是    | schema `forum_backup_2017` 没有匹配到 `do-dbs` 任意一项                                                                                              |
-| `forum`.`users`                | 是    | 1. schema `forum` 匹配到 `do-dbs` 进入 table 过滤<br> 2. schema 和 table 没有匹配到 `do-tables` 和 `ignore-tables` 中任意一项，并且 `do-tables` 不为空，因此过滤          |
-| `forum`.`messages`             | 否    | 1. schema `forum` 匹配到 `do-dbs` 进入 table 过滤<br> 2. schema 和 table 匹配到 `do-tables` 的 `db-name: "~^forum.*",tbl-name: "messages"`              |
-| `forum_backup_2018`.`messages` | 否    | 1. schema `forum_backup_2018` 匹配到 `do-dbs` 进入 table 过滤<br> 2. schema 和 table 匹配到 `do-tables` 的  `db-name: "~^forum.*",tbl-name: "messages"` |
-
-## Binlog event filter
-
-Binlog event filter 是比同步表黑白名单更加细粒度的过滤规则，可以指定只同步或者过滤掉某些 `schema / table` 的指定类型 binlog，比如 `INSERT`，`TRUNCATE TABLE`。
-
-> **注意：**
-> 
-> 同一个表匹配上多个规则，将会顺序应用这些规则，并且黑名单的优先级高于白名单，即如果同时存在规则 `Ignore` 和 `Do` 应用在某个 table 上，那么 `Ignore` 生效。
-
-### 参数配置
-
-```yaml
-filters:
-  rule-1:
-    schema-pattern: "test_*"
-    ​table-pattern: "t_*"
-    ​events: ["truncate table", "drop table"]
-    sql-pattern: ["^DROP\\s+PROCEDURE", "^CREATE\\s+PROCEDURE"]
-    ​action: Ignore
-```
-
-### 参数解释
-
-- [`schema-pattern`/`table-pattern`](/v2.1/reference/tools/data-migration/table-selector.md)：对匹配上的上游 MySQL/MariaDB 实例的表的 binlog events 或者 DDL SQL 语句进行以下规则过滤。
-
-- `events`：binlog events 数组。
-
-    | Event           | 分类  | 解释                    |
-    | --------------- | --- | --------------------- |
-    | all             |     | 代表包含下面所有的 events      |
-    | all dml         |     | 代表包含下面所有 DML events   |
-    | all ddl         |     | 代表包含下面所有 DDL events   |
-    | none            |     | 代表不包含下面所有 events      |
-    | none ddl        |     | 代表不包含下面所有 DDL events  |
-    | none dml        |     | 代表不包含下面所有 DML events  |
-    | insert          | DML | insert DML event      |
-    | update          | DML | update DML event      |
-    | delete          | DML | delete DML event      |
-    | create database | DDL | create database event |
-    | drop database   | DDL | drop database event   |
-    | create table    | DDL | create table event    |
-    | create index    | DDL | create index event    |
-    | drop table      | DDL | drop table event      |
-    | truncate table  | DDL | truncate table event  |
-    | rename table    | DDL | rename table event    |
-    | drop index      | DDL | drop index event      |
-    | alter table     | DDL | alter table event     |
-
-- `sql-pattern`：用于过滤指定的 DDL SQL 语句，支持正则表达式匹配，例如上面示例 `"^DROP\\s+PROCEDURE"`。
-
-- `action`：string(`Do` / `Ignore`)；进行下面规则判断，满足其中之一则过滤，否则不过滤。
-
-    - `Do`：白名单。binlog event 如果满足下面两个条件之一就会被过滤掉：
-        - 不在该 rule 的 `events` 中。
-        - 如果规则的 `sql-pattern` 不为空的话，对应的 SQL 没有匹配上 `sql-pattern` 中任意一项。
-    - `Ignore`：黑名单。如果满足下面两个条件之一就会被过滤掉：
-        - 在该 rule 的 `events` 中。
-        - 如果规则的 `sql-pattern` 不为空的话，对应的 SQL 可以匹配上 `sql-pattern` 中任意一项。
-
-### 使用示例
-
-#### 过滤分库分表的所有删除操作
-
-需要设置下面两个 `Binlog event filter rule` 来过滤掉所有的删除操作：
-
-- `filter-table-rule` 过滤掉所有匹配到 pattern `test_*`.`t_*` 的 table 的 `turncate table`、`drop table`、`delete statement` 操作。
-- `filter-schema-rule` 过滤掉所有匹配到 pattern `test_*` 的 schema 的 `drop database` 操作。
-
-```yaml
-filters:
-  filter-table-rule:
-    schema-pattern: "test_*"
-    table-pattern: "t_*"
-    events: ["truncate table", "drop table", "delete"]
-    action: Ignore
-  filter-schema-rule:
-    schema-pattern: "test_*"
-    events: ["drop database"]
-    action: Ignore
-```
-
-#### 只同步分库分表的 DML 操作
-
-需要设置下面两个 `Binlog event filter rule` 只同步 DML 操作：
-
-- `do-table-rule` 只同步所有匹配到 pattern `test_*`.`t_*` 的 table 的 `create table`、`insert`、`update`、`delete` 操作。
-- `do-schema-rule` 只同步所有匹配到 pattern `test_*` 的 schema 的 `create database` 操作。
-
-> **注意：**
-> 
-> 同步 `create database/table` 的原因是创建库和表后才能同步 `DML`。
-
-```yaml
-filters:
-  do-table-rule:
-    schema-pattern: "test_*"
-    table-pattern: "t_*"
-    events: ["create table", "all dml"]
-    action: Do
-  do-schema-rule:
-    schema-pattern: "test_*"
-    events: ["create database"]
-    action: Do
-```
-
-#### 过滤 TiDB 不支持的 SQL 语句
-
-可设置如下规则过滤 TiDB 不支持的 `PROCEDURE` 语句：
-
-```yaml
-filters:
-  filter-procedure-rule:
-    schema-pattern: "test_*"
-    table-pattern: "t_*"
-    sql-pattern: ["^DROP\\s+PROCEDURE", "^CREATE\\s+PROCEDURE"]
-    action: Ignore
-```
-
-#### 过滤 TiDB parser 不支持的 SQL 语句
-
-对于 TiDB parser 不支持的 SQL 语句，DM 无法解析获得 `schema`/`table` 信息，因此需要使用全局过滤规则：`schema-pattern: "*"`。
-
-> **注意：**
-> 
-> 全局过滤规则的设置必须尽可能严格，以避免预期之外地过滤掉需要同步的数据。
-
-可设置如下规则过滤 TiDB parser 不支持的 `PARTITION` 语句：
-
-```yaml
-filters:
-  filter-partition-rule:
-    schema-pattern: "*"
-    sql-pattern: ["ALTER\\s+TABLE[\\s\\S]*ADD\\s+PARTITION", "ALTER\\s+TABLE[\\s\\S]*DROP\\s+PARTITION"]
-    action: Ignore
-```
-
-## Column mapping
-
-> **注意：**
-> 
-> 由于 Column mapping 的使用限制较多，我们不推荐使用 Column mapping 功能作为首选方案。我们优先推荐的方案请参考 [自增主键冲突处理](/v2.1/reference/tools/data-migration/usage-scenarios/best-practice-dm-shard.md#自增主键冲突处理)。
-
-Column mapping 提供对表的列值进行修改的功能。可以根据不同的表达式对表的指定列做不同的修改操作，目前只支持 DM 提供的内置表达式。
-
-> **注意：**
-> 
-> - 不支持修改 column 的类型和表结构。
-> - 不支持对同一个表设置多个不同的列值转换规则。
-
-### 参数配置
-
-```yaml
-column-mappings:
-  rule-1:
-​    schema-pattern: "test_*"
-​    table-pattern: "t_*"
-​    expression: "partition id"
-​    source-column: "id"
-​    target-column: "id"
-​    arguments: ["1", "test", "t", "_"]
-  rule-2:
-​    schema-pattern: "test_*"
-​    table-pattern: "t_*"
-​    expression: "partition id"
-​    source-column: "id"
-​    target-column: "id"
-​    arguments: ["2", "test", "t", "_"]
-```
-
-### 参数解释
-
-- [`schema-pattern`/`table-pattern`](/v2.1/reference/tools/data-migration/table-selector.md)：对匹配上该规则的上游 MySQL/MariaDB 实例的表按照指定 `expression` 进行列值修改操作。
-- `source-column`，`target-column`：对 `source-column` 列的值按照指定 `expression` 进行修改，将修改后的值赋值给 `target-column`。
-- `expression`：对数据进行转换的表达式，目前只支持下面的内置计算表达式。
-
-#### `partition id` 表达式
-
-`partition id` 目的是为了解决分库分表合并同步的自增主键的冲突。
-
-**`partition id` 限制**
-
-注意下面的限制：
-
-- 只支持类型为 bigint 的列，通常为自增主键，联合主键或者联合唯一索引的其中一列
-- 如果 `schema 前缀` 不为空，则库名的组成必须为 `schema 前缀` 或者 `schema 前缀 + 分隔符 + 数字（即 schema ID）`，例如：支持 `s` 和 `s_1`，不支持 `s_a`
-- 如果 `table 前缀` 不为空，则表名的组成必须为 `table 前缀` 或者 `table 前缀 + 分隔符 + 数字（即 table ID）`
-- 如果库名/表名不包含 `… + 分隔符 + 数字` 部分，则对应的 ID 默认为 0
-- 对分库分表的规模支持限制如下
-    - 支持最多 16 个 MySQL/MariaDB 实例，且需要满足 0 <= instance ID <= 15。
-    - 每个实例支持最多 128 个 schema，且需要满足 0 <= schema ID  <= 127。
-    - 每个实例的每个 schema 支持最多 256 个 table，且需要满足 0 <= table ID <= 255。
-    - 进行 Column mapping 的列的范围需要满足 0 <= ID <= 17592186044415。
-    - `{instance ID, schema ID, table ID}` 组合需要保持唯一。
-- 目前该功能是定制功能，如果需要调整请联系相关开发人员进行调整
-
-**`partition id` 参数配置**
-
-用户需要在 arguments 里面按顺序设置以下三个或四个参数：
-
-- `instance_id`：客户指定的上游分库分表的 MySQL/MariaDB instance ID（0 <= instance ID <= 15）
-- `schema 前缀`：用来解析库名并获取 `schema ID`
-- `table 前缀`：用来解释表名并获取 `table ID`
-- 分隔符：用来分隔前缀与 ID，可省略，省略时分隔符默认为空字符串
-
-`instance_id`、`schema 前缀` 和 `table 前缀` 这三个参数均可被设置为空字符串（`""`），表示对应的部分不会被编码进 `partition id`。
-
-**`partition id` 表达式规则**
-
-`partition id` 会用 arguments 里面的数字来填充自增主键 ID 的首个比特位，计算出来一个 int64（即 MySQL bigint）类型的值，具体规则如下：
-
-| instance_id | schema 前缀 | table 前缀 |                                                                编码 |
-|:----------- |:--------- |:-------- | -----------------------------------------------------------------:|
-| ☑ 已定义       | ☑ 已定义     | ☑ 已定义    | [`S`: 1 比特位] [`I`: 4 比特位] [`D`: 7 比特位] [`T`: 8 比特位] [`P`: 44 比特位] |
-| ☐ 空         | ☑ 已定义     | ☑ 已定义    |              [`S`: 1 比特位] [`D`: 7 比特位] [`T`: 8 比特位] [`P`: 48 比特位] |
-| ☑ 已定义       | ☐ 空       | ☑ 已定义    |              [`S`: 1 比特位] [`I`: 4 比特位] [`T`: 8 比特位] [`P`: 51 比特位] |
-| ☑ 已定义       | ☑ 已定义     | ☐ 空      |              [`S`: 1 比特位] [`I`: 4 比特位] [`D`: 7 比特位] [`P`: 52 比特位] |
-| ☐ 空         | ☐ 空       | ☑ 已定义    |                           [`S`: 1 比特位] [`T`: 8 比特位] [`P`: 55 比特位] |
-| ☐ 空         | ☑ 已定义     | ☐ 空      |                           [`S`: 1 比特位] [`D`: 7 比特位] [`P`: 56 比特位] |
-| ☑ 已定义       | ☐ 空       | ☐ 空      |                           [`S`: 1 比特位] [`I`: 4 比特位] [`P`: 59 比特位] |
-
-- `S`：符号位，保留
-- `I`：instance ID，默认 4 比特位
-- `D`：schema ID，默认 7 比特位
-- `T`：table ID，默认 8 比特位
-- `P`：自增主键 ID，占据剩下的比特位（≥44 比特位）
-
-### 使用示例
-
-假设存在分库分表场景：将上游两个 MySQL 实例的 `test_{1,2,3...}`.`t_{1,2,3...}` 同步到下游 TiDB 的 `test`.`t`，并且这些表都有自增主键。
-
-需要设置下面两个规则：
-
-```yaml
-column-mappings:
-  rule-1:
-​    schema-pattern: "test_*"
-​    table-pattern: "t_*"
-​    expression: "partition id"
-​    source-column: "id"
-​    target-column: "id"
-​    arguments: ["1", "test", "t", "_"]
-  rule-2:
-​    schema-pattern: "test_*"
-​    table-pattern: "t_*"
-​    expression: "partition id"
-​    source-column: "id"
-​    target-column: "id"
-​    arguments: ["2", "test", "t", "_"]
-```
-
-- MySQL instance 1 的表 `test_1`.`t_1` 的 `ID = 1` 的行经过转换后 ID = 1 变为 `1 << (64-1-4) | 1 << (64-1-4-7) | 1 << 44 | 1 = 580981944116838401`
-- MySQL instance 2 的表 `test_1`.`t_2` 的 `ID = 1` 的行经过转换后 ID = 2 变为 `2 << (64-1-4) | 1 << (64-1-4-7) | 2 << 44 | 2 = 1157460288606306306`
-
-## 同步延迟监控
-
-DM 支持通过 heartbeat 真实同步数据来计算每个同步任务与 MySQL/MariaDB 的实时同步延迟。
-
-> **注意：**
-> 
-> - 同步延迟的估算的精度在秒级别。
-> - heartbeat 相关的 binlog 不会同步到下游，在计算延迟后会被丢弃。
-
-### 系统权限
-
-如果开启 heartbeat 功能，需要上游 MySQL/MariaDB 实例提供下面的权限：
-
-- SELECT
-- INSERT
-- CREATE (databases, tables)
-
-### 参数配置
-
-在 task 的配置文件中设置：
-
-```
-enable-heartbeat: true
-```
-
-### 原理介绍
-
-- DM-worker 在对应的上游 MySQL/MariaDB 创建库 `dm_heartbeat`（当前不可配置）
-- DM-worker 在对应的上游 MySQL/MariaDB 创建表 `heartbeat`（当前不可配置）
-- DM-worker 每秒钟（当前不可配置）在对应的上游 MySQL/MariaDB 的 `dm_heartbeat`.`heartbeat` 表中，利用 `replace statement` 更新当前时间戳 `TS_master`
-- DM-worker 每个任务拿到 `dm_heartbeat`.`heartbeat` 的 binlog 后，更新自己的同步时间 `TS_slave_task`
-- DM-worker 每 10 秒在对应的上游 MySQL/MariaDB 的 `dm_heartbeat`.`heartbeat` 查询当前的 `TS_master`，并且对每个任务计算 `task_lag` = `TS_master` - `TS_slave_task`
-
-可以在 metrics 的 [binlog replication](/v2.1/reference/tools/data-migration/monitor.md#binlog-replication) 处理单元找到 replicate lag 监控项。
+#### 手动处理示例
+
+仍然假设是 [部分 DM-worker 下线](#场景一部分-dm-worker-下线) 示例中的上下游表结构及合表同步需求。
+
+当在 DM-master 自动执行 unlock 操作的过程中，owner (DM-worker-1) 成功执行了 DDL 操作且开始继续进行后续同步，并移除了 DM-master 上的 DDL lock 信息；但在请求 DM-worker-2 跳过 DDL 操作的过程中，由于 DM-worker-2 发生了重启而跳过 DDL 操作失败。
+
+DM-worker-2 重启后，将尝试重新同步重启前已经在等待的 DDL lock。此时将在 DM-master 上创建一个新的 lock，并且该 DM-worker 将成为 lock 的 owner（其他 DM-worker 此时已经执行或跳过 DDL 操作并在进行后续同步）。
+
+处理流程如下：
+
+1. 使用 `show-ddl-locks` 确认 DM-master 上存在该 DDL 操作对应的 lock。
+
+    应该仅有该重启的 DM-worker（`127.0.0.1:8263`）处于 `syned` 状态：
+
+    ```bash
+    » show-ddl-locks
+    {
+        "result": true,
+        "msg": "",
+        "locks": [
+            {
+                "ID": "test-`shard_db`.`shard_table`",
+                "task": "test",
+                "owner": "127.0.0.1:8263",
+                "DDLs": [
+                    "USE `shard_db`; ALTER TABLE `shard_db`.`shard_table` ADD COLUMN `c2` int(11);"
+                ],
+                "synced": [
+                    "127.0.0.1:8263"
+                ],
+                "unsynced": [
+                    "127.0.0.1:8262"
+                ]
+            }
+        ]
+    }
+    ```
+
+2. 使用 `unlock-ddl-lock` 请求 DM-master unlock 该 lock。
+
+    - 使用 `--worker` 参数限定操作仅针对该重启的 DM-worker（`127.0.0.1:8263`）。
+    - Lock 过程中该 DM-worker 会尝试再次向下游执行该 DDL 操作（重启前的原 owner 已向下游执行过该 DDL 操作），需要确保该 DDL 操作可被多次执行。
+
+        ```bash
+        » unlock-ddl-lock --worker=127.0.0.1:8263 test-`shard_db`.`shard_table`
+        {
+            "result": true,
+            "msg": "",
+            "workers": [
+                {
+                    "result": true,
+                    "worker": "127.0.0.1:8263",
+                    "msg": ""
+                }
+            ]
+        }
+        ```
+
+3. 使用 `show-ddl-locks` 确认 DDL lock 是否被成功 unlock。
+4. 使用 `query-status` 确认同步任务是否正常。
+
+#### 手动处理后的影响
+
+手动 unlock sharding DDL lock 后，后续的 sharding DDL 将可以自动正常同步。
+
+### 场景三：unlock 过程中部分 DM-worker 临时不可达
+
+#### Lock 异常原因
+
+与 [unlock 过程中部分 DM-worker 重启](#场景二unlock-过程中部分-dm-worker-重启) 造成 lock 异常的原因类似。当请求 DM-worker 跳过 DDL 操作时，如果该 DM-worker 临时不可达，则会造成该 DM-worker 跳过 DDL 操作失败。此时 DM-master 上的 lock 信息被移除，但该 DM-worker 将处于等待一个不再存在的 DDL lock 的状态。
+
+场景三与[场景二](#场景二unlock-过程中部分-dm-worker-重启)的区别在于，场景三中 DM-master 没有 lock，而场景二中 DM-master 有一个新的 lock。
+
+#### 手动处理示例
+
+仍然假设是 [部分 DM-worker 下线](#场景一部分-dm-worker-下线) 示例中的上下游表结构及合表同步需求。
+
+在 DM-master 自动执行 unlock 操作的过程中，owner (DM-worker-1) 成功执行了 DDL 操作且开始继续进行后续同步，并移除了 DM-master 上的 DDL lock 信息，但在请求 DM-worker-2 跳过 DDL 操作的过程中，由于网络原因等临时不可达而跳过 DDL 操作失败。
+
+处理流程如下：
+
+1. 使用 `show-ddl-locks` 确认 DM-master 上不再存在该 DDL 操作对应的 lock。
+2. 使用 `query-status` 确认 DM-worker 仍在等待 lock 同步。
+
+    ```bash
+    » query-status test
+    {
+        "result": true,
+        "msg": "",
+        "workers": [
+            ...
+            {
+                ...
+                "worker": "127.0.0.1:8263",
+                "subTaskStatus": [
+                    {
+                        ...
+                        "unresolvedDDLLockID": "test-`shard_db`.`shard_table`",
+                        "sync": {
+                            ...
+                            "blockingDDLs": [
+                                "USE `shard_db`; ALTER TABLE `shard_db`.`shard_table` ADD COLUMN `c2` int(11);"
+                            ],
+                            "unresolvedGroups": [
+                                {
+                                    "target": "`shard_db`.`shard_table`",
+                                    "DDLs": [
+                                        "USE `shard_db`; ALTER TABLE `shard_db`.`shard_table` ADD COLUMN `c2` int(11);"
+                                    ],
+                                    "firstPos": "(mysql-bin|000001.000003, 1752)",
+                                    "synced": [
+                                        "`shard_db_2`.`shard_table_1`",
+                                        "`shard_db_2`.`shard_table_2`"
+                                    ],
+                                    "unsynced": [
+                                    ]
+                                }
+                            ],
+                            "synced": false
+                        }
+                    }
+                ]
+                ...
+            }
+        ]
+    }
+    ```
+
+3. 使用 `break-ddl-lock` 请求强制 break 该 DM-worker 当前正在等待的 DDL lock。
+
+    由于 owner 已经向下游执行了 DDL 操作，因此在 break 时使用 `--skip` 参数。
+
+    ```bash
+    » break-ddl-lock --worker=127.0.0.1:8263 --skip test
+    {
+        "result": true,
+        "msg": "",
+        "workers": [
+            {
+                "result": true,
+                "worker": "127.0.0.1:8263",
+                "msg": ""
+            }
+        ]
+    }
+    ```
+
+4. 使用 `query-status` 确认同步任务是否正常且不再处于等待 lock 的状态。
+
+#### 手动处理后的影响
+
+手动强制 break lock 后，后续 sharding DDL 将可以自动正常同步。
