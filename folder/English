@@ -1,141 +1,299 @@
 ---
-title: TiDB 集群故障诊断
+title: TiDB-Binlog 部署方案
 category: advanced
 ---
 
-# TiDB 集群故障诊断
+# TiDB-Binlog 部署方案
 
-当试用 TiDB 遇到问题时，请先参考本篇文档。如果问题未解决，请按文档要求收集必要的信息通过 Github [提供给 TiDB 开发者](https://github.com/pingcap/tidb/issues/new)。
+## TiDB-Binlog 简介
 
-## 如何给 TiDB 开发者报告错误
+TiDB-Binlog 用于收集 TiDB 的 Binlog，并提供实时备份和同步功能的商业工具。
 
-当使用 TiDB 遇到问题并且通过后面所列信息无法解决时，请收集以下信息并[创建新 Issue](https://github.com/pingcap/tidb/issues/new):
+TiDB-Binlog 支持以下功能场景:
 
-+ 具体的出错信息以及正在执行的操作
-+ 当前所有组件的状态
-+ 出问题组件 log 中的 error/fatal/panic 信息
-+ 机器配置以及部署拓扑
-+ dmesg 中 TiDB 组件相关的问题
+* **数据同步**：同步 TiDB 集群数据到其他数据库。
+* **实时备份和恢复**：备份 TiDB 集群数据，同时可以用于 TiDB 集群故障时恢复。
 
-## 数据库连接不上
+## TiDB-Binlog 架构
 
-首先请确认集群的各项服务是否已经启动，包括 tidb-server、pd-server、tikv-server。请用 ps 命令查看所有进程是否在。如果某个组件的进程已经不在了，请参考对应的章节排查错误。
+首先介绍 TiDB-Binlog 的整体架构。
 
-如果所有的进程都在，请查看 tidb-server 的日志，看是否有报错？常见的错误包括：
+![TiDB-Binlog 架构](../media/architecture.jpeg)
 
-+ InformationSchema is out of date
+TiDB-Binlog 集群主要分为两个组件：
 
-    无法连接 tikv-server，请检查 pd-server 以及 tikv-server 的状态和日志。
+### Pump
 
-+ panic
+Pump 是一个守护进程，在每个 TiDB 的主机上后台运行。他的主要功能是实时记录 TiDB 产生的 Binlog 并顺序写入磁盘文件
 
-    程序有错误，请将具体的 panic log [提供给 TiDB 开发者](https://github.com/pingcap/tidb/issues/new)。
+#### Drainer
 
-    如果是清空数据并重新部署服务，请确认以下信息：
+Drainer 从各个 Pump 节点收集 Binlog，并按照在 TiDB 中事务的提交顺序转化为指定数据库兼容的 SQL 语句，最后同步到目的数据库或者写到顺序文件
 
-+ pd-server、tikv-server 数据都已清空
+## TiDB-Binlog 安装
 
-    tikv-server 存储具体的数据，pd-server 存储 tikv-server 中数据的的元信息。如果只清空 pd-server 或只清空 tikv-server 的数据，会导致两边数据不匹配。
+### 下载官方 Binary
 
-+ 清空 pd-server 和 tikv-server 的数据并重启后，也需要重启 tidb-server
+- CentOS 7+
 
-    集群 ID 是由 pd-server 在集群初始化时随机分配，所以重新部署集群后，集群 ID 会发生变化。tidb-server 业务需要重启以获取新的集群 ID。
+    ```bash
+    # 下载压缩包
+    wget http://download.pingcap.org/tidb-binlog-local-linux-amd64.tar.gz
+    wget http://download.pingcap.org/tidb-binlog-local-linux-amd64.sha256
 
-## tidb-server 启动报错
+    # 检查文件完整性，返回 ok 则正确
+    sha256sum -c tidb-binlog-local-linux-amd64.sha256
 
-tidb-server 无法启动的常见情况包括：
+    # 解开压缩包
+    tar -xzf tidb-binlog-local-linux-amd64.tar.gz
+    cd tidb-binlog-local-linux-amd64
+    ```
 
-+ 启动参数错误
+### TiDB-Binlog 部署
 
-    请参考[TiDB 命令行参数](op-guide/configuration.md#tidb)
+#### 注意
 
-+ 端口被占用：`lsof -i:port`
+* 需要为一个 TiDB 集群中的每台 TiDB server 部署一个 Pump，目前 TiDB server 只支持以 unix socket 方式的输出 binlog。
+* 手动部署时， 启动优先级为： Pump > TiDB ； 停止优先级为 TiDB > Pump
 
-    请确保 tidb-server 启动所需要的端口未被占用。
+    我们设置 TiDB 启动参数 binlog-socket 为对应的 Pump 的参数 socket 所指定的 unix socket 文件路径，最终部署结构如下图所示：
 
-+ 无法连接 pd-server
+    ![TiDB pump 模块部署结构](../media/tidb-pump-deployment.png)
 
-    首先检查 pd-server 的进程状态和日志，确保 pd-server 成功启动，对应端口已打开：`lsof -i:port`。
+* drainer 不支持对 ignore schemas（在过滤列表中的 schemas） 的 table 进行 rename DDL 操作
 
-    若 pd-server 正常，则需要检查 tidb-server 机器和 pd-server 对应端口之间的连通性， 确保网段连通且对应服务端口已添加到防火墙白名单中，可通过 nc 或 curl 工具检查。
+* 在已有的 TiDB 集群中启动 drainer，一般需要全量备份 并且获取 savepoint，然后导入全量备份，最后启动 drainer 从 savepoint 开始同步；
 
-    例如，假设 tidb 服务位于 `192.168.1.100`，无法连接的 pd 位于 `192.168.1.101`，且 2379 为其 client port， 则可以在 tidb 机器上执行 `nc -v -z 192.168.1.101 2379`，测试是否可以访问端口。 或使用 `curl -v 192.168.1.101:2379/pd/api/v1/leader` 直接检查 pd 是否正常服务。
+    为了保证数据的完整性，在 pump 运行 10 分钟左右后按顺序进行下面的操作
 
-## tikv-server 启动报错
+    * 以 gen-savepoint model 运行 drainer 生成 drainer savepint 文件，`bin/drainer -gen-savepoint --data-dir= ${drainer_savepoint_dir} --pd-urls=${pd_urls}`
+    * 全量备份，例如 mydumper 备份 tidb
+    * 全量导入备份到目标系统
+    * 设置 savepoint 文件路径，然后启动 drainer，`bin/drainer --config=conf/drainer.toml --data-dir=${drainer_savepoint_dir}`
 
-+ 启动参数错误
+* drainer 输出的 pb, 需要在配置文件设置下面的参数
 
-    请参考[TiKV 启动参数](op-guide/configuration.md#tikv)文档。
+    ```toml
+    [syncer]
+    db-type = "pb"
+    disable-dispatch = true
 
-+ 端口被占用：`lsof -i:port`
+    [syncer.to]
+    dir = "/path/pb-dir"
+    ```
 
-    请确保 tikv-server 启动所需要的端口未被占用： `lsof -i:port`。
-+ 无法连接 pd-server
+#### 使用 tidb-ansible 部署 PUMP (推荐)
 
-    首先检查 pd-server 的进程状态和日志。确保 pd-server 成功启动，对应端口已打开：`lsof -i:port`。
+* 搭建全新的 TiDB Cluster，启动顺序 pd-server -> tikv-server -> pump -> tidb-server -> drainer
+    * 修改 tidb-ansible inventory.ini 文件
+        * enable_binlog = True
+    * 执行 ansible-playbook deploy.yml
+    * 执行 ansible-playbook start.yml
+        * drainer 目前需要手动部署
 
-    若 pd-server 正常，则需要检查 tikv-server 机器和 pd-server 对应端口之间的连通性， 确保网段连通且对应服务端口已添加到防火墙白名单中，可通过 nc 或 curl 工具检查。具体命令参考上一节。
+* 对已有的 TiDB Cluster 部署 binlog
+    * 修改 tidb-ansible inventory.ini 文件
+        * enable_binlog = True
+    * 执行 ansible-playbook rolling_update.yml --tags=tidb
+        * drainer 目前需要手动部署
 
-+ 文件被占用
+#### 使用 Binary 部署 PUMP
 
-    不要在一个数据库文件目录上打开两个 tikv。
+1. PUMP 命令行参数说明
 
-## pd-server 启动报错
+    ```
+    Usage of pump:
+    -L string
+        日志输出信息等级设置: debug, info, warn, error, fatal (默认 "info")
+    -V
+        打印版本信息
+    -addr string
+        pump 提供服务的 rpc 地址(默认 "127.0.0.1:8250")
+    -advertise-addr string
+        pump 对外提供服务的 rpc 地址(默认 "127.0.0.1:8250")
+    -config string
+        配置文件路径,如果你指定了配置文件，pump 会首先读取配置文件的配置
+        如果对应的配置在命令行参数里面也存在，pump 就会使用命令行参数的配置来覆盖配置文件里面的
+    -data-dir string
+        pump 数据存储位置路径
+    -gc int
+        日志最大保留天数 (默认 7)， 设置为 0 可永久保存
+    -heartbeat-interval uint
+        pump 向 pd 发送心跳间隔 (单位 秒)
+    -log-file string
+        log 文件路径
+    -log-rotate string
+        log 文件切换频率, hour/day
+    -metrics-addr string
+       prometheus Pushgateway 地址，不设置则禁止上报监控信息
+    -metrics-interval int
+       监控信息上报频率 (默认 15，单位 秒)
+    -pd-urls string
+        pd 集群节点的地址 (默认 "http://127.0.0.1:2379")
+    -socket string
+        unix socket 模式服务监听地址 (默认 unix:///tmp/pump.sock)
+    ```
 
-+ 启动参数错误
+ 2. PUMP 配置文件
 
-    请参考[PD 命令行参数](op-guide/configuration.md#placement-driver-pd)文档。
-+ 端口被占用：`lsof -i:port`
+    ```toml
+    # pump Configuration.
+    # pump 提供服务的 rpc 地址(默认 "127.0.0.1:8250")
+    addr = "127.0.0.1:8250"
+    # pump 对外提供服务的 rpc 地址(默认 "127.0.0.1:8250")
+    advertise-addr = ""
+    # binlog 最大保留天数 (默认 7)， 设置为 0 可永久保存
+    gc = 7
+    #  pump 数据存储位置路径
+    data-dir = "data.pump"
+    # pump 向 pd 发送心跳间隔 (单位 秒)
+    heartbeat-interval = 3
+    # pd 集群节点的地址 (默认 "http://127.0.0.1:2379")
+    pd-urls = "http://127.0.0.1:2379"
+    # unix socket 模式服务监听地址 (默认 unix:///tmp/pump.sock)
+    socket = "unix:///tmp/pump.sock"
+    ```
 
-    请确保 pd-server 启动所需要的端口未被占用： `lsof -i:port`。
+3. 启动示例
 
-## TiDB/TiKV/PD 进程异常退出
+    ```bash
+    ./bin/pump -config pump.toml
+    ```
 
-+ 进程是否是启动在前台
+#### 使用 Binary 部署 Drainer
 
-    当前终端退出给其所有子进程发送 HUP 信号，从而导致进程退出。
-+ 是否是在命令行用过 `nohup+&` 方式直接运行
+1. Drainer 命令行参数说明
 
-    这样依然可能导致进程因终端连接突然中断，作为终端 SHELL 的子进程被杀掉。 推荐将启动命令写在脚本中，通过脚本运行（相当于二次 fork 启动）。
+    ```
+    Usage of drainer:
+    -L string
+        日志输出信息等级设置: debug, info, warn, error, fatal (默认 "info")
+    -V
+        打印版本信息
+    -addr string
+        drainer 提供服务的地址(默认 "127.0.0.1:8249")
+    -c int
+        同步下游的并发数，该值设置越高同步的吞吐性能越好 (default 1)
+    -config string
+       配置文件路径, drainer 会首先读取配置文件的配置
+       如果对应的配置在命令行参数里面也存在，drainer 就会使用命令行参数的配置来覆盖配置文件里面的
+    -data-dir string
+       drainer 数据存储位置路径 (默认 "data.drainer")
+    -dest-db-type string
+        drainer 下游服务类型 (默认为 mysql)
+    -detect-interval int
+        向 pd 查询在线 Pump 的时间间隔 (默认 10，单位 秒)
+    -disable-dispatch
+        是否禁用拆分单个 binlog 的 sqls 的功能，如果设置为 true，则按照每个 binlog
+        顺序依次还原成单个事务进行同步( 下游服务类型为 mysql, 该项设置为 False )
+    -gen-savepoint
+        如果设置为 true, 则只生成 drainer 的 savepoint meta 文件, 可以配合 mydumper 使用
+    -ignore-schemas string
+        db 过滤列表 (默认 "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql,test"),
+        不支持对 ignore schemas 的 table 进行 rename DDL 操作
+    -log-file string
+        log 文件路径
+    -log-rotate string
+        log 文件切换频率, hour/day
+    -metrics-addr string
+       Prometheus Pushgateway 地址，不设置则禁止上报监控信息
+    -metrics-interval int
+       监控信息上报频率 (默认 15，单位 秒)
+    -pd-urls string
+       pd 集群节点的地址 (默认 "http://127.0.0.1:2379")
+    -txn-batch int
+       输出到下游数据库一个事务的 sql 数量 (default 1)
+    ```
 
-## TiKV 进程异常重启
+2. Drainer 配置文件
 
-+ 检查 dmesg 或者 syslog 里面是否有 OOM 信息
+    ```toml
+    # drainer Configuration.
 
-    如果有 OOM 信息并且杀掉的进程为 TiKV，请减少 TiKV 的 RocksDB 的各个 CF 的 `block-cache-size` 值。
+    # drainer 提供服务的地址(默认 "127.0.0.1:8249")
+    addr = "127.0.0.1:8249"
 
-+ 检查 TiKV 日志是否有 panic 的 log
+    # 向 pd 查询在线 pump 的时间间隔 (默认 10，单位 秒)
+    detect-interval = 10
 
-    提交 Issue 并附上 panic 的 log。
+    # drainer 数据存储位置路径 (默认 "data.drainer")
+    data-dir = "data.drainer"
 
-## TiDB panic
+    # pd 集群节点的地址 (默认 "http://127.0.0.1:2379")
+    pd-urls = "http://127.0.0.1:2379"
 
-请提供 panic 的 log
+    # log 文件路径
+    log-file = "drainer.log"
 
-## 连接被拒绝
+    # Syncer Configuration.
+    [syncer]
 
-+ 请确保操作系统的网络参数正确，包括但不限于
-    - 连接字符串中的端口和 tidb-server 启动的端口需要一致
-    - 请保证防火墙的配置正确
+    ## db 过滤列表 (默认 "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql,test"),
+    ## 不支持对 ignore schemas 的 table 进行 rename DDL 操作
+    ignore-schemas = "INFORMATION_SCHEMA,PERFORMANCE_SCHEMA,mysql"
 
-## Too many open files
+    # 输出到下游数据库一个事务的 sql 数量 (default 1)
+    txn-batch = 1
 
-在启动进程之前，请确保 ulimit -n 的结果足够大，推荐设为 unlimited 或者是大于 1000000。
+    # 同步下游的并发数，该值设置越高同步的吞吐性能越好 (default 1)
+    worker-count = 1
 
-## 数据库访问超时，系统负载高
+    # 是否禁用拆分单个 binlog 的 sqls 的功能，如果设置为 true，则按照每个 binlog
+    # 顺序依次还原成单个事务进行同步( 下游服务类型为 mysql, 该项设置为 False )
+    disable-dispatch = false
 
-首先检查 [SLOW-QUERY](sql/slow-query.md) 日志, 判断是否是因为某条 SQL 语句导致。 如果未能解决，请提供如下信息：
+    # drainer 下游服务类型 (默认为 mysql)
+    # 参数有效值为 "mysql", "pb"
+    db-type = "mysql"
 
-+ 部署的拓扑结构
-    - tidb-server/pd-server/tikv-server 部署了几个实例
-    - 这些实例在机器上是如何分布的
-+ 机器的硬件配置
-    - CPU 核数
-    - 内存大小
-    - 硬盘类型（SSD 还是机械硬盘）
-    - 是实体机还是虚拟机
-+ 机器上除了 TiDB 集群之外是否还有其他服务
-+ pd-server 和 tikv-server 是否分开部署
-+ 目前正在进行什么操作
-+ 用 `top -H` 命令查看当前占用 CPU 的线程名
-+ 最近一段时间的网络/IO 监控数据是否有异常
+    # replicate-do-db priority over replicate-do-table if have same db name
+    # and we support regex expression ,
+    # 以 '~' 开始声明使用正则表达式
+
+    #replicate-do-db = ["~^b.*","s1"]
+
+    #[[syncer.replicate-do-table]]
+    #db-name ="test"
+    #tbl-name = "log"
+
+    #[[syncer.replicate-do-table]]
+    #db-name ="test"
+    #tbl-name = "~^a.*"
+
+    # db-type 设置为 mysql 时，下游数据库服务器参数
+    [syncer.to]
+    host = "127.0.0.1"
+    user = "root"
+    password = ""
+    port = 3306
+
+    # db-type 设置为 pb 时,存放 binlog 文件的目录
+    # [syncer.to]
+    # dir = "data.drainer"
+    ```
+
+3. 启动示例
+
+    ```bash
+    ./bin/drainer -config drainer.toml
+    ```
+
+## TiDB-Binlog 监控
+
+这部分主要对 TiDB-Binlog 的状态、性能做监控，通过 Prometheus + Grafana 展现 metrics 数据，
+
+### pump/drainer 配置
+
+使用 ansible 部署的 pump 服务，已经在启动参数设置 metrics 。
+
+drainer 启动时可以设置 `--metrics-addr` 和 `--metrics-interval` 两个参数，其中 metrics-addr 设为 Push Gateway 的地址，metrics-interval 为 push 的频率，单位为秒，默认值为15
+
+### Grafana 配置
+
++ 进入 Grafana Web 界面（默认地址: `http://localhost:3000`，默认账号: admin 密码: admin）
+
+    点击 Grafana Logo -> 点击 Data Sources -> 点击 Add data source -> 填写 data source 信息 ( 注: Type 选 Prometheus，Url 为 Prometheus 地址，根据实际情况 添加/填写 ）
+
++ 导入 dashboard 配置文件
+
+    点击 Grafana Logo -> 点击 Dashboards -> 点击 Import -> 选择需要的 [dashboard 配置文件](https://github.com/pingcap/tidb-ansible/blob/master/scripts/syncer.json)上传 -> 选择对应的 data source
