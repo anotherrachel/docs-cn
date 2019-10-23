@@ -1,14 +1,12 @@
 ---
-title: SHOW DATABASES
-summary: TiDB 数据库中 SHOW DATABASES 的使用概况。
+title: SHOW CREATE USER
+summary: TiDB 数据库中 SHOW CREATE USER 的使用概况。
 category: reference
 ---
 
-# SHOW DATABASES
+# SHOW CREATE USER
 
-`SHOW DATABASES` 语句用于显示当前用户有权访问的数据库列表。当前用户无权访问的数据库将从列表中隐藏。`information_schema` 数据库始终出现在列表的最前面。
-
-`SHOW SCHEMAS` 是 `SHOW DATABASES` 语句的别名。
+`SHOW CREATE USER` 语句用于显示如何使用 `CREATE USER` 语法来重新创建用户。
 
 ## 语法图
 
@@ -16,46 +14,36 @@ category: reference
 
 ![ShowStmt](/media/sqlgram/ShowStmt.png)
 
-**ShowTargetFilterable:**
+**Username:**
 
-![ShowTargetFilterable](/media/sqlgram/ShowTargetFilterable.png)
+![Username](/media/sqlgram/Username.png)
 
 ## 示例
 
 ```sql
-mysql> SHOW DATABASES;
-+--------------------+
-| Database           |
-+--------------------+
-| INFORMATION_SCHEMA |
-| PERFORMANCE_SCHEMA |
-| mysql              |
-| test               |
-+--------------------+
-4 rows in set (0.00 sec)
+mysql> SHOW CREATE USER 'root';
++--------------------------------------------------------------------------------------------------------------------------+
+| CREATE USER for root@%                                                                                                   |
++--------------------------------------------------------------------------------------------------------------------------+
+| CREATE USER 'root'@'%' IDENTIFIED WITH 'mysql_native_password' AS '' REQUIRE NONE PASSWORD EXPIRE DEFAULT ACCOUNT UNLOCK |
++--------------------------------------------------------------------------------------------------------------------------+
+1 row in set (0.00 sec)
 
-mysql> CREATE DATABASE mynewdb;
-Query OK, 0 rows affected (0.10 sec)
-
-mysql> SHOW DATABASES;
-+--------------------+
-| Database           |
-+--------------------+
-| INFORMATION_SCHEMA |
-| PERFORMANCE_SCHEMA |
-| mynewdb            |
-| mysql              |
-| test               |
-+--------------------+
-5 rows in set (0.00 sec)
+mysql> SHOW GRANTS FOR 'root';
++-------------------------------------------+
+| Grants for root@%                         |
++-------------------------------------------+
+| GRANT ALL PRIVILEGES ON *.* TO 'root'@'%' |
++-------------------------------------------+
+1 row in set (0.00 sec)
 ```
 
 ## MySQL 兼容性
 
-`SHOW DATABASES` 语句与 MySQL 完全兼容。如有任何兼容性差异，请在 GitHub 上提交 [issue](/v2.1/report-issue.md)。
+* `SHOW CREATE USER` 的输出结果旨在匹配 MySQL，但 TiDB 尚不支持若干 `CREATE` 选项。尚未支持的选项在语句执行过程中会被解析但会被跳过执行。详情可参阅 [security compatibility]。
 
 ## 另请参阅
 
-* [SHOW SCHEMAS](/v2.1/reference/sql/statements/show-schemas.md)
-* [DROP DATABASE](/v2.1/reference/sql/statements/drop-database.md)
-* [CREATE DATABASE](/v2.1/reference/sql/statements/create-database.md)
+* [CREATE USER](/v2.1/reference/sql/statements/create-user.md)
+* [SHOW GRANTS](/v2.1/reference/sql/statements/show-grants.md)
+* [DROP USER](/v2.1/reference/sql/statements/drop-user.md)
