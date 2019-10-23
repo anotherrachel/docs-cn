@@ -1,40 +1,38 @@
 ---
-title: Bit-value Literals
-category: user guide
+title: TiDB-Ansible 常见运维操作
+category: deployment
 ---
 
-# Bit-value Literals
+# TiDB-Ansible 常见运维操作
 
-位值字面值用 `b` 或者 `0b` 做前缀，后接以 0 跟 1 组成的二进制数字。其中 `0b` 是区分大小写的，`0B` 是会报错的。
+## 启动集群
 
-合法的 Bit-value：
+此操作会按顺序启动整个 TiDB 集群所有组件（包括 PD、TiDB、TiKV 等组件和监控组件）。
 
-* b'01'
-* B'01'
-* 0b01
+```
+$ ansible-playbook start.yml
+```
 
-非法的 Bit-value：
+## 关闭集群
 
-* b'2' (2 不是二进制数值, 必须为 0 或 1)
-* 0B01 (0B 必须是小写 0b)
+此操作会按顺序关闭整个 TiDB 集群所有组件（包括 PD、TiDB、TiKV 等组件和监控组件）。
 
-默认情况，位值字面值是一个二进制字符串。
+```
+$ ansible-playbook stop.yml
+```
 
-Bit-value 是作为二进制返回的，所以输出到 MySQL Client 可能会显示不出来，如果要转换为可打印的字符，可以使用内建函数 `BIN()` 或者 `HEX()`：
+## 清除集群数据
 
-```sql
-CREATE TABLE t (b BIT(8));
-INSERT INTO t SET b = b'00010011';
-INSERT INTO t SET b = b'1110';
-INSERT INTO t SET b = b'100101';
+此操作会关闭 TiDB、Pump、TiKV、PD 服务，并清空 Pump、TiKV、PD 数据目录。
 
-mysql> SELECT b+0, BIN(b), HEX(b) FROM t;
-+------+--------+--------+
-| b+0  | BIN(b) | HEX(b) |
-+------+--------+--------+
-|   19 | 10011  | 13     |
-|   14 | 1110   | E      |
-|   37 | 100101 | 25     |
-+------+--------+--------+
-3 rows in set (0.00 sec)
+```
+$ ansible-playbook unsafe_cleanup_data.yml
+```
+
+## 销毁集群
+
+此操作会关闭集群，并清空部署目录，若部署目录为挂载点，会报错，可忽略。
+
+```
+$ ansible-playbook unsafe_cleanup.yml
 ```
