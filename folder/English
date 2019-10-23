@@ -1,53 +1,57 @@
 ---
-title: DEALLOCATE
-summary: TiDB 数据库中 DEALLOCATE 的使用概况。
+title: CREATE USER
+summary: TiDB 数据库中 CREATE USER 的使用概况。
 category: reference
 ---
 
-# DEALLOCATE
+# CREATE USER
 
-`DEALLOCATE` 语句用于为服务器端预处理语句提供 SQL 接口。
+`CREATE USER` 语句用于创建带有指定密码的新用户。和 MySQL 一样，在 TiDB 权限系统中，用户是用户名和用户名所连接主机的组合。因此，可创建一个用户 `'newuser2'@'192.168.1.1'`，使其只能通过 IP 地址 `192.168.1.1` 进行连接。相同的用户名从不同主机登录时可能会拥有不同的权限。
 
 ## 语法图
 
-**DeallocateStmt:**
+**CreateUserStmt:**
 
-![DeallocateStmt](/media/sqlgram/DeallocateStmt.png)
+![CreateUserStmt](/media/sqlgram/CreateUserStmt.png)
 
-**DeallocateSym:**
+**IfNotExists:**
 
-![DeallocateSym](/media/sqlgram/DeallocateSym.png)
+![IfNotExists](/media/sqlgram/IfNotExists.png)
 
-**Identifier:**
+**UserSpecList:**
 
-![Identifier](/media/sqlgram/Identifier.png)
+![UserSpecList](/media/sqlgram/UserSpecList.png)
+
+**UserSpec:**
+
+![UserSpec](/media/sqlgram/UserSpec.png)
+
+**AuthOption:**
+
+![AuthOption](/media/sqlgram/AuthOption.png)
+
+**StringName:**
+
+![StringName](/media/sqlgram/StringName.png)
 
 ## 示例
 
 ```sql
-mysql> PREPARE mystmt FROM 'SELECT ? as num FROM DUAL';
-Query OK, 0 rows affected (0.00 sec)
+mysql> CREATE USER 'newuser' IDENTIFIED BY 'newuserpassword';
+Query OK, 1 row affected (0.04 sec)
 
-mysql> SET @number = 5;
-Query OK, 0 rows affected (0.00 sec)
-
-mysql> EXECUTE mystmt USING @number;
-+------+
-| num  |
-+------+
-| 5    |
-+------+
-1 row in set (0.00 sec)
-
-mysql> DEALLOCATE PREPARE mystmt;
-Query OK, 0 rows affected (0.00 sec)
+mysql> CREATE USER 'newuser2'@'192.168.1.1' IDENTIFIED BY 'newuserpassword';
+Query OK, 1 row affected (0.02 sec)
 ```
 
 ## MySQL 兼容性
 
-`DEALLOCATE` 语句与 MySQL 完全兼容。如有任何兼容性差异，请在 GitHub 上提交 [issue](/v2.1/report-issue.md)。
+* TiDB 尚不支持若干 `CREATE` 选项。这些选项可被解析，但会被忽略。
 
 ## 另请参阅
 
-* [PREPARE](/v2.1/reference/sql/statements/prepare.md)
-* [EXECUTE](/v2.1/reference/sql/statements/execute.md)
+* [Security Compatibility with MySQL](/v2.1/reference/security/compatibility.md)
+* [DROP USER](/v2.1/reference/sql/statements/drop-user.md)
+* [SHOW CREATE USER](/v2.1/reference/sql/statements/show-create-user.md)
+* [ALTER USER](/v2.1/reference/sql/statements/alter-user.md)
+* [Privilege Management](/v2.1/reference/security/privilege-system.md)
