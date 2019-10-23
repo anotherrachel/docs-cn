@@ -1,158 +1,220 @@
 ---
-title: 离线 TiDB Ansible 部署方案
+title: TiDB Docker 部署方案
 category: how-to
 ---
 
-# 离线 TiDB Ansible 部署方案
+# TiDB Docker 部署方案
 
-## 准备机器
+本文介绍如何使用 Docker 部署一个多节点的 TiDB 集群。
 
-1. 下载机一台
+> **注意：**
+> 
+> 对于生产环境，不要使用 Docker 进行部署，而应[使用 Ansible 部署 TiDB 集群](/v2.1/how-to/deploy/orchestrated/ansible.md)。
 
-    - 该机器需开放外网访问，用于下载 TiDB Ansible、TiDB 及相关软件安装包。
-    - 推荐安装 CentOS 7.3 及以上版本 Linux 操作系统。
+## 环境准备
 
-2. 部署目标机器若干及部署中控机一台
+### 安装 Docker
 
-    - 系统要求及配置参考[准备机器](/v2.1/how-to/deploy/orchestrated/ansible.md#准备机器)。
-    - 可以无法访问外网。
+Docker 可以方便地在 Linux / Mac OS / Windows 平台安装，安装方法请参考 [Docker 官方文档](https://www.docker.com/products/docker)。
 
-## 在中控机上安装系统依赖包
+### 拉取 TiDB 的 Docker 镜像
 
-> 下载[系统依赖离线安装包](https://download.pingcap.org/ansible-system-rpms.el7.tar.gz)，上传至中控机。该离线包仅支持 CentOS 7 系统，包含 `pip` 及 `sshpass`。
+部署 TiDB 集群主要包括 3 个服务组件:
 
-```bash
-# tar -xzvf ansible-system-rpms.el7.tar.gz
-# cd ansible-system-rpms.el7
-# chmod u+x install_ansible_system_rpms.sh
-# ./install_ansible_system_rpms.sh
-```
+- TiDB
+- TiKV
+- PD
 
-安装完成后，可通过 `pip -V` 验证 pip 是否安装成功：
+对应的最新 Docker 镜像可以通过 [Docker 官方镜像仓库](https://hub.docker.com) 获取：
 
 ```bash
-# pip -V
- pip 8.1.2 from /usr/lib/python2.7/site-packages (python 2.7)
+docker pull pingcap/tidb:latest
+docker pull pingcap/tikv:latest
+docker pull pingcap/pd:latest
 ```
 
-> 如果你的系统已安装 pip，请确认版本 >= 8.1.2，否则离线安装 ansible 及其依赖时，会有兼容问题。
+## 部署一个多节点集群
 
-## 在中控机上创建 tidb 用户，并生成 ssh key
+假设我们打算在 6 台主机上部署一个 TiDB 集群:
 
-参考[在中控机上创建 tidb 用户，并生成 ssh key](/v2.1/how-to/deploy/orchestrated/ansible.md#在中控机上创建-tidb-用户并生成-ssh-key) 即可。
+| 主机名   | IP            | 部署服务       | 数据盘挂载 |
+| ----- | ------------- | ---------- | ----- |
+| host1 | 192.168.1.101 | PD1 & TiDB | /data |
+| host2 | 192.168.1.102 | PD2        | /data |
+| host3 | 192.168.1.103 | PD3        | /data |
+| host4 | 192.168.1.104 | TiKV1      | /data |
+| host5 | 192.168.1.105 | TiKV2      | /data |
+| host6 | 192.168.1.106 | TiKV3      | /data |
 
-## 在中控机器上离线安装 Ansible 及其依赖
+### 启动 PD
 
-以下是 CentOS 7 系统 Ansible 离线安装方式：
-
-目前 release-2.0 及 master 版本兼容 Ansible 2.5 版本，Ansible 及相关依赖版本记录在 `tidb-ansible/requirements.txt` 文件中，请下载 Ansible 2.5 离线安装包上传至中控机。
-
-> 下载 [Ansible 2.5 离线安装包](https://download.pingcap.org/ansible-2.5.0-pip.tar.gz)
-
-下面以安装 Ansible 2.5 为例：
-
-```
-# tar -xzvf ansible-2.5.0-pip.tar.gz
-# cd ansible-2.5.0-pip/
-# chmod u+x install_ansible.sh
-# ./install_ansible.sh
-```
-
-安装完成后，可通过 `ansible --version` 查看版本：
+登录 **host1** 执行：
 
 ```bash
-# ansible --version
- ansible 2.5.0
+docker run -d --name pd1 \
+  -p 2379:2379 \
+  -p 2380:2380 \
+  -v /etc/localtime:/etc/localtime:ro \
+  -v /data:/data \
+  pingcap/pd:latest \
+  --name="pd1" \
+  --data-dir="/data/pd1" \
+  --client-urls="http://0.0.0.0:2379" \
+  --advertise-client-urls="http://192.168.1.101:2379" \
+  --peer-urls="http://0.0.0.0:2380" \
+  --advertise-peer-urls="http://192.168.1.101:2380" \
+  --initial-cluster="pd1=http://192.168.1.101:2380,pd2=http://192.168.1.102:2380,pd3=http://192.168.1.103:2380"
 ```
 
-## 在下载机上下载 TiDB Ansible 及 TiDB 安装包
+登录 **host2** 执行：
 
-以下为 tidb-ansible 与 TiDB 的版本对应关系，版本选择可以咨询官方。
+```bash
+docker run -d --name pd2 \
+  -p 2379:2379 \
+  -p 2380:2380 \
+  -v /etc/localtime:/etc/localtime:ro \
+  -v /data:/data \
+  pingcap/pd:latest \
+  --name="pd2" \
+  --data-dir="/data/pd2" \
+  --client-urls="http://0.0.0.0:2379" \
+  --advertise-client-urls="http://192.168.1.102:2379" \
+  --peer-urls="http://0.0.0.0:2380" \
+  --advertise-peer-urls="http://192.168.1.102:2380" \
+  --initial-cluster="pd1=http://192.168.1.101:2380,pd2=http://192.168.1.102:2380,pd3=http://192.168.1.103:2380"
+```
 
-| TiDB 版本   | tidb-ansible tag          | 备注                       |
-| --------- | ------------------------- | ------------------------ |
-| 2.0 版本    | v2.0.10、v2.0.11           | 最新 2.0 稳定版本，可用于生产环境。     |
-| 2.1 版本    | v2.1.1 ~ v2.1.6           | 最新 2.1 稳定版本，可用于生产环境（建议）。 |
-| 3.0 版本    | v3.0.0-beta、v3.0.0-beta.1 | 目前是 beta 版本，不建议用于生产环境。   |
-| latest 版本 | None                      | 包含最新特性，每日更新，不建议用于生产环境。   |
+登录 **host3** 执行：
 
-1. 在下载机上安装 Ansible
+```bash
+docker run -d --name pd3 \
+  -p 2379:2379 \
+  -p 2380:2380 \
+  -v /etc/localtime:/etc/localtime:ro \
+  -v /data:/data \
+  pingcap/pd:latest \
+  --name="pd3" \
+  --data-dir="/data/pd3" \
+  --client-urls="http://0.0.0.0:2379" \
+  --advertise-client-urls="http://192.168.1.103:2379" \
+  --peer-urls="http://0.0.0.0:2380" \
+  --advertise-peer-urls="http://192.168.1.103:2380" \
+  --initial-cluster="pd1=http://192.168.1.101:2380,pd2=http://192.168.1.102:2380,pd3=http://192.168.1.103:2380"
+```
 
-    请按以下方式在 CentOS 7 系统的下载机上在线安装 Ansible。安装完成后，可通过 `ansible --version` 查看版本，请务必确认是 **Ansible 2.5.0** 版本，否则会有兼容问题。
+### 启动 TiKV
 
-    ```bash
-    # yum install epel-release
-    # yum install ansible curl
-    # ansible --version
-      ansible 2.5.0
-    ```
+登录 **host4** 执行：
 
-2. 下载 tidb-ansible
+```bash
+docker run -d --name tikv1 \
+  -p 20160:20160 \
+  --ulimit nofile=1000000:1000000 \
+  -v /etc/localtime:/etc/localtime:ro \
+  -v /data:/data \
+  pingcap/tikv:latest \
+  --addr="0.0.0.0:20160" \
+  --advertise-addr="192.168.1.104:20160" \
+  --data-dir="/data/tikv1" \
+  --pd="192.168.1.101:2379,192.168.1.102:2379,192.168.1.103:2379"
+```
 
-    使用以下命令从 Github [TiDB Ansible 项目](https://github.com/pingcap/tidb-ansible)上下载 TiDB Ansible 相应版本，默认的文件夹名称为 `tidb-ansible`。
+登录 **host5** 执行：
 
-    > **注意：**
-    > 
-    > 部署和升级 TiDB 集群需使用对应的 tidb-ansible 版本，通过改 `inventory.ini` 文件中的版本来混用可能会产生一些错误。
+```bash
+docker run -d --name tikv2 \
+  -p 20160:20160 \
+  --ulimit nofile=1000000:1000000 \
+  -v /etc/localtime:/etc/localtime:ro \
+  -v /data:/data \
+  pingcap/tikv:latest \
+  --addr="0.0.0.0:20160" \
+  --advertise-addr="192.168.1.105:20160" \
+  --data-dir="/data/tikv2" \
+  --pd="192.168.1.101:2379,192.168.1.102:2379,192.168.1.103:2379"
+```
 
-    - 下载指定 tag 的 tidb-ansible：
+登录 **host6** 执行：
 
-        ```
-        $ git clone -b $tag https://github.com/pingcap/tidb-ansible.git
-        ```
+```bash
+docker run -d --name tikv3 \
+  -p 20160:20160 \
+  --ulimit nofile=1000000:1000000 \
+  -v /etc/localtime:/etc/localtime:ro \
+  -v /data:/data \
+  pingcap/tikv:latest \
+  --addr="0.0.0.0:20160" \
+  --advertise-addr="192.168.1.106:20160" \
+  --data-dir="/data/tikv3" \
+  --pd="192.168.1.101:2379,192.168.1.102:2379,192.168.1.103:2379"
+```
 
-    - 下载 latest 版本对应的 tidb-ansible：
+### 启动 TiDB
 
-        ```
-        $ git clone https://github.com/pingcap/tidb-ansible.git
-        ```
+登录 **host1** 执行：
 
-3. 执行 `local_prepare.yml` playbook，联网下载 TiDB binary 到下载机
+```bash
+docker run -d --name tidb \
+  -p 4000:4000 \
+  -p 10080:10080 \
+  -v /etc/localtime:/etc/localtime:ro \
+  pingcap/tidb:latest \
+  --store=tikv \
+  --path="192.168.1.101:2379,192.168.1.102:2379,192.168.1.103:2379"
+```
 
-    ```
-    cd tidb-ansible
-    ansible-playbook local_prepare.yml
-    ```
+### 使用 MySQL 标准客户端连接 TiDB 测试
 
-4. 将执行完以上命令之后的 `tidb-ansible` 文件夹拷贝到中控机 `/home/tidb` 目录下，文件属主权限需是 `tidb` 用户。
+登录 **host1** 并确保已安装 [MySQL 命令行客户端](http://dev.mysql.com/downloads/mysql/)，执行：
 
-## 在中控机上配置部署机器 ssh 互信及 sudo 规则
+```bash
+$ mysql -h 127.0.0.1 -P 4000 -u root -D test
+mysql> show databases;
++--------------------+
+| Database           |
++--------------------+
+| INFORMATION_SCHEMA |
+| PERFORMANCE_SCHEMA |
+| mysql              |
+| test               |
++--------------------+
+4 rows in set (0.00 sec)
+```
 
-参考[在中控机上配置部署机器 ssh 互信及 sudo 规则](/v2.1/how-to/deploy/orchestrated/ansible.md#在中控机上配置部署机器-ssh-互信及-sudo-规则)即可。
+### 如何自定义配置文件
 
-## 在部署目标机器上安装 NTP 服务
+TiKV 和 PD 可以通过指定配置文件的方式来加载更加丰富的启动参数，用于性能调优。
 
-> 如果你的部署目标机器时间、时区设置一致，已开启 NTP 服务且在正常同步时间，此步骤可忽略，可参考[如何检测 NTP 服务是否正常](/v2.1/how-to/deploy/orchestrated/ansible.md#如何检测-ntp-服务是否正常)。
+假定配置文件在宿主机上的存放路径 `/path/to/config/pd.toml` 和 `/path/to/config/tikv.toml`。启动 Docker 时需要调整相应的启动参数，以 tikv1 和 pd1 为例：
 
-参考[在部署目标机器上安装 NTP 服务](/v2.1/how-to/deploy/orchestrated/ansible.md#在部署目标机器上安装-ntp-服务)即可。
+```bash
+docker run -d --name tikv1 \
+  -p 20160:20160 \
+  -v /etc/localtime:/etc/localtime:ro \
+  -v /data:/data \
+  -v /path/to/config/tikv.toml:/tikv.toml:ro \
+  pingcap/tikv:latest \
+  --addr="0.0.0.0:20160" \
+  --advertise-addr="192.168.1.104:20160" \
+  --data-dir="/data/tikv1" \
+  --pd="192.168.1.101:2379,192.168.1.102:2379,192.168.1.103:2379" \
+  --config="/tikv.toml"
+```
 
-## 在部署目标机器上配置 CPUfreq 调节器模式
-
-参考[在部署目标机器上配置 CPUfreq 调节器模式](/v2.1/how-to/deploy/orchestrated/ansible.md#在部署目标机器上配置-cpufreq-调节器模式)即可。
-
-## 在部署目标机器上添加数据盘 ext4 文件系统挂载参数
-
-参考[在部署目标机器上添加数据盘 ext4 文件系统挂载参数](/v2.1/how-to/deploy/orchestrated/ansible.md#在部署目标机器上添加数据盘-ext4-文件系统挂载参数)即可。
-
-## 分配机器资源，编辑 inventory.ini 文件
-
-参考[分配机器资源，编辑 inventory.ini 文件](/v2.1/how-to/deploy/orchestrated/ansible.md#分配机器资源编辑-inventoryini-文件)即可。
-
-## 部署任务
-
-1. `ansible-playbook local_prepare.yml` 该 playbook 不需要再执行。
-
-2. Grafana Dashboard 上的 Report 按钮可用来生成 PDF 文件，此功能依赖 `fontconfig` 包及英文字体，如需使用该功能，请下载 [font 离线安装包](https://download.pingcap.org/grafana-font-rpms.el7.tar.gz)上传至 **grafana_servers** 机器上安装。该离线包仅支持 CentOS 7 系统，包含 `fontconfig` 及 `open-sans-fonts`。
-
-    ```
-    $ tar -xzvf grafana-font-rpms.el7.tar.gz
-    $ cd grafana-font-rpms.el7
-    $ chmod u+x install_grafana_font_rpms.sh
-    $ ./install_grafana_font_rpms.sh
-    ```
-
-3. 参考[部署任务](/v2.1/how-to/deploy/orchestrated/ansible.md#部署任务)即可。
-
-## 测试集群
-
-参考[测试集群](/v2.1/how-to/deploy/orchestrated/ansible.md#测试集群)即可。
+```bash
+docker run -d --name pd1 \
+  -p 2379:2379 \
+  -p 2380:2380 \
+  -v /etc/localtime:/etc/localtime:ro \
+  -v /data:/data \
+  -v /path/to/config/pd.toml:/pd.toml:ro \
+  pingcap/pd:latest \
+  --name="pd1" \
+  --data-dir="/data/pd1" \
+  --client-urls="http://0.0.0.0:2379" \
+  --advertise-client-urls="http://192.168.1.101:2379" \
+  --peer-urls="http://0.0.0.0:2380" \
+  --advertise-peer-urls="http://192.168.1.101:2380" \
+  --initial-cluster="pd1=http://192.168.1.101:2380,pd2=http://192.168.1.102:2380,pd3=http://192.168.1.103:2380" \
+  --config="/pd.toml"
+```
