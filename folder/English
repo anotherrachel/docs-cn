@@ -1,69 +1,60 @@
 ---
-title: ANALYZE TABLE
-summary: TiDB 数据库中 ANALYZE TABLE 的使用概况。
+title: ALTER USER
+summary: TiDB 数据库中 ALTER USER 的使用概况。
 category: reference
 ---
 
-# ANALYZE TABLE
+# ALTER USER
 
-`ANALYZE TABLE` 语句用于更新 TiDB 在表和索引上留下的统计信息。执行大批量更新或导入记录后，或查询执行计划不是最佳时，建议运行 `ANALYZE TABLE`。
-
-当 TiDB 逐渐发现这些统计数据与预估不一致时，也会自动更新其统计数据。
+`ALTER USER` 语句用于更改 TiDB 权限系统内的已有用户。和 MySQL 一样，在 TiDB 权限系统中，用户是用户名和用户名所连接主机的组合。因此，可创建一个用户 `'newuser2'@'192.168.1.1'`，使其只能通过 IP 地址 `192.168.1.1` 进行连接。相同的用户名从不同主机登录时可能会拥有不同的权限。
 
 ## 语法图
 
-**AnalyzeTableStmt:**
+**AlterUserStmt:**
 
-![AnalyzeTableStmt](/media/sqlgram/AnalyzeTableStmt.png)
+![AlterUserStmt](/media/sqlgram/AlterUserStmt.png)
 
-**TableNameList:**
+**UserSpecList:**
 
-![TableNameList](/media/sqlgram/TableNameList.png)
+![UserSpecList](/media/sqlgram/UserSpecList.png)
 
-**TableName:**
+**UserSpec:**
 
-![TableName](/media/sqlgram/TableName.png)
+![UserSpec](/media/sqlgram/UserSpec.png)
 
 ## 示例
 
 ```sql
-mysql> CREATE TABLE t1 (id INT NOT NULL PRIMARY KEY auto_increment, c1 INT NOT NULL);
-Query OK, 0 rows affected (0.11 sec)
+mysql> CREATE USER 'newuser' IDENTIFIED BY 'newuserpassword';
+Query OK, 1 row affected (0.01 sec)
 
-mysql> INSERT INTO t1 (c1) VALUES (1),(2),(3),(4),(5);
-Query OK, 5 rows affected (0.03 sec)
-Records: 5  Duplicates: 0  Warnings: 0
+mysql> SHOW CREATE USER 'newuser';
++----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| CREATE USER for newuser@%                                                                                                                                            |
++----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| CREATE USER 'newuser'@'%' IDENTIFIED WITH 'mysql_native_password' AS '*5806E04BBEE79E1899964C6A04D68BCA69B1A879' REQUIRE NONE PASSWORD EXPIRE DEFAULT ACCOUNT UNLOCK |
++----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+1 row in set (0.00 sec)
 
-mysql> ALTER TABLE t1 ADD INDEX (c1);
-Query OK, 0 rows affected (0.30 sec)
+mysql> ALTER USER 'newuser' IDENTIFIED BY 'newnewpassword';
+Query OK, 0 rows affected (0.02 sec)
 
-mysql> EXPLAIN SELECT * FROM t1 WHERE c1 = 3;
-+-------------------+-------+------+-----------------------------------------------------------------+
-| id                | count | task | operator info                                                   |
-+-------------------+-------+------+-----------------------------------------------------------------+
-| IndexReader_6     | 10.00 | root | index:IndexScan_5                                               |
-| └─IndexScan_5     | 10.00 | cop  | table:t1, index:c1, range:[3,3], keep order:false, stats:pseudo |
-+-------------------+-------+------+-----------------------------------------------------------------+
-2 rows in set (0.00 sec)
-
-mysql> analyze table t1;
-Query OK, 0 rows affected (0.13 sec)
-
-mysql> EXPLAIN SELECT * FROM t1 WHERE c1 = 3;
-+-------------------+-------+------+---------------------------------------------------+
-| id                | count | task | operator info                                     |
-+-------------------+-------+------+---------------------------------------------------+
-| IndexReader_6     | 1.00  | root | index:IndexScan_5                                 |
-| └─IndexScan_5     | 1.00  | cop  | table:t1, index:c1, range:[3,3], keep order:false |
-+-------------------+-------+------+---------------------------------------------------+
-2 rows in set (0.00 sec)
+mysql> SHOW CREATE USER 'newuser';
++----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| CREATE USER for newuser@%                                                                                                                                            |
++----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| CREATE USER 'newuser'@'%' IDENTIFIED WITH 'mysql_native_password' AS '*FB8A1EA1353E8775CA836233E367FBDFCB37BE73' REQUIRE NONE PASSWORD EXPIRE DEFAULT ACCOUNT UNLOCK |
++----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+1 row in set (0.00 sec)
 ```
 
 ## MySQL 兼容性
 
-`ANALYZE TABLE` 在语法上与 MySQL 类似。但 `ANALYZE TABLE` 在 TiDB 上执行所需时间可能长得多，因为它的内部运行方式不同。
+* 在 MySQL 中，`ALTER` 语句用于更改属性，例如使密码失效。但 TiDB 尚未支持此功能。
 
 ## 另请参阅
 
-* [EXPLAIN](/v2.1/reference/sql/statements/explain.md)
-* [EXPLAIN ANALYZE](/v2.1/reference/sql/statements/explain-analyze.md)
+* [Security Compatibility with MySQL](/v2.1/reference/security/compatibility.md)
+* [CREATE USER](/v2.1/reference/sql/statements/create-user.md)
+* [DROP USER](/v2.1/reference/sql/statements/drop-user.md)
+* [SHOW CREATE USER](/v2.1/reference/sql/statements/show-create-user.md)
