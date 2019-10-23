@@ -1,68 +1,166 @@
 ---
-title: crwdns127114:0crwdne127114:0
-category: crwdns127116:0crwdne127116:0
+title: crwdns126958:0crwdne126958:0
+category: crwdns126960:0crwdne126960:0
 ---
 
-# crwdns127118:0crwdne127118:0
+# crwdns126962:0crwdne126962:0
 
-crwdns127120:0[error]crwdne127120:0
+crwdns126964:0crwdne126964:0
 
-## crwdns127122:0crwdne127122:0
+## crwdns126966:0crwdne126966:0
 
-crwdns127124:0crwdne127124:0
+crwdns126968:0crwdne126968:0
 
-crwdns127126:0crwdne127126:0
+- crwdns126970:0crwdne126970:0
+- crwdns126972:0crwdne126972:0
 
-crwdns127128:0crwdne127128:0
+    ```sh
+    crwdns126974:0crwdne126974:0
+    ```
 
-1. crwdns127130:0crwdne127130:0
-2. crwdns127132:0crwdne127132:0
-3. crwdns127134:0crwdne127134:0
+## crwdns126976:0crwdne126976:0
 
-crwdns127136:0crwdne127136:0
+crwdns126978:0crwdne126978:0
 
-crwdns127138:0crwdne127138:0
+### crwdns126980:0crwdne126980:0
 
-crwdns127140:0crwdne127140:0
+crwdns126982:0crwdne126982:0
 
-crwdns127142:0crwdne127142:0
+- `crwdns126984:0crwdne126984:0`
 
-## crwdns127144:0crwdne127144:0
+    - crwdns126986:0crwdne126986:0
+    - crwdns126988:0crwdne126988:0
+    - crwdns126990:0crwdne126990:0
+    - crwdns126992:0crwdne126992:0
+    - crwdns126994:0crwdne126994:0
 
-crwdns127146:0crwdne127146:0
+- `crwdns126996:0crwdne126996:0`
 
-1. crwdns127148:0crwdne127148:0
-2. crwdns127150:0crwdne127150:0
-3. crwdns127152:0crwdne127152:0
-4. crwdns127154:0crwdne127154:0
+    - crwdns126998:0crwdne126998:0
+    - crwdns127000:0crwdne127000:0
+    - crwdns127002:0crwdne127002:0
+    - crwdns127004:0crwdne127004:0
+    - crwdns127006:0crwdne127006:0
 
-    * crwdns127156:0crwdne127156:0
-    * crwdns127158:0crwdne127158:0
+crwdns127008:0crwdne127008:0
 
-crwdns127160:0crwdne127160:0
+### crwdns127010:0crwdne127010:0
 
-1. crwdns127162:0crwdne127162:0
-2. crwdns127164:0[checkpoint]crwdne127164:0
+crwdns127012:0crwdne127012:0
 
-## crwdns127166:0crwdne127166:0
+crwdns127014:0crwdne127014:0
 
-crwdns127168:0crwdne127168:0
+- crwdns127016:0crwdne127016:0
+- crwdns127018:0crwdne127018:0
+- crwdns127020:0crwdne127020:0
+- crwdns127022:0crwdne127022:0
 
-crwdns127170:0crwdne127170:0
+> **crwdns127024:0crwdne127024:0**
+> 
+> crwdns127026:0crwdne127026:0
 
-1. crwdns127172:0crwdne127172:0
+## crwdns127028:0crwdne127028:0
 
-    crwdns127174:0crwdne127174:0
+crwdns127030:0crwdne127030:0
 
-2. crwdns127176:0crwdne127176:0
+### crwdns127032:0crwdne127032:0
 
-3. crwdns127178:0crwdne127178:0
+crwdns127034:0crwdne127034:0
 
-## crwdns127180:0crwdne127180:0
+1. crwdns127036:0crwdne127036:0
 
-crwdns127182:0crwdne127182:0
+    ```ini
+    crwdns127038:0crwdne127038:0
 
-crwdns127184:0crwdne127184:0
+    crwdns127040:0[importer_server]crwdnd127040:0[lightning_server]crwdne127040:0
+    ```
 
-1. crwdns127186:0crwdne127186:0
-2. crwdns127188:0[mydumper]crwdne127188:0
+2. crwdns127042:0crwdne127042:0
+
+    - `crwdns127044:0crwdne127044:0`
+
+        ```yaml
+        crwdns127046:0crwdne127046:0
+        crwdns127048:0crwdne127048:0
+        ```
+
+    - `crwdns127050:0crwdne127050:0`
+
+        ```yaml
+        crwdns127052:0{{ deploy_dir }}crwdne127052:0
+        ```
+
+    - `crwdns127054:0crwdne127054:0`
+
+        ```yaml
+        crwdns127056:0{{ deploy_dir }}crwdne127056:0
+        ```
+
+3. crwdns127058:0crwdne127058:0
+
+    ```sh
+    crwdns127060:0crwdne127060:0
+    ```
+
+4. crwdns127062:0crwdne127062:0
+
+5. crwdns127064:0crwdne127064:0
+
+    ```sh
+    crwdns127066:0crwdne127066:0
+    ```
+
+6. crwdns127068:0crwdne127068:0
+
+    ```sh
+    crwdns127070:0crwdne127070:0
+    ```
+
+7. crwdns127072:0crwdne127072:0
+
+### crwdns127074:0crwdne127074:0
+
+#### crwdns127076:0crwdne127076:0
+
+crwdns127078:0crwdne127078:0
+
+#### crwdns127080:0crwdne127080:0
+
+crwdns127082:0crwdne127082:0
+
+- crwdns127084:0crwdne127084:0
+- crwdns127086:0crwdne127086:0
+
+#### crwdns127088:0crwdne127088:0
+
+1. crwdns127090:0crwdne127090:0
+
+2. crwdns127092:0crwdne127092:0
+
+    ```toml
+    crwdns127094:0[server]crwdnd127094:0[metric]crwdnd127094:0[rocksdb]crwdnd127094:0[rocksdb.defaultcf]crwdnd127094:0[import]crwdne127094:0
+    ```
+
+3. crwdns127096:0crwdne127096:0
+
+    ```sh
+    crwdns127098:0crwdne127098:0
+    ```
+
+#### crwdns127100:0crwdne127100:0
+
+1. crwdns127102:0crwdne127102:0
+
+2. crwdns127104:0crwdne127104:0
+
+3. crwdns127106:0crwdne127106:0
+
+    ```toml
+    crwdns127108:0[lightning]crwdnd127108:0[checkpoint]crwdnd127108:0[tidb]crwdnd127108:0[tikv-importer]crwdnd127108:0[mydumper]crwdnd127108:0[tidb]crwdnd127108:0[post-restore]crwdne127108:0
+    ```
+
+4. crwdns127110:0crwdne127110:0
+
+    ```sh
+    crwdns127112:0crwdne127112:0
+    ```
