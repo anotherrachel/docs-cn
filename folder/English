@@ -1,52 +1,56 @@
 ---
-title: TiDB 2.0.1 release notes
+title: TiDB 2.1 RC4 Release Notes
 category: Releases
 aliases:
-  - '/docs-cn/releases/201/'
+  - '/docs-cn/releases/21rc4/'
 ---
 
-<!-- markdownlint-disable MD001 -->
-# TiDB 2.0.1 Release Notes
+# TiDB 2.1 RC4 Release Notes
 
-2018 年 5 月 16 日，TiDB 发布 2.0.1 版。该版本在 2.0.0 (GA) 版的基础上，对 MySQL 兼容性、系统稳定性做出了改进。
+2018 年 10 月 23 日，TiDB 发布 2.1 RC4 版。相比 2.1 RC3 版本，该版本对系统稳定性、优化器、统计信息以及执行引擎做了很多改进。
 
 ## TiDB
 
-- 实时更新 `Add Index` 的进度到 DDL 任务信息中
-- 添加 Session 变量 `tidb_auto_analyze_ratio` 控制统计信息自动更新阈值
-- 修复当事务提交失败时可能未清理所有的残留状态的问题
-- 修复加索引在部分情况下的 Bug
-- 修复 DDL 修改表面操作在某些并发场景下的正确性问题
-- 修复某些情况下 `LIMIT` 结果不正确的问题
-- 修复 `ADMIN CHECK INDEX` 语句索引名字区分大小写问题
-- 修复 `UNION` 语句的兼容性问题
-- 修复插入 `TIME` 类型数据的兼容性问题
-- 修复某些情况下 `copIteratorTaskSender` 导致的 goroutine 泄漏问题
-- 增加一个选项，用于设置 TiDB 在写 Binlog 失败的情况下的行为
-- 优化 Coprocessor 慢请求日志格式，区分处理时间长与排队时间长的任务
-- MySQL 协议握手阶段发生错误不打印日志，避免 KeepAlive 造成大量日志
-- 优化 `Out of range value for column` 的错误信息
-- 修复 `Update` 语句中遇到子查询导致结果错误的问题
-- 调整 TiDB 进程处理 `SIGTERM` 的行为，不等待正在执行的 Query 完成
++ SQL 优化器
+    - 修复某些情况下 `UnionAll` 的列裁剪不正确的问题 [#7941](https://github.com/pingcap/tidb/pull/7941)
+    - 修复某些情况下 `UnionAll` 算子结果不正确的问题 [#8007](https://github.com/pingcap/tidb/pull/8007)
++ SQL 执行引擎
+    - 修复 `AVG` 函数的精度问题 [#7874](https://github.com/pingcap/tidb/pull/7874)
+    - 支持通过 `EXPLAIN ANALYZE` 语句查看 Query 执行过程中各个算子的运行时间，返回结果行数等运行时统计信息 [#7925](https://github.com/pingcap/tidb/pull/7925)
+    - 修复多次引用同一列时 `PointGet` 算子 panic 的问题 [#7943](https://github.com/pingcap/tidb/pull/7943)
+    - 修复当 `Limit` 子句中的值太大时 panic 的问题 [#8002](https://github.com/pingcap/tidb/pull/8002)
+    - 修复某些情况下 `AddDate`/`SubDate` 执行过程中 panic 的问题 [#8009](https://github.com/pingcap/tidb/pull/8009)
++ 统计信息
+    - 修复将组合索引的直方图下边界前缀判断为越界的问题 [#7856](https://github.com/pingcap/tidb/pull/7856)
+    - 修复统计信息收集引发的内存泄漏问题 [#7873](https://github.com/pingcap/tidb/pull/7873)
+    - 修复直方图为空时 panic 的问题 [#7928](https://github.com/pingcap/tidb/pull/7928)
+    - 修复加载统计信息时直方图边界越界的问题 [#7944](https://github.com/pingcap/tidb/pull/7944)
+    - 限制统计信息采样过程中数值的最大长度 [#7982](https://github.com/pingcap/tidb/pull/7982)
++ Server
+    - 重构 Latch，避免事务冲突误判，提升并发事务的执行性能 [#7711](https://github.com/pingcap/tidb/pull/7711)
+    - 修复某些情况下收集 Slow Query 导致的 panic 问题 [#7874](https://github.com/pingcap/tidb/pull/7847)
+    - 修复 `LOAD DATA` 语句中，`ESCAPED BY` 为空字符串时 panic 的问题 [#8005](https://github.com/pingcap/tidb/pull/8005)
+    - 完善 “coprocessor error” 日志信息 [#8006](https://github.com/pingcap/tidb/pull/8006)
++ 兼容性
+    - 当 Query 为空时，将 `SHOW PROCESSLIST` 结果中的 `Command` 字段设置为 “Sleep” [#7839](https://github.com/pingcap/tidb/pull/7839)
++ 表达式
+    - 修复 `SYSDATE` 函数被常量折叠的问题 [#7895](https://github.com/pingcap/tidb/pull/7895)
+    - 修复 `SUBSTRING_INDEX` 在某些情况下 panic 的问题 [#7897](https://github.com/pingcap/tidb/pull/7897)
++ DDL
+    - 修复抛出 “invalid ddl job type” 的错误时导致栈溢出的问题 [#7958](https://github.com/pingcap/tidb/pull/7958)
+    - 修复某些情况下 `ADMIN CHECK TABLE` 结果不正确的问题 [#7975](https://github.com/pingcap/tidb/pull/7975)
 
 ## PD
 
-- 添加 `Scatter Range` 调度，调度指定 Key Range 包含的 Region
-- 优化 `Merge Region` 调度，使新分裂不久的 Region 不能被合并
-- 添加 learner 相关的 metrics
-- 修复重启误删 scheduler 的问题
-- 修复解析配置文件出错问题
-- 修复 etcd leader 和 PD leader 不同步的问题
-- 修复关闭 learner 情况下还有 learner 出现的问题
-- 修复读取包过大造成 load Regions 失败的问题
+- 修复下线后的 TiKV 没有从 Grafana 面板中移除的问题 [#1261](https://github.com/pingcap/pd/pull/1261)
+- 修复 grpc-go 设置 status 时的 data race 问题[#1265](https://github.com/pingcap/pd/pull/1265)
+- 修复 etcd 启动失败导致的服务挂起问题 [#1267](https://github.com/pingcap/pd/pull/1267)
+- 修复 leader 切换过程中可能产生的 data race [#1273](https://github.com/pingcap/pd/pull/1273)
+- 修复下线 TiKV 时可能输出多余 warning 日志的问题 [#1280](https://github.com/pingcap/pd/pull/1273)
 
 ## TiKV
 
-- 修复 `SELECT FOR UPDATE` 阻止其他人读的问题
-- 优化慢查询的日志
-- 减少 `thread_yield` 的调用次数
-- 修复生成 snapshot 会意外阻塞 raftstore 的 bug
-- 修复特殊情况下开启 learner 无法选举成功的问题
-- 修复极端情况下分裂可能导致的脏读问题
-- 修正读线程池的配置默认值
-- 修正删大数据表会影响写性能的问题
+- 优化 apply snapshot 导致的 RocksDB Write stall 的问题 [#3606](https://github.com/tikv/tikv/pull/3606)
+- 增加 raftstore tick 相关 metrics [#3657](https://github.com/tikv/tikv/pull/3657)
+- 升级 RocksDB，修复写入卡死及 IngestExternalFile 时可能写坏源文件的问题 [#3661](https://github.com/tikv/tikv/pull/3661)
+- 升级 grpcio，修复 “too many pings” 误报的问题 [#3650](https://github.com/tikv/tikv/pull/3650)
