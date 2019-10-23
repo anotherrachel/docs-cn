@@ -1,99 +1,242 @@
 ---
-title: TiDB Controller 使用说明
-category: tools
+title: TiDB 用户账户管理
+category: reference
 ---
 
-# TiDB Controller 使用说明
+# TiDB 用户账户管理
 
-TiDB Controller 是 TiDB 的命令行工具，用于获取 TiDB 状态信息，多用于调试。
+本文档主要介绍如何管理 TiDB 用户账户。
 
-## 源码编译
+## 用户名和密码
 
-编译环境要求：[Go](https://golang.org/) Version 1.7 以上
+TiDB 将用户账户存储在 `mysql.user` 系统表里面。每个账户由用户名和 host 作为标识。每个账户可以设置一个密码。
 
-编译步骤：在 [TiDB Controller 项目](https://github.com/pingcap/tidb-ctl)根目录，使用 `make` 命令进行编译，生成 tidb-ctl。
+通过 MySQL 客户端连接到 TiDB 服务器，通过指定的账户和密码登录：
 
-编译文档：帮助文档在 doc 文件夹下，如丢失或需要更新，可通过 `make doc` 命令生成帮助文档。
+{{< copyable "shell-regular" >}}
 
-## 使用介绍
-
-`tidb-ctl` 的使用由命令（包括子命令）、选项和参数组成。命令即不带 `-` 或者 `--` 的字符，选项即带有 `-` 或者 `--` 的字符，参数即命令或选项字符后紧跟的传递给命令和选项的字符。
-
-如：`tidb-ctl schema in mysql -n db`
-
-* schema: 命令
-* in: schema 的子命令
-* mysql: in 的参数
-* -n: 选项
-* db: -n 的参数
-
-### 获取帮助
-
-`tidb-ctl -h/--help` 用于获取帮助信息。tidb-ctl 由多层命令组成，tidb-ctl 及其所有子命令都可以通过 `-h/--help` 来获取使用帮助。
-
-### 连接
-
-`tidb-ctl -H/--host { TiDB 服务地址} -P/--port { TiDB 服务端口}`
-
-如不添加地址和端口将使用默认值，默认的地址是 127.0.0.1 (服务地址只能使用 IP 地址)，默认的端口是 10080。**连接选项是顶级选项，适用于以下所有命令。**
-
-目前，TiDB Controller 可以获取四类信息，分别通过以下四个命令获得：
-
-* `tidb-ctl mvcc` - MVCC 信息
-* `tidb-ctl region` - Region 信息
-* `tidb-ctl schema` - Schema 信息
-* `tidb-ctl table` - Table 信息
-
-### 使用举例
-
-以获取 Schema 信息为例：
-
-通过 `tidb-ctl schema -h` 可以获取这个子命令的使用帮助。schema 有两个子命令，in 和 tid。in 用来通过数据库名获取数据库中所有表的表结构，tid 用来通过全数据库唯一的 table_id 获取表的表结构。
-
-#### in 命令
-
-同样可以通过 `tidb-ctl schema in -h/--help` 来获取子命令 in 的使用帮助。
-
-##### 基本用法
-
-`tidb-ctl schema in {数据库名}`
-
-如：`tidb-ctl schema in mysql` 将得到以下结果：
-
-```json
-[
-    {
-        "id": 13,
-        "name": {
-            "O": "columns_priv",
-            "L": "columns_priv"
-        },
-              ...
-        "update_timestamp": 399494726837600268,
-        "ShardRowIDBits": 0,
-        "Partition": null
-    }
-]
+```
+mysql --port 4000 --user xxx --password
 ```
 
-结果将以 json 形式展示，内容较长，这里做了截断。
+使用缩写的命令行参数则是：
 
-如希望指定表名，可以使用 `tidb-ctl schema in {数据库名} -n {表名}` 进行过滤。
+{{< copyable "shell-regular" >}}
 
-如：`tidb-ctl schema in mysql -n db` 将得到 mysql 库中 db 表的表结构，结果如下：
+```
+mysql -P 4000 -u xxx -p
+```
 
-```json
-{
-    "id": 9,
-    "name": {
-        "O": "db",
-        "L": "db"
-    },
-    ...
-    "Partition": null
+## 添加用户
+
+添加用户有两种方式：
+
+* 通过标准的用户管理的 SQL 语句创建用户以及授予权限，比如 `CREATE USER` 和 `GRANT`。
+* 直接通过 `INSERT`、`UPDATE` 和 `DELETE` 操作授权表。
+
+推荐使用第一种方式。第二种方式修改容易导致一些不完整的修改，因此不推荐。还有另一种可选方式是使用第三方工具的图形化界面工具。
+
+{{< copyable "sql" >}}
+
+```sql
+CREATE USER [IF NOT EXISTS]
+    user [auth_spec] [, user [auth_spec]] ...
+```
+
+{{< copyable "sql" >}}
+
+```sql
+auth_spec: {
+    IDENTIFIED BY 'auth_string'
+  | IDENTIFIED BY PASSWORD 'hash_string'
 }
 ```
 
-这里同样做了截断。
+* `IDENTIFIED BY 'auth_string'`：设置登录密码时，`auth_string` 会被 TiDB 经过加密存储在 `mysql.user` 表中。
+* `IDENTIFIED BY PASSWORD 'hash_string'`：设置登录密码，`hash_string` 是一个类似于 `*EBE2869D7542FCE37D1C9BBC724B97BDE54428F1` 的 41 位字符串，会被 TiDB 直接存储在 `mysql.user` 表中，该字符串可以通过 `SELECT password('auth_string')` 加密得到。
 
-如希望指定服务地址，可以使用 `-H -P` 选项，如：`tidb-ctl -H 127.0.0.1 -P 10080 schema in mysql -n db`。
+{{< copyable "sql" >}}
+
+```sql
+CREATE USER 'test'@'127.0.0.1' IDENTIFIED BY 'xxx';
+```
+
+TiDB 的用户账户名由一个用户名和一个主机名组成。账户名的语法为 `'user_name'@'host_name'`。
+
+- `user_name` 大小写敏感。
+- `host_name` 可以是一个主机名或 IP 地址。主机名或 IP 地址中允许使用通配符 `%` 和 `_`。例如，名为 `'%'` 的主机名可以匹配所有主机，`'192.168.1.%'` 可以匹配子网中的所有主机。
+
+host 支持模糊匹配，比如：
+
+{{< copyable "sql" >}}
+
+```sql
+CREATE USER 'test'@'192.168.10.%';
+```
+
+允许 `test` 用户从 `192.168.10` 子网的任何一个主机登录。
+
+如果没有指定 host，则默认是所有 IP 均可登录。如果没有指定密码，默认为空：
+
+{{< copyable "sql" >}}
+
+```sql
+CREATE USER 'test';
+```
+
+等价于：
+
+{{< copyable "sql" >}}
+
+```sql
+CREATE USER 'test'@'%' IDENTIFIED BY '';
+```
+
+下面的例子用 `CREATE USER` 和 `GRANT` 语句创建了四个账户：
+
+{{< copyable "sql" >}}
+
+```sql
+CREATE USER 'finley'@'localhost' IDENTIFIED BY 'some_pass';
+```
+
+{{< copyable "sql" >}}
+
+```sql
+GRANT ALL PRIVILEGES ON *.* TO 'finley'@'localhost' WITH GRANT OPTION;
+```
+
+{{< copyable "sql" >}}
+
+```sql
+CREATE USER 'finley'@'%' IDENTIFIED BY 'some_pass';
+```
+
+{{< copyable "sql" >}}
+
+```sql
+GRANT ALL PRIVILEGES ON *.* TO 'finley'@'%' WITH GRANT OPTION;
+```
+
+{{< copyable "sql" >}}
+
+```sql
+CREATE USER 'admin'@'localhost' IDENTIFIED BY 'admin_pass';
+```
+
+{{< copyable "sql" >}}
+
+```sql
+GRANT RELOAD,PROCESS ON *.* TO 'admin'@'localhost';
+```
+
+{{< copyable "sql" >}}
+
+```sql
+CREATE USER 'dummy'@'localhost';
+```
+
+使用 `SHOW GRANTS` 可以看到为一个用户授予的权限：
+
+{{< copyable "sql" >}}
+
+```sql
+SHOW GRANTS FOR 'admin'@'localhost';
+```
+
+```
++-----------------------------------------------------+
+| Grants for admin@localhost                          |
++-----------------------------------------------------+
+| GRANT RELOAD, PROCESS ON *.* TO 'admin'@'localhost' |
++-----------------------------------------------------+
+```
+
+## 删除用户
+
+使用 `DROP USER` 语句可以删除用户，例如：
+
+{{< copyable "sql" >}}
+
+```sql
+DROP USER 'test'@'localhost';
+```
+
+这个操作会清除用户在 `mysql.user` 表里面的记录项，并且清除在授权表里面的相关记录。
+
+## 保留用户账户
+
+TiDB 在数据库初始化时会生成一个 `'root'@'%'` 的默认账户。
+
+## 设置资源限制
+
+暂不支持。
+
+## 设置密码
+
+TiDB 将密码存在 `mysql.user` 系统数据库里面。只有拥有 `CREATE USER` 权限，或者拥有 `mysql` 数据库权限（`INSERT` 权限用于创建，`UPDATE` 权限用于更新）的用户才能够设置或修改密码。
+
+- 在 `CREATE USER` 创建用户时可以通过 `IDENTIFIED BY` 指定密码：
+
+    {{< copyable "sql" >}}
+
+    ```sql
+    CREATE USER 'test'@'localhost' IDENTIFIED BY 'mypass';
+    ```
+
+- 为一个已存在的账户修改密码，可以通过 `SET PASSWORD FOR` 或者 `ALTER USER` 语句完成：
+
+    {{< copyable "sql" >}}
+
+    ```sql
+    SET PASSWORD FOR 'root'@'%' = 'xxx';
+    ```
+
+    或者：
+
+    {{< copyable "sql" >}}
+
+    ```sql
+    ALTER USER 'test'@'localhost' IDENTIFIED BY 'mypass';
+    ```
+
+## 忘记 `root` 密码
+
+1. 修改配置文件，在 `security` 部分添加 `skip-grant-table`：
+
+    {{< copyable "" >}}
+
+    ```
+    [security]
+    skip-grant-table = true
+    ```
+
+2. 使用修改后的配置启动 TiDB（需要 `root` 权限）：
+
+    {{< copyable "shell-root" >}}
+
+    ```bash
+    sudo ./tidb-server -skip-grant-table=true -store=tikv -path=...
+    ```
+
+    这个配置参数会让 TiDB 跳过权限系统。
+
+3. 然后使用 `root` 登录后修改密码：
+
+    {{< copyable "shell-regular" >}}
+
+    ```bash
+    mysql -h 127.0.0.1 -P 4000 -u root
+    ```
+
+## `FLUSH PRIVILEGES`
+
+如果授权表已被直接修改，运行如下命令可使改动立即生效：
+
+{{< copyable "sql" >}}
+
+```sql
+FLUSH PRIVILEGES;
+```
+
+详情参见[权限管理](/v2.1/reference/security/privilege-system.md)。
