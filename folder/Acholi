@@ -1,23 +1,24 @@
 ---
-name: "crwdns66:0crwdne66:0"
-about: crwdns68:0crwdne68:0
+name: "crwdns84:0crwdne84:0"
+about: crwdns86:0crwdne86:0 crwdns88:0crwdne88:0
 ---
 
-## crwdns70:0crwdne70:0
+## crwdns90:0crwdne90:0
 
-crwdns72:0crwdne72:0 crwdns74:0crwdne74:0
+crwdns92:0crwdne92:0 crwdns94:0crwdne94:0
 <!-- 本仓库仅用于解决与中文文档相关的问题，
-其他方面的问题（如 TiDB、TiKV 等），请移步其他[相关仓库](https://github.com/pingcap/)。 -->
+其他方面问题（如 TiDB、TiKV 等），请移步其他[相关仓库](https://github.com/pingcap/)。 -->
 
-crwdns76:0crwdne76:0 crwdns78:0crwdne78:0
-<!-- 非常感谢你提出相关问题，在提交你的 issue 之前，请回答下面几个问题：-->
-
-1. crwdns80:0crwdne80:0
-<!-- 1. 该问题出现的文档路径是什么？-->
+1. crwdns96:0crwdne96:0 crwdns98:0crwdne98:0
+<!-- 1. 提出的扩充文档部分，是因为你遇到了相关问题吗？如果是，请描述一下你所遇到的问题。-->
 
 
-2. crwdns82:0crwdne82:0
-<!-- 2. 你希望如何改正它? -->
+2. crwdns100:0crwdne100:0
+<!-- 2. 描述你想要扩充的方面或你的建议。-->
+
+
+3. crwdns102:0crwdne102:0
+<!-- 3. 如果方便的话，请提供一些参考资料（如你遇到的博客、搜索到的资料等）。-->
 
 
 
