@@ -1,69 +1,164 @@
 ---
-title: Data Migration 故障诊断
-category: reference
+title: 生成自签名证书
+category: how-to
 aliases:
-  - '/docs-cn/tools/dm/troubleshooting/'
+  - '/docs-cn/op-guide/generate-self-signed-certificates/'
 ---
 
-# Data Migration 故障诊断
+# 生成自签名证书
 
-本文总结了在 DM 工具使用过程中一些常见的问题，并提供了相应的解决方案。
+## 概述
 
-如果你在运行 DM 工具时出现了错误，请尝试以下解决方案：
+本文档提供使用 `cfssl` 生成自签名证书的示例。
 
-1. 执行 `query-status` 命令查看任务运行状态以及相关错误输出。
+假设实例集群拓扑如下：
 
-2. 查看与该错误相关的日志文件。日志文件位于 DM-master、DM-worker 部署节点上。然后查看[常见错误](#常见错误)以寻找相应的解决方案。
+| Name  | Host IP     | Services   |
+| ----- | ----------- | ---------- |
+| node1 | 172.16.10.1 | PD1, TiDB1 |
+| node2 | 172.16.10.2 | PD2, TiDB2 |
+| node3 | 172.16.10.3 | PD3        |
+| node4 | 172.16.10.4 | TiKV1      |
+| node5 | 172.16.10.5 | TiKV2      |
+| node6 | 172.16.10.6 | TiKV3      |
 
-3. 如果该错误还没有相应的解决方案，并且你无法通过查询日志或监控指标自行解决此问题，你可以联系相关销售人员进行支持。
+## 下载 cfssl
 
-4. 一般情况下，错误处理完成后，只需使用 dmctl 重启任务即可。
+假设使用 x86_64 Linux 主机：
 
-    {{< copyable "shell-regular" >}}
+{{< copyable "shell-regular" >}}
 
-    ```bash
-    resume-task ${task name}
-    ```
+```bash
+mkdir ~/bin &&
+curl -s -L -o ~/bin/cfssl https://pkg.cfssl.org/R1.2/cfssl_linux-amd64 &&
+curl -s -L -o ~/bin/cfssljson https://pkg.cfssl.org/R1.2/cfssljson_linux-amd64 &&
+chmod +x ~/bin/{cfssl,cfssljson} &&
+export PATH=$PATH:~/bin
+```
 
-但在某些情况下，你还需要重置数据同步任务。有关何时需要重置以及如何重置，详见[重置数据同步任务](#重置数据同步任务)。
+## 初始化证书颁发机构
 
-## 常见错误
+生成 cfssl 的默认配置，以便于之后修改：
 
-### 执行 `query-status` 或查看日志时出现 `Access denied for user 'root'@'172.31.43.27' (using password: YES)`
+```bash
+mkdir ~/cfssl &&
+cd ~/cfssl &&
+cfssl print-defaults config > ca-config.json &&
+cfssl print-defaults csr > ca-csr.json
+```
 
-在所有 DM 配置文件中，数据库相关的密码都必须使用经 dmctl 加密后的密文（若数据库密码为空，则无需加密）。有关如何使用 dmctl 加密明文密码，参见[使用 dmctl 加密上游 MySQL 用户密码](/v3.0/how-to/deploy/data-migration-with-ansible.md#使用-dmctl-加密上游-mysql-用户密码)。
+## 生成证书
 
-此外，在 DM 运行过程中，上下游数据库的用户必须具备相应的读写权限。在启动同步任务过程中，DM 会自动进行相应权限的前置检查，详见[上游 MySQL 实例配置前置检查](/v3.0/reference/tools/data-migration/precheck.md)。
+### 证书介绍
 
-### 处理不兼容的 DDL 语句
+- tidb-server certificate 由 TiDB 使用，为其他组件和客户端验证 TiDB 身份。
+- tikv-server certificate 由 TiKV 使用，为其他组件和客户端验证 TiKV 身份。
+- pd-server certificate 由 PD 使用，为其他组件和客户端验证 PD 身份。
+- client certificate 用于通过 PD、TiKV、TiDB 验证客户端。例如 `pd-ctl`，`tikv-ctl`，`pd-recover`。
 
-你需要使用 dmctl 手动处理 TiDB 不兼容的 DDL 语句（包括手动跳过该 DDL 语句或使用用户指定的 DDL 语句替换原 DDL 语句，详见[跳过 (skip) 或替代执行 (replace) 异常的 SQL 语句](/v3.0/reference/tools/data-migration/skip-replace-sqls.md)）。
+### 配置 CA 选项
 
-> **注意：**
-> 
-> TiDB 目前并不兼容 MySQL 支持的所有 DDL 语句。
+根据实际需求修改 `ca-config.json`：
 
-## 重置数据同步任务
+```json
+{
+    "signing": {
+        "default": {
+            "expiry": "43800h"
+        },
+        "profiles": {
+            "server": {
+                "expiry": "43800h",
+                "usages": [
+                    "signing",
+                    "key encipherment",
+                    "server auth",
+                    "client auth"
+                ]
+            },
+            "client": {
+                "expiry": "43800h",
+                "usages": [
+                    "signing",
+                    "key encipherment",
+                    "client auth"
+                ]
+            }
+        }
+    }
+}
+```
 
-在以下情况中，你需要重置整个数据同步任务：
+根据实际需求修改 `ca-csr.json` ：
 
-- 上游数据库中人为执行了 `RESET MASTER`，造成 relay log 同步出错
+```json
+{
+    "CN": "My own CA",
+    "key": {
+        "algo": "rsa",
+        "size": 2048
+    },
+    "names": [
+        {
+            "C": "CN",
+            "L": "Beijing",
+            "O": "PingCAP",
+            "ST": "Beijing"
+        }
+    ]
+}
+```
 
-- relay log 或上游 binlog event 损坏或者丢失
+### 生成 CA 证书
 
-此时，relay 处理单元通常会发生错误而退出，且无法优雅地自动恢复，因此需要通过手动方式恢复数据同步：
+{{< copyable "shell-regular" >}}
 
-1. 使用 `stop-task` 命令停止当前正在运行的所有同步任务。
+```bash
+cfssl gencert -initca ca-csr.json | cfssljson -bare ca -
+```
 
-2. 使用 Ansible [停止整个 DM 集群](/v3.0/how-to/deploy/data-migration-with-ansible.md#第-10-步关闭-dm-集群)。
+将会生成以下几个文件：
 
-3. 手动清理掉与 binlog event 被重置的 MySQL master 相对应的 DM-worker 的 relay log 目录。
+```
+ca-key.pem
+ca.csr
+ca.pem
+```
 
-    - 如果是使用 Ansible 部署，relay log 目录即 `<deploy_dir>/relay_log` 目录。
-    - 如果是使用二进制文件手动部署，relay log 目录即 relay-dir 参数设置的目录。
+### 生成服务器端证书
 
-4. 清理掉下游已同步的数据。
+`hostname` 中为各组件的 IP 地址，以及 `127.0.0.1`
 
-5. 使用 Ansible [启动整个 DM 集群](/v3.0/how-to/deploy/data-migration-with-ansible.md#第-9-步部署-dm-集群)。
+{{< copyable "shell-regular" >}}
 
-6. 以新的任务名重启数据同步任务，或设置 `remove-meta` 为 `true` 且 `task-mode` 为 `all`。
+```bash
+echo '{"CN":"tidb-server","hosts":[""],"key":{"algo":"rsa","size":2048}}' | cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=server -hostname="172.16.10.1,172.16.10.2,127.0.0.1" - | cfssljson -bare tidb-server &&
+
+echo '{"CN":"tikv-server","hosts":[""],"key":{"algo":"rsa","size":2048}}' | cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=server -hostname="172.16.10.4,172.16.10.5,172.16.10.6,127.0.0.1" - | cfssljson -bare tikv-server &&
+
+echo '{"CN":"pd-server","hosts":[""],"key":{"algo":"rsa","size":2048}}' | cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=server -hostname="172.16.10.1,172.16.10.2,172.16.10.3,127.0.0.1" - | cfssljson -bare pd-server
+```
+
+将会生成以下几个文件：
+
+```
+tidb-server-key.pem     tikv-server-key.pem      pd-server-key.pem
+tidb-server.csr         tikv-server.csr          pd-server.csr
+tidb-server.pem         tikv-server.pem          pd-server.pem
+```
+
+### 生成客户端证书
+
+{{< copyable "shell-regular" >}}
+
+```bash
+echo '{"CN":"client","hosts":[""],"key":{"algo":"rsa","size":2048}}' | cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=client -hostname="" - | cfssljson -bare client
+```
+
+将会生成以下几个文件：
+
+```
+client-key.pem
+client.csr
+client.pem
+```
