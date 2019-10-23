@@ -1,18 +1,39 @@
----
-title: TiDB 监控框架概述
-category: monitoring
----
+#!/usr/bin/env python3
+#-*- coding:utf-8 -*-
 
-# TiDB 监控框架概述
+import sys
+import os
+from qiniu import Auth, put_file, etag, urlsafe_base64_encode
+import qiniu.config
 
-TiDB 使用开源时序数据库 Prometheus 作为监控和性能指标信息存储方案，使用 Grafana 作为可视化组件进行展示。
 
-Prometheus 是一个拥有多维度数据模型，灵活的查询语句的时序数据库。Prometheus 作为热门的开源项目，拥有活跃的社区及众多的成功案例。
+ACCESS_KEY = os.getenv('QINIU_ACCESS_KEY')
+SECRET_KEY = os.getenv('QINIU_SECRET_KEY')
+BUCKET_NAME = os.getenv('QINIU_BUCKET_NAME')
 
-Prometheus 提供了多个组件供用户使用。目前，我们使用 Prometheus Server，来收集和存储时间序列数据。Client 代码库，在程序中定制需要的 Metric 。Push GateWay 来接收 Client Push 上来的数据，统一供 Prometheus 主服务器抓取。以及 AlertManager 来实现报警机制。其结构如下图：
+assert(ACCESS_KEY and SECRET_KEY and BUCKET_NAME)
 
-![Prometheus in TiDB](../media/prometheus-in-tidb.png)
+def progress_handler(progress, total):
+    print("{}/{} {:.2f}".format(progress, total, progress/total*100))
 
-Grafana 是一个开源的 metric 分析及可视化系统。我们使用 Grafana 来展示 TiDB 的各项性能指标 。如下图所示:
+# local_file: local file path
+# remote_name: 上传到七牛后保存的文件名
+def upload(local_file, remote_name, ttl=3600):
+    print(local_file, remote_name, ttl)
+    #构建鉴权对象
+    q = Auth(ACCESS_KEY, SECRET_KEY)
 
-![Grafana Screeshot](../media/grafana-screenshot.png)
+    #生成上传 Token，可以指定过期时间等
+    token = q.upload_token(BUCKET_NAME, remote_name, ttl)
+
+    ret, info = put_file(token, remote_name, local_file, progress_handler=progress_handler)
+    print(info)
+    assert ret['key'] == remote_name
+    assert ret['hash'] == etag(local_file)
+
+if __name__ == "__main__":
+    local_file = sys.argv[1]
+    remote_name = sys.argv[2]
+    upload(local_file, remote_name)
+
+    print("http://download.pingcap.org/{}".format(remote_name))
