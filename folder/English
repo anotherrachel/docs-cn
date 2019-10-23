@@ -1,92 +1,61 @@
----
-title: 重要监控指标详解
-category: monitoring
----
+## TiDB：
 
-# 重要监控指标详解
+- [ ] 优化器
+  - [ ] 重构 Ranger
+  - [ ] 统计信息优化
+  - [ ] 代价模型优化
+- [ ] 执行引擎
+  - [ ] 算子并行化
+  - [ ] Compact Row Foramt，节省内存占用
+  - [ ] File Sort
+- [ ] 支持 View
+- [ ] 支持窗口函数
+- [ ] 支持 Common Table Expression
+- [ ] 支持分区表
+- [ ] Hash 时间索引，解决写入热点 Region 问题
+- [ ] 逆序索引
+- [ ] 聚簇索引
+- [ ] DDL 改进
+- [ ] 支持 `utf8_general_ci` collation
 
-使用 ansible 部署 tidb 集群时，一键部署监控系统 (prometheus/grafana)，监控架构请看 [TiDB 监控框架概述](monitor-overview.md)
+## TiKV:
 
-目前 grafana dashboard 整体分为四个 dashboard，node_export，PD，TIDB，TIKV。 内容较多，主要在于尽快让 TIDB 开发确认问题。
+- [ ] Raft
+  - [ ] Region 合并
+  - [ ] Local read thread
+  - [ ] 多线程 Raftstore
+  - [ ] None voter
+  - [ ] Pre-vote
+- [ ] RocksDB
+  - [ ] 使用 DeleteRange 特性
+- [ ] Transaction
+  - [ ] 提升冲突严重的场景下 Transaction 的性能
+- [ ] Coprocessor
+  - [ ] 支持 Streaming 接口
+- [ ] Tool
+  - [ ] 分布式数据导入
+  - [ ] 分布式数据导出
+  - [ ] 灾难恢复
+- [ ] 流控和降级处理
 
-对于日常运维，我们单独挑选出重要的 metrics 放在 overview 页面，方便日常运维人员观察集群组件(PD, TIDB, TIKV)使用状态以及集群使用状态 。
+## PD:
 
-以下为 overview dashboard 说明：
+- [ ] Namespace 完善
+  - [ ] 不同 Namespace 或者 Table 配置不同的副本策略
+- [ ] Table region 分散调度
+- [ ] 调度支持优先级，更加可控
+- [ ] 使用机器学习优化调度
 
-## 说明
+## TiSpark:
 
--   PD
-    -   Storage Capacity   :   tidb 集群总可用数据库空间大小
-    -   Current Storage Size   :   tidb 集群目前已用数据库空间大小
-    -   Store Status  -- up store   :   tikv 正常节点数量
-    -   Store Status  -- down store   :   tikv 异常节点数量
+- [ ] limit / Order下推
+- [ ] DAG接口接入（废除Select接口）
+- [ ] Index Join和并行merge join
+- [ ] Data Federation（桥接其他数据源，最好能和社区同步，这个接进来可以比较好扩展Usecase，如果再做一个InputFormat适配就可以接Hive和Presto这些Hadoop上的数仓）
 
-        如果大于0，证明有节点不正常
-    -   Store Status  -- offline store   :   手动执行下线操作tikv节点数量
-    -   Store Status  -- Tombstone store   :   下线成功的tikv节点数量
-    -   Current storage usage   :   tikv 集群存储空间占用率
-
-        超过 80% 应考虑添加 tikv 节点
-    -   99% completed_cmds_duration_seconds   :   99% pd-server 请求完成时间
-
-        小于 5ms
-    -   average completed_cmds_duration_seconds   :   pd-server 请求平均完成时间
-
-        小于 50ms
-    -   leader balance ratio   :   leader ratio 最大的节点与最小的节点的差
-
-        均衡状况下一般小于 5%，节点重启时会比较大
-    -   region balance ratio   :   region ratio 最大的节点与最小的节点的差
-
-        均衡状况下一般小于 5%，新增/下线节点时会比较大
-
--   TiDB
-    -   handle_requests_duration_seconds   :   请求PD获取TSO响应时间
-
-        小于100ms
-    -   tidb server QPS   :   集群的请求量
-
-        和业务相关
-    -   connection count   :   从业务服务器连接到数据库的连接数
-
-        和业务相关。但是如果连接数发生跳变，需要查明原因。比如突然掉为0，可以检查网络是否中断；如果突然上涨，需要检查业务。
-    -   statement count   :   单位时间内不同类型语句执行的数目
-
-        这个和业务相关
-    -   Query Duration 99th percentile   :   99% 的query时间
-
--   TiKV
-    -   99%  & 99.99%  scheduler command duration   :   99% & 99.99% 命令执行的时间
-
-        99% 小于 50ms；99.99% 小于100ms
-    -   95%  & 99% storage async_request duration   :   95%  & 99% Raft 命令执行时间
-
-        95% 小于 50ms；99% 小于100ms
-    -   server report failure message   :   发送失败或者收到了错误的 message
-
-        如果出现了大量的 unreachadble 的消息，表明系统网络出现了问题。如果有 store not match 这样的错误，表明收到了不属于这个集群发过来的消息
-    -   Vote   :   Raft vote 的频率
-
-        通常这个值只会在发生 split 的时候有变动，如果长时间出现了 vote 偏高的情况，证明系统出现了严重的问题，有一些节点无法工作了
-    -   95% & 99% coprocessor request duration   :   95% & 99%  coprocessor 执行时间
-
-        和业务相关，但通常不会出现持续高位的值
-    -   Pending task   :   累积的任务数量
-
-        除了 pd worker，其他任何偏高都属于异常
-    -   stall   :   RocksDB Stall 时间
-
-        大于 0，表明 RocksDB 忙不过来，需要注意 IO 和 CPU 了
-    -   channel full   :   channel 满了，表明线程太忙无法处理
-
-        如果大于 0，表明线程已经没法处理了
-    -   95% send_message_duration_seconds   :   95% 发送消息的时间
-
-        小于50ms
-    -   leader/region   :   每个tikv的leader/region数量
-
-        和业务相关
-
-## 图例
-
-![overview](../media/overview.png)
+## SRE&Tools:
+- [ ] On-Premise 版本集成部署 (K8s based)
+- [ ] On-Premise 版本 Dashboard UI
+- [ ] 集群备份和恢复工具（结合物理备份）
+- [ ] 数据迁移工具（Wormhole 二期）
+- [ ] 安全与系统诊断
