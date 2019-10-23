@@ -1,40 +1,193 @@
 ---
-title: crwdns222592:0crwdne222592:0
-category: crwdns222594:0crwdne222594:0
+title: crwdns222400:0crwdne222400:0
+category: crwdns222402:0crwdne222402:0
 aliases:
-  - 'crwdns222596:0crwdne222596:0'
+  - 'crwdns222404:0crwdne222404:0'
 ---
 
-# crwdns222598:0crwdne222598:0
+# crwdns222406:0crwdne222406:0
 
-crwdns222600:0crwdne222600:0
+crwdns222408:0crwdne222408:0
 
-- crwdns222602:0crwdne222602:0
-- crwdns222604:0crwdne222604:0
+## crwdns222410:0crwdne222410:0
 
-## crwdns222606:0crwdne222606:0
+- crwdns222412:0[monitored_servers]crwdne222412:0
+- crwdns222414:0crwdne222414:0
 
-crwdns222608:0crwdne222608:0
+### `crwdns222416:0crwdne222416:0`
 
-- crwdns222610:0crwdne222610:0
-- crwdns222612:0crwdne222612:0
+crwdns222418:0crwdne222418:0
 
-![crwdns222616:0crwdne222616:0](crwdns222614:0crwdne222614:0)
+```toml
+crwdns222420:0[metric]crwdne222420:0
+```
 
-crwdns222618:0crwdne222618:0
+### `crwdns222422:0crwdne222422:0`
 
-1. crwdns222620:0crwdne222620:0
+crwdns222424:0crwdne222424:0
 
-2. crwdns222622:0crwdne222622:0
+crwdns222426:0crwdne222426:0
 
-3. crwdns222624:0crwdne222624:0
+```toml
+crwdns222428:0[lightning]crwdne222428:0
+```
 
-4. crwdns222626:0crwdne222626:0
+crwdns222430:0crwdne222430:0
 
-5. crwdns222628:0crwdne222628:0
+crwdns222432:0crwdne222432:0
 
-   crwdns222630:0crwdne222630:0
+```yaml
+crwdns222434:0crwdne222434:0
+crwdns222436:0crwdne222436:0
+```
 
-6. crwdns222632:0crwdne222632:0
+## crwdns222438:0crwdne222438:0
 
-7. crwdns222634:0crwdne222634:0
+crwdns222440:0crwdne222440:0
+
+### `crwdns222442:0crwdne222442:0`
+
+crwdns222444:0crwdne222444:0
+
+- crwdns222446:0crwdne222446:0
+
+    crwdns222448:0crwdne222448:0
+
+    - crwdns222450:0crwdne222450:0
+    - crwdns222452:0crwdne222452:0
+
+- crwdns222454:0crwdne222454:0
+
+    crwdns222456:0crwdne222456:0
+
+- crwdns222458:0crwdne222458:0
+
+    crwdns222460:0crwdne222460:0
+
+- crwdns222462:0crwdne222462:0
+
+     crwdns222464:0crwdne222464:0
+
+- crwdns222466:0crwdne222466:0
+
+    crwdns222468:0crwdne222468:0
+
+- crwdns222470:0crwdne222470:0
+
+    crwdns222472:0crwdne222472:0
+
+- crwdns222474:0crwdne222474:0
+
+    crwdns222476:0crwdne222476:0
+
+- crwdns222478:0crwdne222478:0
+
+    crwdns222480:0crwdne222480:0
+
+- crwdns222482:0crwdne222482:0
+
+    crwdns222484:0crwdne222484:0
+
+- crwdns222486:0crwdne222486:0
+
+    crwdns222488:0crwdne222488:0
+
+- crwdns222490:0crwdne222490:0
+
+    crwdns222492:0crwdne222492:0
+
+- crwdns222494:0crwdne222494:0
+
+    crwdns222496:0crwdne222496:0
+
+    - crwdns222498:0crwdne222498:0
+
+- crwdns222500:0crwdne222500:0
+
+    crwdns222502:0crwdne222502:0
+
+    - crwdns222504:0crwdne222504:0
+
+- crwdns222506:0crwdne222506:0
+
+    crwdns222508:0crwdne222508:0
+
+### `crwdns222510:0crwdne222510:0`
+
+crwdns222512:0crwdne222512:0
+
+- crwdns222514:0crwdne222514:0
+
+    crwdns222516:0crwdne222516:0
+
+    - crwdns222518:0crwdne222518:0
+
+- crwdns222520:0crwdne222520:0
+
+    crwdns222522:0crwdne222522:0
+
+    - crwdns222524:0crwdne222524:0
+
+- crwdns222526:0crwdne222526:0
+
+    crwdns222528:0crwdne222528:0
+
+    - crwdns222530:0crwdne222530:0
+
+- crwdns222532:0crwdne222532:0
+
+    crwdns222534:0crwdne222534:0
+
+    - crwdns222536:0crwdne222536:0
+    - crwdns222538:0crwdne222538:0
+
+- crwdns222540:0crwdne222540:0
+
+    crwdns222542:0crwdne222542:0
+
+    - crwdns222544:0crwdne222544:0
+    - crwdns222546:0crwdne222546:0
+
+- crwdns222548:0crwdne222548:0
+
+    crwdns222550:0crwdne222550:0
+
+    - crwdns222552:0crwdne222552:0
+
+- crwdns222554:0crwdne222554:0
+
+    crwdns222556:0crwdne222556:0
+
+- crwdns222558:0crwdne222558:0
+
+    crwdns222560:0crwdne222560:0
+
+- crwdns222562:0crwdne222562:0
+
+    crwdns222564:0crwdne222564:0
+
+- crwdns222566:0crwdne222566:0
+
+    crwdns222568:0crwdne222568:0
+
+- crwdns222570:0crwdne222570:0
+
+    crwdns222572:0crwdne222572:0
+
+- crwdns222574:0crwdne222574:0
+
+    crwdns222576:0crwdne222576:0
+
+- crwdns222578:0crwdne222578:0
+
+    crwdns222580:0crwdne222580:0
+
+- crwdns222582:0crwdne222582:0
+
+    crwdns222584:0crwdne222584:0
+
+- crwdns222586:0crwdne222586:0
+
+    crwdns222588:0crwdne222588:0
+
+    - crwdns222590:0crwdne222590:0
