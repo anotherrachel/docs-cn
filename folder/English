@@ -1,352 +1,447 @@
 ---
-title: 在阿里云上部署 TiDB 集群
-category: how-to
+title: TiDB Lightning 部署与执行
+category: reference
 ---
 
-# 在阿里云上部署 TiDB 集群
+# TiDB Lightning 部署与执行
 
-本文介绍了如何使用个人电脑（Linux 或 macOS 系统）在阿里云上部署 TiDB 集群。
+本文主要介绍 TiDB Lightning 单独部署与混合部署的硬件需求，Ansible 部署与手动部署这两种部署方式，以及启动与执行。
 
-## 环境需求
+## 注意事项
 
-- [aliyun-cli](https://github.com/aliyun/aliyun-cli) >= 3.0.15 并且[配置 aliyun-cli](https://www.alibabacloud.com/help/doc-detail/90766.htm?spm=a2c63.l28256.a3.4.7b52a893EFVglq)
+在使用 TiDB Lightning 前，需注意以下事项：
 
-    > **注意：**
-    > 
-    > Access Key 需要具有操作相应资源的权限。
-
-- [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/#install-kubectl) >= 1.12
-- [helm](https://github.com/helm/helm/blob/master/docs/install.md#installing-the-helm-client) >= 2.9.1 且 <= 2.11.0
-- [jq](https://stedolan.github.io/jq/download/) >= 1.6
-- [terraform](https://learn.hashicorp.com/terraform/getting-started/install.html) 0.11.*
-
-你可以使用阿里云的[云命令行](https://shell.aliyun.com)服务来进行操作，云命令行中已经预装并配置好了所有工具。
-
-### 权限
-
-完整部署集群需要具备以下权限：
-
-- AliyunECSFullAccess
-- AliyunESSFullAccess
-- AliyunVPCFullAccess
-- AliyunSLBFullAccess
-- AliyunCSFullAccess
-- AliyunEIPFullAccess
-- AliyunECIFullAccess
-- AliyunVPNGatewayFullAccess
-- AliyunNATGatewayFullAccess
-
-## 概览
-
-默认配置下，会创建：
-
-- 一个新的 VPC
-- 一台 ECS 实例作为堡垒机
-- 一个托管版 ACK（阿里云 Kubernetes）集群以及一系列 worker 节点：
-    - 属于一个伸缩组的 2 台 ECS 实例（2 核 2 GB）托管版 Kubernetes 的默认伸缩组中必须至少有两台实例，用于承载整个的系统服务，例如 CoreDNS
-    - 属于一个伸缩组的 3 台 `ecs.g5.large` 实例，用于部署 PD
-    - 属于一个伸缩组的 3 台 `ecs.i2.2xlarge` 实例，用于部署 TiKV
-    - 属于一个伸缩组的 2 台 `ecs.c5.4xlarge` 实例用于部署 TiDB
-    - 属于一个伸缩组的 1 台 `ecs.c5.xlarge` 实例用于部署监控组件
-    - 一块 100 GB 的云盘用作监控数据存储
-
-除了默认伸缩组之外的其它所有实例都是跨可用区部署的。而伸缩组 (Auto-scaling Group) 能够保证集群的健康实例数等于期望数值。因此，当发生节点故障甚至可用区故障时，伸缩组能够自动为我们创建新实例来确保服务可用性。
-
-## 安装部署
-
-1. 设置目标 Region 和阿里云密钥（也可以在运行 `terraform` 命令时根据命令提示输入）：
+- TiDB Lightning 运行后，TiDB 集群将无法正常对外提供服务。
+- 若 `tidb-lightning` 崩溃，集群会留在“导入模式”。若忘记转回“普通模式”，集群会产生大量未压缩的文件，继而消耗 CPU 并导致迟延 (stall)。此时，需要使用 `tidb-lightning-ctl` 手动将集群转回“普通模式”：
 
     {{< copyable "shell-regular" >}}
 
-    ```shell
-    export TF_VAR_ALICLOUD_REGION=<YOUR_REGION> && \
-    export TF_VAR_ALICLOUD_ACCESS_KEY=<YOUR_ACCESS_KEY> && \
-    export TF_VAR_ALICLOUD_SECRET_KEY=<YOUR_SECRET_KEY>
+    ```sh
+    bin/tidb-lightning-ctl -switch-mode=normal
     ```
 
-    用于部署集群的各变量的默认值存储在 `variables.tf` 文件中，如需定制可以修改此文件或在安装时通过 `-var` 参数覆盖。
+- TiDB Lightning 需要下游 TiDB 有如下权限：
 
-2. 使用 Terraform 进行安装：
+    |     权限 | 作用域               |
+    | ------:|:----------------- |
+    | SELECT | Tables            |
+    | INSERT | Tables            |
+    | UPDATE | Tables            |
+    | DELETE | Tables            |
+    | CREATE | Databases, tables |
+    |   DROP | Databases, tables |
+    |  ALTER | Tables            |
 
-    {{< copyable "shell-regular" >}}
+  如果 TiDB Lightning 配置项 `checksum = true`，则 TiDB Lightning 需要有下游 TiDB admin 用户权限。
 
-    ```shell
-    git clone --depth=1 https://github.com/pingcap/tidb-operator && \
-    cd tidb-operator/deploy/aliyun
-    ```
+## 硬件需求
 
-    {{< copyable "shell-regular" >}}
+`tidb-lightning` 和 `tikv-importer` 这两个组件皆为资源密集程序，建议各自单独部署。
 
-    ```shell
-    terraform init
-    ```
+为了优化效能，建议硬件配置如下：
 
-    `apply` 过程中需要输入 `yes` 来确认执行：
+- `tidb-lightning`
 
-    {{< copyable "shell-regular" >}}
+    - 32+ 逻辑核 CPU
+    - 足够储存整个数据源的 SSD 硬盘，读取速度越快越好
+    - 使用万兆网卡，带宽需 300 MB/s 以上
+    - 运行过程默认会打满 CPU，建议单独部署。条件不允许的情况下可以和其他组件 (比如 `tidb-server`) 部署在同一台机器上，然后通过配置 `region-concurrency` 限制 `tidb-lightning` 的 CPU 使用。
 
-    ```shell
-    terraform apply
-    ```
+- `tikv-importer`
 
-    假如在运行 `terraform apply` 时出现报错，可根据报错信息（例如缺少权限）进行修复后再次运行 `terraform apply`。
+    - 32+ 逻辑核 CPU
+    - 40 GB+ 内存
+    - 1 TB+ SSD 硬盘，IOPS 越高越好（要求 ≥8000）
+        * 硬盘必须大于最大的 N 个表的大小总和，其中 N = max(index-concurrency, table-concurrency)。
+    - 使用万兆网卡，带宽需 300 MB/s 以上
+    - 运行过程中 CPU、I/O 和网络带宽都可能打满，建议单独部署。
 
-    整个安装过程大约需要 5 至 10 分钟，安装完成后会输出集群的关键信息（想要重新查看这些信息，可以运行 `terraform output`）：
-
-    ```
-    Apply complete! Resources: 3 added, 0 changed, 1 destroyed.
-
-    Outputs:
-
-    bastion_ip = 47.96.174.214
-    cluster_id = c2d9b20854a194f158ef2bc8ea946f20e
-    kubeconfig_file = /tidb-operator/deploy/aliyun/credentials/kubeconfig
-    monitor_endpoint = 121.199.195.236:3000
-    region = cn-hangzhou
-    ssh_key_file = /tidb-operator/deploy/aliyun/credentials/my-cluster-keyZ.pem
-    tidb_endpoint = 172.21.5.171:4000
-    tidb_version = v3.0.0
-    vpc_id = vpc-bp1v8i5rwsc7yh8dwyep5
-    ```
-
-3. 用 `kubectl` 或 `helm` 对集群进行操作：
-
-    {{< copyable "shell-regular" >}}
-
-    ```shell
-    export KUBECONFIG=$PWD/credentials/kubeconfig
-    ```
-
-    {{< copyable "shell-regular" >}}
-
-    ```shell
-    kubectl version
-    ```
-
-    {{< copyable "shell-regular" >}}
-
-    ```shell
-    helm ls
-    ```
-
-## 连接数据库
-
-通过堡垒机可连接 TiDB 集群进行测试，相关信息在安装完成后的输出中均可找到：
-
-{{< copyable "shell-regular" >}}
-
-```shell
-ssh -i credentials/<cluster_name>-key.pem root@<bastion_ip>
-```
-
-{{< copyable "shell-regular" >}}
-
-```shell
-mysql -h <tidb_slb_ip> -P 4000 -u root
-```
-
-## 监控
-
-访问 `<monitor_endpoint>` 就可以查看相关的 Grafana 监控面板。相关信息可在安装完成后的输出中找到。默认帐号密码为：
-
-- 用户名：admin
-- 密码：admin
-
-> **警告：**
-> 
-> 出于安全考虑，假如你已经或将要配置 VPN 用于访问 VPC，强烈建议将 `deploy/modules/aliyun/tidb-cluster/values/default.yaml` 文件里 `monitor.grafana.service.annotations` 中的 `service.beta.kubernetes.io/alicloud-loadbalancer-address-type` 设置为 `intranet` 以禁止监控服务的公网访问。
-
-## 升级 TiDB 集群
-
-设置 `variables.tf` 中的 `tidb_version` 参数，并再次运行 `terraform apply` 即可完成升级。
-
-升级操作可能会执行较长时间，可以通过以下命令来持续观察进度：
-
-{{< copyable "shell-regular" >}}
-
-```
-kubectl get pods --namespace <tidb_cluster_name> -o wide --watch
-```
-
-## TiDB 集群水平伸缩
-
-按需修改 `variables.tf` 中的 `tikv_count` 和 `tidb_count` 数值，再次运行 `terraform apply` 即可完成 TiDB 集群的水平伸缩。
-
-## 销毁集群
-
-{{< copyable "shell-regular" >}}
-
-```shell
-terraform destroy
-```
-
-假如 Kubernetes 集群没有创建成功，那么在 destroy 时会出现报错，无法进行正常清理。此时需要手动将 Kubernetes 资源从本地状态中移除：
-
-{{< copyable "shell-regular" >}}
-
-```shell
-terraform state list
-```
-
-{{< copyable "shell-regular" >}}
-
-```shell
-terraform state rm module.ack.alicloud_cs_managed_kubernetes.k8s
-```
-
-销毁集群操作需要执行较长时间。
+如果机器充裕的话，可以部署多套 `tidb-lightning` + `tikv-importer`，然后将源数据以表为粒度进行切分，并发导入。
 
 > **注意：**
 > 
-> 监控组件挂载的云盘需要在阿里云管理控制台中手动删除。
+> - `tidb-lightning` 是 CPU 密集型程序，如果和其它程序混合部署，需要通过 `region-concurrency` 限制 `tidb-lightning` 的 CPU 实际占用核数，否则会影响其他程序的正常运行。建议将混合部署机器上 75% 的 CPU 分配给 `tidb-lightning`。例如，机器为 32 核，则 `tidb-lightning` 的 `region-concurrency` 可设为 24。
+> 
+> - `tikv-importer` 将中间数据存储缓存到内存上以加速导入过程。占用内存大小可以通过 **(`max-open-engines` × `write-buffer-size` × 2) + (`num-import-jobs` × `region-split-size` × 2)** 计算得来。如果磁盘写入速度慢，缓存可能会带来更大的内存占用。
 
-## 配置
+此外，目标 TiKV 集群必须有足够空间接收新导入的数据。除了[标准硬件配置](/dev/how-to/deploy/hardware-recommendations.md)以外，目标 TiKV 集群的总存储空间必须大于 **数据源大小 × [副本数量](/dev/faq/tidb.md#326-每个-region-的-replica-数量可配置吗调整的方法是) × 2**。例如集群默认使用 3 副本，那么总存储空间需为数据源大小的 6 倍以上。
 
-### 配置 TiDB Operator
+## 导出数据
 
-通过调整 `variables.tf` 内的值来配置 TiDB Operator，大多数配置项均能按照 `variable` 的注释理解语义后进行修改。需要注意的是，`operator_helm_values` 配置项允许为 TiDB Operator 提供一个自定义的 `values.yaml` 配置文件，示例如下：
+我们使用 [`mydumper`](/dev/reference/tools/mydumper.md) 从 MySQL 导出数据，如下：
 
-- 在 `terraform.tfvars` 中设置 `operator_helm_values`：
+{{< copyable "shell-regular" >}}
 
-    ```hcl
-    operator_helm_values = "./my-operator-values.yaml"
-    ```
-
-- 在 `main.tf` 中设置 `operator_helm_values`：
-
-    ```hcl
-    operator_helm_values = file("./my-operator-values.yaml")
-    ```
-
-同时，在默认配置下 Terraform 脚本会创建一个新的 VPC，假如要使用现有的 VPC，可以在 `variable.tf` 中设置 `vpc_id`。注意，当使用现有 VPC 时，没有设置 vswitch 的可用区将不会部署 Kubernetes 节点。
-
-### 配置 TiDB 集群
-
-TiDB 集群会使用 `./my-cluster.yaml` 作为集群的 `values.yaml` 配置文件，修改该文件即可配置 TiDB 集群。支持的配置项可参考 [Kubernetes 上的 TiDB 集群配置](/dev/tidb-in-kubernetes/reference/configuration/tidb-cluster.md)。
-
-## 管理多个 TiDB 集群
-
-需要在一个 Kubernetes 集群下管理多个 TiDB 集群时，需要编辑 `./main.tf`，按实际需要新增 `tidb-cluster` 声明，示例如下：
-
-```hcl
-module "tidb-cluster-dev" {
-  source = "../modules/aliyun/tidb-cluster"
-  providers = {
-    helm = helm.default
-  }
-
-  cluster_name = "dev-cluster"
-  ack          = module.tidb-operator
-
-  pd_count                   = 1
-  tikv_count                 = 1
-  tidb_count                 = 1
-  override_values            = file("dev-cluster.yaml")
-}
-
-module "tidb-cluster-staging" {
-  source = "../modules/aliyun/tidb-cluster"
-  providers = {
-    helm = helm.default
-  }
-
-  cluster_name = "staging-cluster"
-  ack          = module.tidb-operator
-
-  pd_count                   = 3
-  tikv_count                 = 3
-  tidb_count                 = 2
-  override_values            = file("staging-cluster.yaml")
-}
+```sh
+./bin/mydumper -h 127.0.0.1 -P 3306 -u root -t 16 -F 256 -B test -T t1,t2 --skip-tz-utc -o /data/my_database/
 ```
 
-注意，多个 TiDB 集群之间 `cluster_name` 必须保持唯一。下面是 `tidb-cluster` 模块的所有可配置参数：
+其中：
 
-| 参数名                          | 说明                                                 | 默认值                 |
-|:---------------------------- |:-------------------------------------------------- |:------------------- |
-| `ack`                        | 封装目标 Kubernetes 集群信息的结构体，必填                        | `nil`               |
-| `cluster_name`               | TiDB 集群名，必填且必须唯一                                   | `nil`               |
-| `tidb_version`               | TiDB 集群版本                                          | `v3.0.1`            |
-| `tidb_cluster_chart_version` | `tidb-cluster` helm chart 的版本                      | `v1.0.1`            |
-| `pd_count`                   | PD 节点数                                             | 3                   |
-| `pd_instance_type`           | PD 实例类型                                            | `ecs.g5.large`      |
-| `tikv_count`                 | TiKV 节点数                                           | 3                   |
-| `tikv_instance_type`         | TiKV 实例类型                                          | `ecs.i2.2xlarge`    |
-| `tidb_count`                 | TiDB 节点数                                           | 2                   |
-| `tidb_instance_type`         | TiDB 实例类型                                          | `ecs.c5.4xlarge`    |
-| `monitor_instance_type`      | 监控组件的实例类型                                          | `ecs.c5.xlarge`     |
-| `override_values`            | TiDB 集群的 `values.yaml` 配置文件，通常通过 `file()` 函数从文件中读取 | `nil`               |
-| `local_exec_interpreter`     | 执行命令行指令的解释器                                        | `["/bin/sh", "-c"]` |
+- `-B test`：从 `test` 数据库导出。
+- `-T t1,t2`：只导出 `t1` 和 `t2` 这两个表。
+- `-t 16`：使用 16 个线程导出数据。
+- `-F 256`：将每张表切分成多个文件，每个文件大小约为 256 MB。
+- `--skip-tz-utc`：添加这个参数则会忽略掉 TiDB 与导数据的机器之间时区设置不一致的情况，禁止自动转换。
 
-## 管理多个 Kubernetes 集群
+如果数据源是 CSV 文件，请参考 [CSV 支持](/dev/reference/tools/tidb-lightning/csv.md)获取配置信息。
 
-推荐针对每个 Kubernetes 集群都使用单独的 Terraform 模块进行管理（一个 Terraform Module 即一个包含 `.tf` 脚本的目录）。
+## 部署 TiDB Lightning
 
-`deploy/aliyun` 实际上是将 `deploy/modules` 中的数个可复用的 Terraform 脚本组合在了一起。当管理多个集群时（下面的操作在 `tidb-operator` 项目根目录下进行）：
+本节介绍 TiDB Lightning 的两种部署方式：[使用 Ansible 部署](#使用-ansible-部署-tidb-lightning)和[手动部署](#手动部署-tidb-lightning)。
 
-1. 首先针对每个集群创建一个目录，如：
+### 使用 Ansible 部署 TiDB Lightning
+
+TiDB Lightning 可随 TiDB 集群一起用 [Ansible 部署](/dev/how-to/deploy/orchestrated/ansible.md)。
+
+1. 编辑 `inventory.ini`，分别配置一个 IP 来部署 `tidb-lightning` 和 `tikv-importer`。
+
+    ```ini
+    ...
+
+    [importer_server]
+    192.168.20.9
+
+    [lightning_server]
+    192.168.20.10
+
+    ...
+    ```
+
+2. 修改 `group_vars/*.yml` 的变量配置这两个工具。
+
+    - `group_vars/all.yml`
+
+        ```yaml
+        ...
+        # tikv-importer 的监听端口。需对 tidb-lightning 服务器开放。
+        tikv_importer_port: 8287
+        ...
+        ```
+
+    - `group_vars/lightning_server.yml`
+
+        ```yaml
+        ---
+        dummy:
+
+        # 提供监控告警的端口。需对监控服务器 (monitoring_server) 开放。
+        tidb_lightning_pprof_port: 8289
+
+        # 获取数据源（Mydumper SQL dump 或 CSV）的路径。
+        data_source_dir: "{{ deploy_dir }}/mydumper"
+        ```
+
+    - `group_vars/importer_server.yml`
+
+        ```yaml
+        ---
+        dummy:
+
+        # 储存引擎文件的路径。需存放在空间足够大的分区。
+        import_dir: "{{ deploy_dir }}/data.import"
+        ```
+
+3. 开始部署。
 
     {{< copyable "shell-regular" >}}
 
-    ```shell
-    mkdir -p deploy/aliyun-staging
+    ```sh
+    ansible-playbook bootstrap.yml &&
+    ansible-playbook deploy.yml
     ```
 
-2. 参考 `deploy/aliyun` 的 `main.tf`，编写自己的脚本，下面是一个简单的例子：
+4. 将数据源写入 `data_source_dir` 指定的路径。
 
-    ```hcl
-    provider "alicloud" {
-        region     = <YOUR_REGION>
-        access_key = <YOUR_ACCESS_KEY>
-        secret_key = <YOUR_SECRET_KEY>
-    }
+5. 登录 `tikv-importer` 的服务器，并执行以下命令来启动 Importer。
 
-    module "tidb-operator" {
-        source     = "../modules/aliyun/tidb-operator"
+    {{< copyable "shell-regular" >}}
 
-        region          = <YOUR_REGION>
-        access_key      = <YOUR_ACCESS_KEY>
-        secret_key      = <YOUR_SECRET_KEY>
-        cluster_name    = "example-cluster"
-        key_file        = "ssh-key.pem"
-        kubeconfig_file = "kubeconfig"
-    }
-
-    provider "helm" {
-        alias    = "default"
-        insecure = true
-        install_tiller = false
-        kubernetes {
-            config_path = module.tidb-operator.kubeconfig_filename
-        }
-    }
-
-    module "tidb-cluster" {
-        source = "../modules/aliyun/tidb-cluster"
-        providers = {
-            helm = helm.default
-        }
-
-        cluster_name = "example-cluster"
-        ack          = module.tidb-operator
-    }
-
-    module "bastion" {
-        source = "../modules/aliyun/bastion"
-
-        bastion_name             = "example-bastion"
-        key_name                 = module.tidb-operator.key_name
-        vpc_id                   = module.tidb-operator.vpc_id
-        vswitch_id               = module.tidb-operator.vswitch_ids[0]
-        enable_ssh_to_worker     = true
-        worker_security_group_id = module.tidb-operator.security_group_id
-    }
+    ```sh
+    scripts/start_importer.sh
     ```
 
-上面的脚本可以自由定制，比如，假如不需要堡垒机则可以移除 `module "bastion"` 相关声明。
+6. 登录 `tidb-lightning` 的服务器，并执行以下命令来启动 Lightning，开始导入过程。
 
-你也可以直接拷贝 `deploy/aliyun` 目录，但要注意不能拷贝已经运行了 `terraform apply` 的目录，建议重新 clone 仓库再进行拷贝。
+    {{< copyable "shell-regular" >}}
 
-## 使用限制
+    ```sh
+    scripts/start_lightning.sh
+    ```
 
-目前，`pod cidr`，`service cidr` 和节点型号等配置在集群创建后均无法修改。
+7. 完成后，在 `tikv-importer` 的服务器执行 `scripts/stop_importer.sh` 来关闭 Importer。
+
+### 手动部署 TiDB Lightning
+
+#### 第 1 步：部署 TiDB 集群
+
+在开始数据导入之前，需先部署一套要进行导入的 TiDB 集群 (版本要求 2.0.9 以上)，建议使用最新版。部署方法可参考 [TiDB 快速入门指南](/dev/overview.md#部署方式)。
+
+#### 第 2 步：下载 TiDB Lightning 安装包
+
+通过以下链接获取 TiDB Lightning 安装包（需选择与集群相同的版本）：
+
+- **v2.1.9**: [https://download.pingcap.org/tidb-v2.1.9-linux-amd64.tar.gz](https://download.pingcap.org/tidb-v2.1.9-linux-amd64.tar.gz)
+- **v2.0.9**: [https://download.pingcap.org/tidb-lightning-v2.0.9-linux-amd64.tar.gz](https://download.pingcap.org/tidb-lightning-v2.0.9-linux-amd64.tar.gz)
+- 最新 unstable 版本：[https://download.pingcap.org/tidb-lightning-test-xx-latest-linux-amd64.tar.gz](https://download.pingcap.org/tidb-lightning-test-xx-latest-linux-amd64.tar.gz)
+
+#### 第 3 步：启动 `tikv-importer`
+
+1. 从安装包上传 `bin/tikv-importer`。
+
+2. 配置 `tikv-importer.toml`。
+
+    ```toml
+    # TiKV Importer 配置文件模版
+
+    # 日志文件。
+    log-file = "tikv-importer.log"
+    # 日志等级：trace、debug、info、warn、error、off。
+    log-level = "info"
+
+    [server]
+    # tikv-importer 监听的地址，tidb-lightning 需要连到这个地址进行数据写入。
+    addr = "0.0.0.0:8287"
+    # gRPC 服务器的线程池大小。
+    grpc-concurrency = 16
+
+    [metric]
+    # 给 Prometheus 客户端的推送任务名称。
+    job = "tikv-importer"
+    # 给 Prometheus 客户端的推送间隔。
+    interval = "15s"
+    # Prometheus Pushgateway 地址。
+    address = ""
+
+    [rocksdb]
+    # 最大的背景任务并发数。
+    max-background-jobs = 32
+
+    [rocksdb.defaultcf]
+    # 数据在刷新到硬盘前能存于内存的容量上限。
+    write-buffer-size = "1GB"
+    # 存于内存的写入缓冲最大数量。
+    max-write-buffer-number = 8
+
+    # 各个压缩层级使用的算法。
+    # 第 0 层的算法用于压缩 KV 数据。
+    # 第 6 层的算法用于压缩 SST 文件。
+    # 第 1 至 5 层的算法目前忽略。
+    compression-per-level = ["lz4", "no", "no", "no", "no", "no", "lz4"]
+
+    [rocksdb.writecf]
+    # (同上)
+    compression-per-level = ["lz4", "no", "no", "no", "no", "no", "lz4"]
+
+    [import]
+    # 存储引擎文档 (engine file) 的文件夹路径。
+    import-dir = "/mnt/ssd/data.import/"
+    # 处理 gRPC 请求的线程数量。
+    num-threads = 16
+    # 导入任务并发数。
+    num-import-jobs = 24
+    # 预处理 Region 最长时间。
+    # max-prepare-duration = "5m"
+    # 把要导入的数据切分为这个大小的 Region。
+    # region-split-size = "512MB"
+    # 流管道窗口大小，管道满时会阻塞流。
+    # stream-channel-window = 128
+    # 引擎文档同时打开的最大数量。
+    max-open-engines = 8
+    # Importer 上传至 TiKV 的最大速度 (bytes per second)。
+    # upload-speed-limit = "512MB"
+    # 目标 store 可用空间的最小比率：store_available_space / store_capacity.
+    # 如果目标存储空间的可用比率低于下值，Importer 将会暂停上传 SST 来为 PD 提供足够时间进行 regions 负载均衡。
+    min-available-ratio = 0.05
+    ```
+
+3. 运行 `tikv-importer`。
+
+    {{< copyable "shell-regular" >}}
+
+    ```sh
+    nohup ./tikv-importer -C tikv-importer.toml > nohup.out &
+    ```
+
+#### 第 4 步：启动 `tidb-lightning`
+
+1. 从安装包上传 `bin/tidb-lightning` 及 `bin/tidb-lightning-ctl`。
+
+2. 将数据源写入到同样的机器。
+
+3. 配置 `tidb-lightning.toml`。对于没有出现在下述模版中的配置，TiDB Lightning 给出配置错误的提醒并退出。
+
+    ```toml
+    # TiDB Lightning 配置文件模版
+
+    [lightning]
+    # 用于调试和 Prometheus 监控的 HTTP 端口。输入 0 关闭。
+    pprof-port = 8289
+
+    # 开始导入前先检查集群版本是否支持。
+    # check-requirements = true
+
+    # 控制同时处理的最大引擎数量。
+    # 每张表被分割为一个用于储存索引的“索引引擎”和若干存储行数据的“数据引擎”。
+    # 这两项设置控制同时处理每种引擎的最大数量。设置会影响 tikv-importer 的内存和
+    # 磁盘用量。两项数值之和不能超过 tikv-importer 的 max-open-engines 的设定。
+    index-concurrency = 2
+    table-concurrency = 6
+
+    # 转换数据的并发数，默认为逻辑 CPU 数量，不需要配置。
+    # 混合部署的情况下可以配置为逻辑 CPU 的 75% 大小。
+    # region-concurrency =
+
+    # 最大的 I/O 并发数。I/O 并发量太高时，会因硬盘内部缓存频繁被刷新而增加 I/O 等待时间，
+    # 导致缓存未命中和降低读取速度。因应不同的存储介质，此参数可能需要调整以达到最佳效率。
+    io-concurrency = 5
+
+    # 日志
+    level = "info"
+    file = "tidb-lightning.log"
+    max-size = 128 # MB
+    max-days = 28 # 默认不删除旧日志
+    max-backups = 14
+
+    # Server 模式
+    # 是否启用 Server 模式
+    # server-mode = false
+    # Server 模式下的监听地址
+    # status-addr = ":8289"
+
+    [checkpoint]
+    # 启用断点续传。
+    # 导入时，Lightning 会记录当前进度。
+    # 若 Lightning 或其他组件异常退出，在重启时可以避免重复再导入已完成的数据。
+    enable = true
+    # 存储断点的数据库名称。
+    schema = "tidb_lightning_checkpoint"
+    # 存储断点的方式
+    #  - file：存放在本地文件系统（要求 v2.1.1 或以上）
+    #  - mysql：存放在兼容 MySQL 的数据库服务器
+    driver = "file"
+    # 断点的存放位置
+    # 若 driver = "file"，此参数为断点信息存放的文件路径。
+    # 如果不设置改参数则默认为“/tmp/CHECKPOINT_SCHEMA.pb”。
+    # 若 driver = "mysql"，此参数为数据库连接参数 (DSN)，格式为“用户:密码@tcp(地址:端口)/”。
+    # 默认会重用 [tidb] 设置目标数据库来存储断点。
+    # 为避免加重目标集群的压力，建议另外使用一个兼容 MySQL 的数据库服务器。
+    # dsn = "/tmp/tidb_lightning_checkpoint.pb"
+    # 导入成功后是否保留断点。默认为删除。
+    # 保留断点可用于调试，但有可能泄漏数据源的元数据。
+    # keep-after-success = false
+
+    [tikv-importer]
+    # tikv-importer 的监听地址，需改成 tikv-importer 服务器的实际地址。
+    addr = "172.16.31.10:8287"
+
+    [mydumper]
+    # 文件读取区块大小。
+    read-block-size = 65536 # 字节 (默认 = 64 KB)
+
+    #（源数据文件）单个导入区块大小的最小值。
+    # Lightning 根据该大小将一张大表分割为多个数据引擎文件。
+    batch-size = 107_374_182_400 # 字节 (默认 100 GiB)
+    # 引擎文件要按序导入。因为是并行处理，多个数据引擎几乎同时被导入，
+    # 这样形成的处理队列会造成资源浪费。因此，Lightning 稍微增大了前几个
+    # 区块的大小，从而合理分配资源。该参数也决定了向上扩展（scale up）因
+    # 数，代表在完全并发下“导入”和“写入”过程的持续时间比。这个值也可以通过
+    # 计算 1 GB 大小单张表的（导入时长/写入时长）得到。精确的时间可以在日志
+    # 里看到。如果“导入”更快，区块大小差异就会更小；比值为 0 则说明区块大小
+    # 是一致的。取值范围是（0 <= batch-import-ratio < 1）。
+    batch-import-ratio = 0.75
+
+    # Mydumper 源数据目录。
+    data-source-dir = "/data/my_database"
+    # 如果 no-schema 设置为 true，tidb-lightning 将直接去 tidb-server 获取表结构信息，
+    # 而不是根据 data-source-dir 的 schema 文件来创建库/表，
+    # 适用于手动创建表或者 TiDB 本来就有表结构的情况。
+    no-schema = false
+    # 指定包含 CREATE TABLE 语句的表结构文件的字符集。只支持下列选项：
+    #  - utf8mb4：表结构文件必须使用 UTF-8 编码，否则 Lightning 会报错
+    #  - gb18030：表结构文件必须使用 GB-18030 编码，否则 Lightning 会报错
+    #  - auto：（默认）自动判断文件编码是 UTF-8 还是 GB-18030，两者皆非则会报错
+    #  - binary：不尝试转换编码
+    # 注意，此参数不影响 Lightning 读取数据文件。
+    character-set = "auto"
+    # 是否区分大小写
+    # case-sensitive = false
+
+    # 配置如何解析 CSV 文件。
+    [mydumper.csv]
+    # 字段分隔符，应为单个 ASCII 字符。
+    separator = ','
+    # 引用定界符，可为单个 ASCII 字符或空字符串。
+    delimiter = '"'
+    # CSV 文件是否包含表头。
+    # 如果为 true，第一行导入时会被跳过。
+    header = true
+    # CSV 是否包含 NULL。
+    # 如果 `not-null` 为 true，CSV 所有列都不能解析为 NULL。
+    not-null = false
+    # 如果 `not-null` 为 false（即 CSV 可以包含 NULL），
+    # 为以下值的字段将会被解析为 NULL。
+    null = '\N'
+    # 是否解析字段内反斜线转义符。
+    backslash-escape = true
+    # 如果有行以分隔符结尾，删除尾部分隔符。
+    trim-last-separator = false
+
+    [tidb]
+    # 目标集群的信息。tidb-server 的监听地址，填一个即可。
+    host = "172.16.31.1"
+    port = 4000
+    user = "root"
+    password = ""
+    # 表架构信息在从 TiDB 的“状态端口”获取。
+    status-port = 10080
+    # pd-server 的监听地址，填一个即可。
+    pd-addr = "172.16.31.4:2379"
+    # tidb-lightning 引用了 TiDB 库，而它自己会产生一些日志。此设置控制 TiDB 库的日志等级。
+    log-level = "error"
+    # MySQL SQL Mode 配置
+    # sql-mode = ""
+
+    # 设置 TiDB 会话变量，提升 CHECKSUM 和 ANALYZE 的速度。各参数定义可参阅
+    # https://pingcap.com/docs-cn/sql/statistics/#%E6%8E%A7%E5%88%B6-analyze-%E5%B9%B6%E5%8F%91%E5%BA%A6
+    build-stats-concurrency = 20
+    distsql-scan-concurrency = 100
+    index-serial-scan-concurrency = 20
+    checksum-table-concurrency = 16
+
+    # 导完数据以后可以自动进行校验和 (CHECKSUM)、压缩 (Compact) 和分析 (ANALYZE) 的操作。
+    # 生产环境建议都设为 true
+    # 执行顺序是: CHECKSUM -> ANALYZE。
+    [post-restore]
+    # 如果设置为 true，会对每个表逐个做 `ADMIN CHECKSUM TABLE <table>` 操作。
+    checksum = true
+    # 如果设置为 true，会在导入每张表后做一次 level-1 Compact。
+    # 如果不填写，则默认为 false。
+    level-1-compact = false
+    # 如果设置为 true，会在导入过程结束时对整个 TiKV 集群执行一次全量 Compact。
+    # 如果不填写，则默认为 false。
+    compact = false
+    # 如果设置为 true，会对每个表逐个做 `ANALYZE TABLE <table>` 操作。
+    analyze = true
+
+    # 设置背景周期性动作。
+    # 支持的单位：h（时）、m（分）、s（秒）。
+    [cron]
+    # Lightning 自动刷新导入模式周期。需要比 TiKV 对应的设定值短。
+    switch-mode = "5m"
+    # 每经过这段时间，在日志打印当前进度。
+    log-progress = "5m"
+
+    # 表库过滤设置。详情见《TiDB Lightning 表库过滤》。
+    #[black-white-list]
+    # ...
+    ```
+
+4. 运行 `tidb-lightning`。如果直接在命令行中用 `nohup` 启动程序，可能会因为 SIGHUP 信号而退出，建议把 `nohup` 放到脚本里面，如：
+
+    {{< copyable "shell-regular" >}}
+
+    ```sh
+    #!/bin/bash
+    nohup ./tidb-lightning -config tidb-lightning.toml > nohup.out &
+    ```
