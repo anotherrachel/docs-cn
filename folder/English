@@ -1,26 +1,73 @@
 ---
-title: 数据类型的默认值
+title: SET [GLOBAL|SESSION] <variable>
+summary: TiDB 数据库中 SET [GLOBAL|SESSION] <variable> 的使用概况。
 category: reference
 ---
 
-# 数据类型的默认值
+# SET [GLOBAL|SESSION] <variable>
 
-在一个数据类型描述中的 `DEFAULT value` 段描述了一个列的默认值。这个默认值必须是常量，不可以是一个函数或者是表达式。但是对于时间类型，可以例外的使用 `NOW`、`CURRENT_TIMESTAMP`、`LOCALTIME`、`LOCALTIMESTAMP` 等函数作为 `DATETIME` 或者 `TIMESTAMP` 的默认值。
+`SET [GLOBAL|SESSION]` 语句用于在 `SESSION` 或 `GLOBAL` 的范围内，对某个 TiDB 的内置变量进行更改。需注意，对 `GLOBAL` 变量的更改不适用于已有连接或本地连接，这与 MySQL 类似。只有新会话才会反映值的变化。
 
-`BLOB`、`TEXT` 以及 `JSON` 不可以设置默认值。
+## 语法图
 
-如果一个列的定义中没有 `DEFAULT` 的设置。TiDB 按照如下的规则决定:
+**SetStmt:**
 
-* 如果该类型可以使用 `NULL` 作为值，那么这个列会在定义时添加隐式的默认值设置 `DEFAULT NULL`。
-* 如果该类型无法使用 `NULL` 作为值，那么这个列在定义时不会添加隐式的默认值设置。
+![SetStmt](/media/sqlgram/SetStmt.png)
 
-对于一个设置了 `NOT NULL` 但是没有显式设置 `DEFAULT` 的列，当 `INSERT`、`REPLACE` 没有涉及到该列的值时，TiDB 根据当时的 `SQL_MODE` 进行不同的行为：
+## 示例
 
-* 如果此时是 `strict sql mode`，在事务中的语句会导致事务失败并回滚，非事务中的语句会直接报错。
-* 如果此时不是 `strict sql mode`，TiDB 会为这列赋值为列数据类型的隐式默认值。
+```sql
+mysql> SHOW GLOBAL VARIABLES LIKE 'sql_mode';
++---------------+-------------------------------------------------------------------------------------------------------------------------------------------+
+| Variable_name | Value                                                                                                                                     |
++---------------+-------------------------------------------------------------------------------------------------------------------------------------------+
+| sql_mode      | ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION |
++---------------+-------------------------------------------------------------------------------------------------------------------------------------------+
+1 row in set (0.00 sec)
 
-此时隐式默认值的设置按照如下规则：
+mysql> SHOW SESSION VARIABLES LIKE 'sql_mode';
++---------------+-------------------------------------------------------------------------------------------------------------------------------------------+
+| Variable_name | Value                                                                                                                                     |
++---------------+-------------------------------------------------------------------------------------------------------------------------------------------+
+| sql_mode      | ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION |
++---------------+-------------------------------------------------------------------------------------------------------------------------------------------+
+1 row in set (0.00 sec)
 
-* 对于数值类型，它们的默认值是 0。当有 `AUTO_INCREMENT` 参数时，默认值会按照增量情况赋予正确的值。
-* 对于除了时间戳外的日期时间类型，默认值会是该类型的“零值”。时间戳类型的默认值会是当前的时间。
-* 对于除枚举以外的字符串类型，默认值会是空字符串。对于枚举类型，默认值是枚举中的第一个值。
+mysql> SET GLOBAL sql_mode = 'STRICT_TRANS_TABLES,NO_AUTO_CREATE_USER';
+Query OK, 0 rows affected (0.03 sec)
+
+mysql> SHOW GLOBAL VARIABLES LIKE 'sql_mode';
++---------------+-----------------------------------------+
+| Variable_name | Value                                   |
++---------------+-----------------------------------------+
+| sql_mode      | STRICT_TRANS_TABLES,NO_AUTO_CREATE_USER |
++---------------+-----------------------------------------+
+1 row in set (0.00 sec)
+
+mysql> SHOW SESSION VARIABLES LIKE 'sql_mode';
++---------------+-------------------------------------------------------------------------------------------------------------------------------------------+
+| Variable_name | Value                                                                                                                                     |
++---------------+-------------------------------------------------------------------------------------------------------------------------------------------+
+| sql_mode      | ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION |
++---------------+-------------------------------------------------------------------------------------------------------------------------------------------+
+1 row in set (0.00 sec)
+
+mysql> SET SESSION sql_mode = 'STRICT_TRANS_TABLES,NO_AUTO_CREATE_USER';
+Query OK, 0 rows affected (0.01 sec)
+
+mysql> SHOW SESSION VARIABLES LIKE 'sql_mode';
++---------------+-----------------------------------------+
+| Variable_name | Value                                   |
++---------------+-----------------------------------------+
+| sql_mode      | STRICT_TRANS_TABLES,NO_AUTO_CREATE_USER |
++---------------+-----------------------------------------+
+1 row in set (0.00 sec)
+```
+
+## MySQL 兼容性
+
+`SET [GLOBAL|SESSION]` 语句与 MySQL 完全兼容。如有任何兼容性差异，请在 GitHub 上提交 [issue](/v2.1/report-issue.md)。
+
+## 另请参阅
+
+* [SHOW \[GLOBAL|SESSION\] VARIABLES](/v2.1/reference/sql/statements/show-variables.md)
