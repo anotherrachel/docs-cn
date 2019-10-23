@@ -1,42 +1,122 @@
-crwdns65108:0crwdne65108:0
+crwdns64892:0crwdne64892:0
 
-crwdns65110:0crwdne65110:0
-crwdns65112:0crwdne65112:0
+crwdns64894:0crwdne64894:0
 
-crwdns65114:0crwdne65114:0
-crwdns65116:0crwdne65116:0
+crwdns64896:0crwdne64896:0
 
-crwdns65118:0crwdne65118:0
-crwdns65120:0crwdne65120:0
+crwdns64898:0crwdne64898:0
+crwdns64900:0crwdne64900:0 
+    crwdns64902:0crwdne64902:0
+crwdns64904:0crwdne64904:0
 
-crwdns65122:0%Y%m%dcrwdne65122:0
-crwdns65124:0%Y%m%dcrwdne65124:0
+crwdns64906:0crwdne64906:0
+    crwdns64908:0crwdne64908:0 
+        crwdns64910:0crwdne64910:0
+        crwdns64912:0crwdne64912:0
+    crwdns64914:0crwdne64914:0
+        crwdns64916:0{ print $2 }crwdne64916:0
+        crwdns64918:0$DISTcrwdne64918:0
+    crwdns64920:0crwdne64920:0
+        crwdns64922:0crwdne64922:0
+    crwdns64924:0crwdne64924:0 
+crwdns64926:0crwdne64926:0
 
-crwdns65126:0crwdne65126:0
-crwdns65128:0crwdne65128:0
+crwdns64928:0crwdne64928:0
+    crwdns64930:0crwdne64930:0
+    crwdns64932:0$OSTYPEcrwdne64932:0 
+        crwdns64934:0crwdne64934:0 
+            crwdns64936:0crwdne64936:0
+        crwdns64938:0crwdne64938:0
 
-crwdns65130:0crwdne65130:0
-crwdns65132:0crwdne65132:0
-crwdns65134:0crwdne65134:0 
+        crwdns64940:0crwdne64940:0
+            crwdns64942:0crwdne64942:0
+        crwdns64944:0crwdne64944:0
 
-crwdns65136:0crwdne65136:0
-   crwdns65138:0$icrwdne65138:0
-   crwdns65140:0$icrwdne65140:0
-   crwdns65142:0$versioncrwdne65142:0
-   crwdns65144:0$icrwdne65144:0
+        crwdns64946:0crwdne64946:0
+            crwdns64948:0$OSTYPEcrwdne64948:0
+            crwdns64950:0crwdne64950:0
+        crwdns64952:0crwdne64952:0
+    crwdns64954:0crwdne64954:0
+    crwdns64956:0${SUDO}crwdne64956:0
+    crwdns64958:0crwdne64958:0
+    crwdns64960:0$PATHcrwdnd64960:0$HOMEcrwdne64960:0
+crwdns64962:0crwdne64962:0
 
-   crwdns65146:0crwdne65146:0
-    crwdns65148:0crwdne65148:0
-    crwdns65150:0crwdne65150:0
-    crwdns65152:0crwdne65152:0
-    crwdns65154:0crwdne65154:0
-    crwdns65156:0crwdne65156:0
-    crwdns65158:0${_version_tag}crwdne65158:0
-    crwdns65160:0${MAINFONT}crwdne65160:0
-    crwdns65162:0${MAINFONT}crwdne65162:0
-    crwdns65164:0${MAINFONT}crwdne65164:0
-    crwdns65166:0${MONOFONT}crwdne65166:0
-    crwdns65168:0crwdne65168:0
-    crwdns65170:0crwdne65170:0
-    crwdns65172:0$versioncrwdnd65172:0$output_pathcrwdne65172:0
-crwdns65174:0crwdne65174:0
+crwdns64964:0crwdne64964:0
+    crwdns64966:0crwdne64966:0
+    crwdns64968:0$OSTYPEcrwdne64968:0 
+        crwdns64970:0crwdne64970:0 
+            crwdns64972:0$(get_linux_platform)crwdne64972:0
+            crwdns64974:0$distcrwdne64974:0
+                crwdns64976:0crwdne64976:0
+                    crwdns64978:0${SUDO}crwdne64978:0
+                crwdns64980:0crwdne64980:0
+                crwdns64982:0crwdne64982:0
+                    crwdns64984:0${SUDO}crwdne64984:0
+                crwdns64986:0crwdne64986:0
+                crwdns64988:0crwdne64988:0
+                    crwdns64990:0$distcrwdne64990:0
+                    crwdns64992:0crwdne64992:0
+                crwdns64994:0crwdne64994:0
+            crwdns64996:0crwdne64996:0
+        crwdns64998:0crwdne64998:0
+
+        crwdns65000:0crwdne65000:0
+            crwdns65002:0crwdne65002:0
+            crwdns65004:0crwdne65004:0
+            crwdns65006:0crwdne65006:0
+            crwdns65008:0crwdne65008:0
+            crwdns65010:0crwdne65010:0
+        crwdns65012:0crwdne65012:0
+
+        crwdns65014:0crwdne65014:0
+            crwdns65016:0$OSTYPEcrwdne65016:0
+            crwdns65018:0crwdne65018:0
+        crwdns65020:0crwdne65020:0
+    crwdns65022:0crwdne65022:0
+crwdns65024:0crwdne65024:0
+
+crwdns65026:0crwdne65026:0
+crwdns65028:0crwdne65028:0
+    crwdns65030:0crwdne65030:0 crwdns65032:0crwdne65032:0
+        crwdns65034:0crwdne65034:0
+crwdns65036:0crwdne65036:0
+crwdns65038:0crwdne65038:0
+        crwdns65040:0crwdne65040:0
+    crwdns65042:0crwdne65042:0
+crwdns65044:0crwdne65044:0
+    crwdns65046:0crwdne65046:0
+    crwdns65048:0${SUDO}crwdne65048:0
+    crwdns65050:0${SUDO}crwdne65050:0
+    crwdns65052:0${SUDO}crwdne65052:0
+crwdns65054:0crwdne65054:0
+
+crwdns65056:0crwdne65056:0
+crwdns65058:0crwdne65058:0
+    crwdns65060:0crwdne65060:0
+    crwdns65062:0[0-9]crwdnd65062:0[0-9]crwdnd65062:0[1]crwdne65062:0
+    crwdns65064:0[0-9]crwdnd65064:0[0-9]crwdnd65064:0[2]crwdne65064:0
+    crwdns65066:0$GO_VER_1crwdnd65066:0$GO_VER_2crwdnd65066:0$GO_VER_1crwdne65066:0
+        crwdns65068:0crwdne65068:0
+        crwdns65070:0crwdne65070:0
+    crwdns65072:0crwdne65072:0
+crwdns65074:0crwdne65074:0
+    crwdns65076:0crwdne65076:0
+crwdns65078:0crwdne65078:0
+
+crwdns65080:0crwdne65080:0
+crwdns65082:0crwdne65082:0
+    crwdns65084:0crwdne65084:0
+    crwdns65086:0[1]crwdne65086:0
+    crwdns65088:0[2]crwdne65088:0
+    crwdns65090:0$G_VER_1crwdnd65090:0$G_VER_2crwdnd65090:0$G_VER_1crwdne65090:0
+        crwdns65092:0crwdne65092:0
+        crwdns65094:0crwdne65094:0
+    crwdns65096:0crwdne65096:0
+crwdns65098:0crwdne65098:0
+    crwdns65100:0crwdne65100:0
+crwdns65102:0crwdne65102:0
+
+crwdns65104:0$HOMEcrwdne65104:0
+
+crwdns65106:0crwdne65106:0
