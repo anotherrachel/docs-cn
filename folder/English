@@ -1,25 +1,128 @@
 ---
-name: "\U0001F41B Bug Report"
-about: Typo, Grammatical error, etc.。
+title: USE
+summary: TiDB 数据库中 USE 的使用概况。
+category: reference
 ---
 
-## Bug 报告
+# USE
 
-**This repository is ONLY used to solve problems related to DOCS-CN. For other issues (TiDB, TiKV, etc), please move to [other repositories](https://github.com/pingcap/).**
-<!-- 本仓库仅用于解决与中文文档相关的问题，
-其他方面的问题（如 TiDB、TiKV 等），请移步其他[相关仓库](https://github.com/pingcap/)。 -->
+`USE` 语句可为用户会话选择当前数据库。
 
-Please answer the following questions before submitting your issue. Thanks!
-<!-- 非常感谢你提出相关问题，在提交你的 issue 之前，请回答下面几个问题：-->
+## 语法图
 
-1. What is the document directory for the problem?
-<!-- 1. 该问题出现的文档路径是什么？-->
+**UseStmt:**
 
+![UseStmt](/media/sqlgram/UseStmt.png)
 
-2. How would you like to improve it?
-<!-- 2. 你希望如何改正它? -->
+**DBName:**
 
+![DBName](/media/sqlgram/DBName.png)
 
+## 示例
 
+{{< copyable "sql" >}}
 
+```sql
+USE mysql;
+```
 
+```
+Reading table information for completion of table and column names
+You can turn off this feature to get a quicker startup with -A
+
+Database changed
+```
+
+{{< copyable "sql" >}}
+
+```sql
+SHOW TABLES;
+```
+
+```
++----------------------+
+| Tables_in_mysql      |
++----------------------+
+| GLOBAL_VARIABLES     |
+| bind_info            |
+| columns_priv         |
+| db                   |
+| default_roles        |
+| gc_delete_range      |
+| gc_delete_range_done |
+| help_topic           |
+| role_edges           |
+| stats_buckets        |
+| stats_feedback       |
+| stats_histograms     |
+| stats_meta           |
+| tables_priv          |
+| tidb                 |
+| user                 |
++----------------------+
+16 rows in set (0.00 sec)
+```
+
+{{< copyable "sql" >}}
+
+```sql
+CREATE DATABASE newtest;
+```
+
+```
+Query OK, 0 rows affected (0.10 sec)
+```
+
+{{< copyable "sql" >}}
+
+```sql
+USE newtest;
+```
+
+```
+Database changed
+```
+
+{{< copyable "sql" >}}
+
+```sql
+SHOW TABLES;
+```
+
+```
+Empty set (0.00 sec)
+```
+
+{{< copyable "sql" >}}
+
+```sql
+CREATE TABLE t1 (a int);
+```
+
+```
+Query OK, 0 rows affected (0.10 sec)
+```
+
+{{< copyable "sql" >}}
+
+```sql
+SHOW TABLES;
+```
+
+```
++-------------------+
+| Tables_in_newtest |
++-------------------+
+| t1                |
++-------------------+
+1 row in set (0.00 sec)
+```
+
+## MySQL 兼容性
+
+`USE` 语句与 MySQL 完全兼容。如有任何兼容性差异，请在 GitHub 上提交 [issue](/dev/report-issue.md)。
+
+## 另请参阅
+
+* [CREATE DATABASE](/dev/reference/sql/statements/create-database.md)
+* [SHOW TABLES](/dev/reference/sql/statements/show-tables.md)
