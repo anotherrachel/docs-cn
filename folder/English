@@ -1,276 +1,206 @@
 ---
-title: 如何用 Sysbench 测试 TiDB
+title: DM 1.0-GA 性能测试报告
 category: benchmark
-aliases:
-  - '/docs-cn/benchmark/how-to-run-sysbench'
 ---
 
-# 如何用 Sysbench 测试 TiDB
+# DM 1.0-GA 性能测试报告
 
-本次测试使用的是 TiDB 3.0 Beta 和 Sysbench 1.0.14。建议使用 Sysbench 1.0 或之后的更新版本，可在[此处](https://github.com/akopytov/sysbench/releases/tag/1.0.14)下载。
+本报告记录了对 1.0-GA 版本的 DM 进行性能测试的目的、环境、场景和结果。
+
+## 测试目的
+
+该性能测试用于评估使用 DM 进行全量数据导入和增量数据同步的性能上限，并根据测试结果提供 DM 同步任务的参考配置。
 
 ## 测试环境
 
-- [硬件要求](/v3.0/how-to/deploy/hardware-recommendations.md)
+### 测试机器信息
 
-- 参考 [TiDB 部署文档](/v3.0/how-to/deploy/orchestrated/ansible.md)部署 TiDB 集群。在 3 台服务器的条件下，建议每台机器部署 1 个 TiDB，1 个 PD，和 1 个 TiKV 实例。关于磁盘，以 32 张表、每张表 10M 行数据为例，建议 TiKV 的数据目录所在的磁盘空间大于 512 GB。 对于单个 TiDB 的并发连接数，建议控制在 500 以内，如需增加整个系统的并发压力，可以增加 TiDB 实例，具体增加的 TiDB 个数视测试压力而定。
+系统信息：
 
-IDC 机器：
+|    机器 IP    |             操作系统              |           内核版本            | 文件系统类型 |
+|:-----------:|:-----------------------------:|:-------------------------:|:------:|
+| 172.16.4.39 | CentOS Linux release 7.6.1810 | 3.10.0-957.1.3.el7.x86_64 |  ext4  |
+| 172.16.4.40 | CentOS Linux release 7.6.1810 | 3.10.0-957.1.3.el7.x86_64 |  ext4  |
+| 172.16.4.41 | CentOS Linux release 7.6.1810 | 3.10.0-957.1.3.el7.x86_64 |  ext4  |
+| 172.16.4.42 | CentOS Linux release 7.6.1810 | 3.10.0-957.1.3.el7.x86_64 |  ext4  |
+| 172.16.4.43 | CentOS Linux release 7.6.1810 | 3.10.0-957.1.3.el7.x86_64 |  ext4  |
+| 172.16.4.44 | CentOS Linux release 7.6.1810 | 3.10.0-957.1.3.el7.x86_64 |  ext4  |
 
-| 类别   | 名称                                              |
-|:---- |:----------------------------------------------- |
-| OS   | Linux (CentOS 7.3.1611)                         |
-| CPU  | 40 vCPUs, Intel® Xeon® CPU E5-2630 v4 @ 2.20GHz |
-| RAM  | 128GB                                           |
-| DISK | Intel Optane SSD P4800X 375G * 1                |
-| NIC  | 10Gb Ethernet                                   |
+硬件信息：
 
-## 测试方案
+| 类别  |                         指标                          |
+|:---:|:---------------------------------------------------:|
+| CPU | 40 vCPUs, Intel(R) Xeon(R) CPU E5-2630 v4 @ 2.20GHz |
+| 内存  |         192GB, 12 条 16GB DIMM DDR4 2133 MHz         |
+| 磁盘  |          Intel DC P4510 4TB NVMe PCIe 3.0           |
+| 网卡  |                        万兆网卡                         |
 
-### TiDB 版本信息
+其他：
 
-| 组件   | GitHash                                  |
-|:---- |:---------------------------------------- |
-| TiDB | 7a240818d19ae96e4165af9ea35df92466f59ce6 |
-| TiKV | e26ceadcdfe94fb6ff83b5abb614ea3115394bcd |
-| PD   | 5e81548c3c1a1adab056d977e7767307a39ecb70 |
+* 服务器间网络延迟：rtt min/avg/max/mdev = 0.074/0.088/0.121/0.019 ms
 
 ### 集群拓扑
 
-| 机器 IP        | 部署实例                        |
-|:------------ |:--------------------------- |
-| 172.16.30.31 | 3*sysbench                  |
-| 172.16.30.33 | 1\*tidb 1\*pd 1\*tikv |
-| 172.16.30.34 | 1\*tidb 1\*pd 1\*tikv |
-| 172.16.30.35 | 1\*tidb 1\*pd 1\*tikv |
+|    机器 IP    |           部署的服务            |
+|:-----------:|:--------------------------:|
+| 172.16.4.39 | PD1, DM-worker1, DM-master |
+| 172.16.4.40 |        PD2, MySQL1         |
+| 172.16.4.41 |         PD3, TiDB          |
+| 172.16.4.42 |           TiKV1            |
+| 172.16.4.43 |           TiKV2            |
+| 172.16.4.44 |           TiKV3            |
 
-### TiDB 配置
+### 各服务版本信息
 
-升高日志级别，可以减少打印日志数量，对 TiDB 的性能有积极影响。开启 TiDB 配置中的 `prepared plan cache`，以减少优化执行计划的开销。具体在 TiDB 配置文件中加入：
+- MySQL 版本: 5.7.27-log
+- TiDB 版本: v4.0.0-alpha-198-gbde7f440e
+- DM 版本: v1.0.1
+- Sysbench 版本: 1.0.17
 
-```toml
-[log]
-level = "error"
-[prepared-plan-cache]
-enabled = true
-```
+## 测试场景
 
-### TiKV 配置
+### 同步数据流
 
-升高 TiKV 的日志级别同样有利于提高性能表现。
+MySQL1 (172.16.4.40) -> DM-worker1 (172.16.4.39) -> TiDB (172.16.4.41)
 
-由于 TiKV 是以集群形式部署的，在 Raft 算法的作用下，能保证大多数节点已经写入数据。因此，除了对数据安全极端敏感的场景之外，raftstore 中的 `sync-log` 选项可以关闭。
+### 公共配置信息
 
-TiKV 集群存在两个 Column Family（Default CF 和 Write CF），主要用于存储不同类型的数据。对于 Sysbench 测试，导入数据的 Column Family 在 TiDB 集群中的比例是固定的。这个比例是：
-
-Default CF : Write CF = 4 : 1
-
-在 TiKV 中需要根据机器内存大小配置 RocksDB 的 block cache，以充分利用内存。以 40 GB 内存的虚拟机部署一个 TiKV 为例，其 block cache 建议配置如下:
-
-```toml
-log-level = "error"
-[raftstore]
-sync-log = false
-[rocksdb.defaultcf]
-block-cache-size = "24GB"
-[rocksdb.writecf]
-block-cache-size = "6GB"
-```
-
-对于 3.0 及以后的版本，还可以使用共享 block cache 的方式进行设置：
-
-```toml
-log-level = "error"
-[raftstore]
-sync-log = false
-[storage.block-cache]
-capacity = "30GB"
-```
-
-更详细的 TiKV 参数调优请参考 [TiKV 性能参数调优](/v3.0/reference/performance/tune-tikv.md)。
-
-## 测试过程
-
-> **注意：**
-> 
-> 此次测试并没有使用如 HAproxy 等负载均衡工具。在 TiDB 单一节点上进行 Sysbench 测试，并把结果相加。负载均衡工具和不同版本参数也会影响性能表现。
-
-### Sysbench 配置
-
-以下为 Sysbench 配置文件样例：
-
-```txt
-mysql-host={TIDB_HOST}
-mysql-port=4000
-mysql-user=root
-mysql-db=sbtest
-time=600
-threads={8, 16, 32, 64, 128, 256}
-report-interval=10
-db-driver=mysql
-```
-
-可根据实际需求调整其参数，其中 `TIDB_HOST` 为 TiDB server 的 IP 地址（配置文件中不能写多个地址），`threads` 为测试中的并发连接数，可在 “8, 16, 32, 64, 128, 256” 中调整，导入数据时，建议设置 threads = 8 或者 16。调整后，将该文件保存为名为 **config** 的文件。
-
-**配置文件**参考示例如下：
-
-```txt
-mysql-host=172.16.30.33
-mysql-port=4000
-mysql-user=root
-mysql-db=sbtest
-time=600
-threads=16
-report-interval=10
-db-driver=mysql
-```
-
-### 数据导入
-
-在数据导入前，需要对 TiDB 进行简单设置。在 MySQL 客户端中执行如下命令：
+#### 同步数据表结构
 
 {{< copyable "sql" >}}
 
 ```sql
-set global tidb_disable_txn_auto_retry = off;
+CREATE TABLE `sbtest` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `k` int(11) NOT NULL DEFAULT '0',
+  `c` char(120) CHARSET utf8mb4 COLLATE utf8mb4_bin NOT NULL DEFAULT '',
+  `pad` char(60) CHARSET utf8mb4 COLLATE utf8mb4_bin NOT NULL DEFAULT '',
+  PRIMARY KEY (`id`),
+  KEY `k_1` (`k`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin
 ```
 
-然后退出客户端。TiDB 使用乐观事务模型，当发现并发冲突时，会回滚事务。将 `tidb_disable_txn_auto_retry` 设置为 `off` 会开启事务冲突后的自动重试机制，可以尽可能避免事务冲突报错导致 Sysbench 程序退出的问题。
+#### 数据库配置
 
-重新启动 MySQL 客户端执行以下 SQL 语句，创建数据库 `sbtest`：
+使用 TiDB Ansible 部署 TiDB 测试集群，所有配置使用 TiDB Ansible 提供的默认配置。
 
-{{< copyable "sql" >}}
+### 全量导入性能测试用例
 
-```sql
-create database sbtest;
-```
+#### 测试过程
 
-调整 Sysbench 脚本创建索引的顺序。Sysbench 按照“建表->插入数据->创建索引”的顺序导入数据。该方式对于 TiDB 需要花费更多的导入时间。用户可以通过调整顺序来加速数据的导入。
+- 部署测试环境
+- 使用 `sysbench` 在上游创建测试表，并生成全量导入的测试数据
+- 在 `full` 模式下启动 DM 同步任务
 
-假设用户使用的 [Sysbench](https://github.com/akopytov/sysbench/tree/1.0.14) 版本。我们可以通过以下两种方式来修改。
-
-1. 直接下载为 TiDB 修改好的 [oltp_common.lua](https://raw.githubusercontent.com/pingcap/tidb-bench/master/sysbench/sysbench-patch/oltp_common.lua) 文件，覆盖 `/usr/share/sysbench/oltp_common.lua` 文件。
-2. 将 `/usr/share/sysbench/oltp_common.lua` 的第 [235](https://github.com/akopytov/sysbench/blob/1.0.14/src/lua/oltp_common.lua#L235) 行到第 [240](https://github.com/akopytov/sysbench/blob/1.0.14/src/lua/oltp_common.lua#L240) 行移动到第 198 行以后。
-
-> **注意：**
-> 
-> 此操作为可选操作，仅节约了数据导入时间。
-
-命令行输入以下命令，开始导入数据，config 文件为上一步中配置的文件：
+`sysbench` 生成数据的命令如下所示：
 
 {{< copyable "shell-regular" >}}
 
 ```bash
-sysbench --config-file=config oltp_point_select --tables=32 --table-size=10000000 prepare
+sysbench --test=oltp_insert --tables=4 --mysql-host=172.16.4.40 --mysql-port=3306 --mysql-user=root --mysql-db=dm_benchmark --db-driver=mysql --table-size=50000000 prepare
 ```
 
-### 数据预热与统计信息收集
+#### 全量导入性能测试结果
 
-数据预热可将磁盘中的数据载入内存的 block cache 中，预热后的数据对系统整体的性能有较大的改善，建议在每次重启集群后进行一次数据预热。
+在 `mydumper` 中使用 `--rows` 选项可以开启单表多线程并发导出（当前 `mydumper` 在 MySQL 的单表并发会优先选出一列做拆分基准，选择优先级为主键>唯一索引>普通索引，选出目标列后需保证该列为 INT 类型；针对 `TiDB` 的并发导出则会优先尝试 `_tidb_rowid` 列），以下的第一项测试用于验证开启单表并发导出可以提高数据导出性能。
 
-Sysbench 1.0.14 没有提供数据预热的功能，因此需要手动进行数据预热。如果使用更新的 Sysbench 版本，可以使用自带的预热功能。
+|    测试项    | 导出线程数 |       mydumper extra-args 参数        | 导出速度 (MB/s) |
+|:---------:|:-----:|:-----------------------------------:|:-----------:|
+| 开启单表并发导出  |  32   | "--rows 320000 --regex '^sbtest.*'" |   191.03    |
+| 不开启单表并发导出 |   4   |        "--regex '^sbtest.*'"        |    72.22    |
 
-以 Sysbench 中某张表 sbtest7 为例，执行如下 SQL 语句 进行数据预热：
+|    测试项    | 事务执行延迟 (s) | 每条插入语句包含的行数 | 导入数据量 (GB) | 导入时间 (s) | 导入速度 (MB/s) |
+|:---------:|:----------:|:-----------:|:----------:|:--------:|:-----------:|
+| load data |   1.737    |    4878     |   38.14    |  2346.9  |    16.64    |
 
-{{< copyable "sql" >}}
+#### 在 load 处理单元使用不同 pool size 的性能测试对比
 
-```sql
-SELECT COUNT(pad) FROM sbtest7 USE INDEX (k_7);
-```
-
-统计信息收集有助于优化器选择更为准确的执行计划，可以通过 `analyze` 命令来收集表 sbtest 的统计信息，每个表都需要统计。
-
-{{< copyable "sql" >}}
-
-```sql
-ANALYZE TABLE sbtest7;
-```
-
-### Point select 测试命令
+该测试中全量导入的数据量为 3.78 GB，使用以下 `sysbench` 命令生成：
 
 {{< copyable "shell-regular" >}}
 
 ```bash
-sysbench --config-file=config oltp_point_select --tables=32 --table-size=10000000 run
+sysbench --test=oltp_insert --tables=4 --mysql-host=172.16.4.40 --mysql-port=3306 --mysql-user=root --mysql-db=dm_benchmark --db-driver=mysql --table-size=5000000 prepare
 ```
 
-### Update index 测试命令
+| load 处理单元 pool size | 事务执行时间 (s) | 导入时间 (s) | 导入速度 (MB/s) | TiDB 99 duration (s) |
+|:-------------------:|:----------:|:--------:|:-----------:|:--------------------:|
+|          2          |   0.250    |  425.9   |     9.1     |         0.23         |
+|          4          |   0.523    |  360.1   |    10.7     |         0.41         |
+|          8          |   0.986    |  267.0   |    14.5     |         0.93         |
+|         16          |   2.022    |  265.9   |    14.5     |         2.68         |
+|         32          |   3.778    |  262.3   |    14.7     |         6.39         |
+|         64          |   7.452    |  281.9   |    13.7     |         8.00         |
+
+#### 导入数据时每条插入语句包含行数不同的情况下的性能测试对比
+
+该测试中全量导入的数据量为 3.78 GB，load 处理单元 `pool-size` 大小为 32。插入语句包含行数通过 mydumper 的 `--statement-size` 来控制。
+
+| 每条语句中包含的行数 | mydumper extra-args 参数 | 事务执行时间 (s) | 导入时间 (s) | 导入速度 (MB/s) | TiDB 99 duration (s) |
+|:----------:|:----------------------:|:----------:|:--------:|:-----------:|:--------------------:|
+|    7426    |  -s 1500000 -r 320000  |   6.982    |  258.3   |    15.0     |        10.34         |
+|    4903    |  -s 1000000 -r 320000  |   3.778    |  262.3   |    14.7     |         6.39         |
+|    2470    |  -s 500000 -r 320000   |   1.962    |  271.36  |    14.3     |         2.00         |
+|    1236    |  -s 250000 -r 320000   |   1.911    |  283.3   |    13.7     |         1.50         |
+|    618     |  -s 125000 -r 320000   |   0.683    |  299.9   |    12.9     |         0.73         |
+|    310     |   -s 62500 -r 320000   |   0.413    |  322.6   |    12.0     |         0.49         |
+
+### 增量同步性能测试用例
+
+#### 测试过程
+
+- 部署测试环境
+- 使用 `sysbench` 在上游创建测试表，并生成全量导入的测试数据
+- 在 `all` 模式下启动 DM 同步任务，等待同步任务进入 `sync` 同步阶段
+- 使用 `sysbench` 在上游持续生成增量数据，通过 `query-status` 命令观测 DM 的同步状态，通过 Grafana 观测 DM 和 TiDB 的监控指标。
+
+#### 增量同步性能测试结果
+
+上游 `sysbench` 生成增量数据命令
 
 {{< copyable "shell-regular" >}}
 
 ```bash
-sysbench --config-file=config oltp_update_index --tables=32 --table-size=10000000 run
+sysbench --test=oltp_insert --tables=4 --num-threads=32 --mysql-host=172.17.4.40 --mysql-port=3306 --mysql-user=root --mysql-db=dm_benchmark --db-driver=mysql --report-interval=10 --time=1800 run
 ```
 
-### Read-only 测试命令
+该性能测试中同步任务 `sync` 处理单元 `worker-count` 设置为 32，`batch` 大小设置为 100。
 
-{{< copyable "shell-regular" >}}
+|             组件             |                    qps                    |   tps    |       95% 延迟        |
+|:--------------------------:|:-----------------------------------------:|:--------:|:-------------------:|
+|           MySQL            |                  42.79k                   |  42.79k  |       1.18ms        |
+|     DM relay log unit      |                     -                     | 11.3MB/s |  45us (binlog 读延迟)  |
+| DM binlog replication unit | 22.97k (binlog event 接收qps，不包括忽略的 event)  |    -     |    20ms (事务执行时间)    |
+|            TiDB            | 31.30k (Begin/Commit 3.93k Insert 22.76k) |  4.16k   | 95%: 6.4ms 99%: 9ms |
 
-```bash
-sysbench --config-file=config oltp_read_only --tables=32 --table-size=10000000 run
-```
+#### 在 sync 处理单元使用不同并发度的性能测试对比
 
-## 测试结果
+| sync 处理单元 worker-count 数 | DM 内部 job tps | DM 事务执行时间 (ms) | TiDB qps | TiDB 99 duration (ms) |
+|:------------------------:|:-------------:|:--------------:|:--------:|:---------------------:|
+|            4             |     7074      |       63       |   7.1k   |           3           |
+|            8             |     14684     |       64       |  14.9k   |           4           |
+|            16            |     23486     |       56       |  24.9k   |           6           |
+|            32            |     23345     |       28       |  29.2k   |          10           |
+|            64            |     23302     |       30       |  31.2k   |          16           |
+|           1024           |     22225     |       70       |  56.9k   |          70           |
 
-测试了数据 32 表，每表有 10M 数据。
+#### 不同数据分布的增量同步性能测试对比
 
-对每个 tidb-server 进行了 Sysbench 测试，将结果相加，得出最终结果：
+| sysbench 语句类型 | DM relay log 持久化速率 (MB/s) | DM 内部 job tps | DM 事务执行时间 (ms) | TiDB qps | TiDB 99 duration (ms) |
+|:-------------:|:-------------------------:|:-------------:|:--------------:|:--------:|:---------------------:|
+|  insert_only  |           11.3            |     23345     |       28       |  29.2k   |          10           |
+|  write_only   |           18.7            |     33470     |      129       |  34.6k   |          11           |
 
-### oltp_point_select
+## 推荐同步任务参数配置
 
-| 类型           | Thread   | TPS       | QPS       | avg.latency(ms) | .95.latency(ms) | max.latency(ms) |
-|:------------ |:-------- |:--------- |:--------- |:--------------- |:--------------- |:--------------- |
-| point_select | 3\*8   | 67502.55  | 67502.55  | 0.36            | 0.42            | 141.92          |
-| point_select | 3\*16  | 120141.84 | 120141.84 | 0.40            | 0.52            | 20.99           |
-| point_select | 3\*32  | 170142.92 | 170142.92 | 0.58            | 0.99            | 28.08           |
-| point_select | 3\*64  | 195218.54 | 195218.54 | 0.98            | 2.14            | 21.82           |
-| point_select | 3\*128 | 208189.53 | 208189.53 | 1.84            | 4.33            | 31.02           |
+### dump 处理单元
 
-![oltp_point_select](/media/oltp_point_select.png)
+推荐每一条插入语句的大小在 200KB ~ 1MB 之间，相应每条语句包含的行数大约在 1000-5000（具体包含的语句行数与实际场景中每行数据大小有关）。
 
-### oltp_update_index
+### load 处理单元
 
-| 类型                  | Thread   | TPS      | QPS      | avg.latency(ms) | .95.latency(ms) | max.latency(ms) |
-|:------------------- |:-------- |:-------- |:-------- |:--------------- |:--------------- |:--------------- |
-| oltp_update_index | 3\*8   | 9668.98  | 9668.98  | 2.51            | 3.19            | 103.88          |
-| oltp_update_index | 3\*16  | 12834.99 | 12834.99 | 3.79            | 5.47            | 176.90          |
-| oltp_update_index | 3\*32  | 15955.77 | 15955.77 | 6.07            | 9.39            | 4787.14         |
-| oltp_update_index | 3\*64  | 18697.17 | 18697.17 | 10.34           | 17.63           | 4539.04         |
-| oltp_update_index | 3\*128 | 20446.81 | 20446.81 | 18.98           | 40.37           | 5394.75         |
-| oltp_update_index | 3\*256 | 23563.03 | 23563.03 | 32.86           | 78.60           | 5530.69         |
+推荐 `pool-size` 设置为 16。
 
-![oltp_update_index](/media/oltp_update_index.png)
+### sync 处理单元
 
-### oltp_read_only
-
-| 类型               | Thread   | TPS     | QPS       | avg.latency(ms) | .95.latency(ms) | max.latency(ms) |
-|:---------------- |:-------- |:------- |:--------- |:--------------- |:--------------- |:--------------- |
-| oltp_read_only | 3\*8   | 2411.00 | 38575.96  | 9.92            | 20.00           | 92.23           |
-| oltp_read_only | 3\*16  | 3873.53 | 61976.50  | 12.25           | 16.12           | 56.94           |
-| oltp_read_only | 3\*32  | 5066.88 | 81070.16  | 19.42           | 26.20           | 123.41          |
-| oltp_read_only | 3\*64  | 5466.36 | 87461.81  | 34.65           | 63.20           | 231.19          |
-| oltp_read_only | 3\*128 | 6684.16 | 106946.59 | 57.29           | 97.55           | 180.85          |
-
-![oltp_read_only](/media/oltp_read_only.png)
-
-## 常见问题
-
-### 在高并发压力下，TiDB、TiKV 的配置都合理，为什么整体性能还是偏低？
-
-这种情况可能与使用了 proxy 有关。可以尝试直接对单个 TiDB 加压，将求和后的结果与使用 proxy 的情况进行对比。
-
-以 HAproxy 为例。`nbproc` 参数可以增加其最大启动的进程数，较新版本的 HAproxy 还支持 `nbthread` 和 `cpu-map` 等。这些都可以减少对其性能的不利影响。
-
-### 在高并发压力下，为什么 TiKV 的 CPU 利用率依然很低？
-
-TiKV 虽然整体 CPU 偏低，但部分模块的 CPU 可能已经达到了很高的利用率。
-
-TiKV 的其他模块，如 storage readpool、coprocessor 和 gRPC 的最大并发度限制是可以通过 TiKV 的配置文件进行调整的。
-
-通过 Grafana 的 TiKV Thread CPU 监控面板可以观察到其实际使用率。如出现多线程模块瓶颈，可以通过增加该模块并发度进行调整。
-
-### 在高并发压力下，TiKV 也未达到 CPU 使用瓶颈，为什么 TiDB 的 CPU 利用率依然很低？
-
-在某些高端设备上，使用的是 NUMA 架构的 CPU，跨 CPU 访问远端内存将极大降低性能。TiDB 默认将使用服务器所有 CPU，goroutine 的调度不可避免地会出现跨 CPU 内存访问。
-
-因此，建议在 NUMA 架构服务器上，部署 *n* 个 TiDB（*n* = NUMA CPU 的个数），同时将 TiDB 的 `max-procs` 变量的值设置为与 NUMA CPU 的核数相同。
+推荐将 `batch` 设置为 100，`worker-count` 设置为 16 ~ 32。
