@@ -1,34 +1,61 @@
----
-version: 0
-jobs:
-  build:
-    docker:
-      - 
-        image: crwdns87968:0crwdne87968:0
-    working_directory: crwdns87970:0crwdne87970:0
-    steps:
-      - crwdns87972:0crwdne87972:0
-      - 
-        run:
-          name: "crwdns87974:0crwdne87974:0"
-          command: crwdns87976:0crwdne87976:0
-      - 
-        run:
-          name: "crwdns87978:0crwdne87978:0"
-          command: crwdns87980:0crwdne87980:0
-      - 
-        run:
-          name: "crwdns87982:0crwdne87982:0"
-          command: crwdns87984:0crwdne87984:0
-      - 
-        deploy:
-          name: "crwdns87986:0crwdne87986:0"
-          command: |
-            crwdns87988:0${CIRCLE_BRANCH}crwdne87988:0
-      - 
-        run:
-          name: "crwdns87990:0crwdne87990:0"
-          command: crwdns87992:0crwdne87992:0
-      - 
-        store_artifacts:
-          path: crwdns87994:0crwdne87994:0
+## crwdns87162:0crwdne87162:0
+
+- crwdns87164:0crwdne87164:0
+  - crwdns87166:0crwdne87166:0
+  - crwdns87168:0crwdne87168:0
+  - crwdns87170:0crwdne87170:0
+- crwdns87172:0crwdne87172:0
+  - crwdns87174:0crwdne87174:0
+  - crwdns87176:0crwdne87176:0
+  - crwdns87178:0crwdne87178:0
+- crwdns87180:0crwdne87180:0
+- crwdns87182:0crwdne87182:0
+- crwdns87184:0crwdne87184:0
+- crwdns87186:0crwdne87186:0
+- crwdns87188:0crwdne87188:0
+- crwdns87190:0crwdne87190:0
+- crwdns87192:0crwdne87192:0
+- crwdns87194:0crwdne87194:0
+- crwdns87196:0crwdne87196:0
+
+## crwdns87198:0crwdne87198:0
+
+- crwdns87200:0crwdne87200:0
+  - crwdns87202:0crwdne87202:0
+  - crwdns87204:0crwdne87204:0
+  - crwdns87206:0crwdne87206:0
+  - crwdns87208:0crwdne87208:0
+  - crwdns87210:0crwdne87210:0
+- crwdns87212:0crwdne87212:0
+  - crwdns87214:0crwdne87214:0
+- crwdns87216:0crwdne87216:0
+  - crwdns87218:0crwdne87218:0
+- crwdns87220:0crwdne87220:0
+  - crwdns87222:0crwdne87222:0
+- crwdns87224:0crwdne87224:0
+  - crwdns87226:0crwdne87226:0
+  - crwdns87228:0crwdne87228:0
+  - crwdns87230:0crwdne87230:0
+- crwdns87232:0crwdne87232:0
+
+## crwdns87234:0crwdne87234:0
+
+- crwdns87236:0crwdne87236:0
+  - crwdns87238:0crwdne87238:0
+- crwdns87240:0crwdne87240:0
+- crwdns87242:0crwdne87242:0
+- crwdns87244:0crwdne87244:0
+
+## crwdns87246:0crwdne87246:0
+
+- crwdns87248:0crwdne87248:0
+- crwdns87250:0crwdne87250:0
+- crwdns87252:0crwdne87252:0
+- crwdns87254:0crwdne87254:0
+
+## crwdns87256:0crwdne87256:0
+- crwdns87258:0crwdne87258:0
+- crwdns87260:0crwdne87260:0
+- crwdns87262:0crwdne87262:0
+- crwdns87264:0crwdne87264:0
+- crwdns87266:0crwdne87266:0
