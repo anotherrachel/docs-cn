@@ -1,18 +1,24 @@
 ---
-title: crwdns163280:0crwdne163280:0
-category: crwdns163282:0crwdne163282:0
+title: crwdns163260:0crwdne163260:0
+category: crwdns163262:0crwdne163262:0
 ---
 
-# crwdns163284:0crwdne163284:0
+# crwdns163264:0crwdne163264:0
 
-crwdns163286:0crwdne163286:0
+crwdns163266:0crwdne163266:0
 
-![crwdns163290:0crwdne163290:0](crwdns163288:0crwdne163288:0)
+crwdns163268:0crwdne163268:0
 
-crwdns163292:0crwdne163292:0
+```toml
+crwdns163270:0[check-tables]crwdnd163270:0[table-config]crwdnd163270:0[table-config.source-tables]crwdne163270:0
+```
 
-``` toml
-crwdns163294:0crwdne163294:0
+crwdns163272:0crwdne163272:0
 
-crwdns163296:0[check-tables]crwdnd163296:0[table-config]crwdnd163296:0[table-config.source-tables]crwdnd163296:0[table-config.source-tables]crwdnd163296:0[table-config.source-tables]crwdnd163296:0[source-db]crwdnd163296:0[source-db]crwdnd163296:0[target-db]crwdne163296:0
+crwdns163274:0crwdne163274:0
+
+```toml
+crwdns163276:0[check-tables]crwdnd163276:0[table-rules]crwdne163276:0
+    crwdns163278:0crwdne163278:0
+
 ```
