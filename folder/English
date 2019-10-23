@@ -1,35 +1,46 @@
 ---
-title: TiDB Lightning 常见的错误用法
+title: Table Selector
+summary: 介绍 DM 的 Table Selector
 category: reference
+aliases:
+  - '/docs-cn/tools/dm/table-selector/'
 ---
 
-# TiDB Lightning 常见的错误用法
+# Table Selector
 
-本文介绍了 [TiDB Lightning](/v3.0/reference/tools/tidb-lightning/overview.md) 使用过程中常见的出错场景以及相应的处理方式。
+Table Selector 提供了一种基于[通配符](https://zh.wikipedia.org/wiki/%E9%80%9A%E9%85%8D%E7%AC%A6) 来匹配指定 `schema/table` 的功能。
 
-## 报错：`checksum mismatched remote vs local`
+## 通配符
 
-在数据导入过程中遇到下面的报错
+table selector 在 `schema-pattern`/`table-pattern` 中可以使用以下两个通配符：
 
-```log
-Error: checksum mismatched remote vs local => (checksum: 3828723015727756136 vs 7895534721177712659) (total_kvs: 1221416844 vs 1501500000) (total_bytes:237660308510 vs 292158203078)
-```
++ 星号(`*`)
 
-### 原因
+  - 匹配零个或者多个字符。例如， `doc*` 匹配 `doc` 和 `document`，但是不匹配 `dodo`。
+  - `*` 只能放在 pattern 的最后一位，例如，支持 `doc*`，但是不支持 `do*c`。
 
-* 先前使用过 TiDB Lightning 进行数据导入，但是对应的 [checkpoint](/v3.0/reference/tools/tidb-lightning/checkpoints.md) 的数据没有被清理，存在残留的数据。可以通过查看 TiDB Lightning 第一次启动 log 来确认：
-    * `[checkpoint] driver = file`，如果对应 TiDB Lightning 导入时间点的 log 存在 `open checkpoint file failed, going to create a new one`，那么 `checkpoint` 已经被正确清理，否则存在残留数据可能导致导入数据缺失；
-    * `[checkpoint] driver = mysql`，可以通过使用 TiDB API `curl http://{TiDBIP}:10080/schema/{checkpoint.schema}/{checkpoint.table}` 来查询对应 `checkpoint table` 的创建时间，从而判断是否正确清理了 `checkpoint`。
++ 问号(`?`)
 
-* TiDB Lightning 导入的数据源存在冲突的数据
-    * 不同行的数据具有相同的主键或唯一键
+  - 匹配任意一个空字符除外的字符。
 
-### 解决方案
+## 匹配规则
 
-* 删除出现 `checksum mismatch` 错误的表的数据
+- `schema-pattern` 限制不能为空；
+- `table-pattern` 可以设置为空。设置为空时，将只根据 `schema-pattern` 对 `schema` 进行匹配，然后返回匹配结果；
+- `table-pattern` 不为空时，分别根据 `schema-pattern` 和 `table-pattern` 进行匹配，两个都匹配则结果为匹配。
 
+## 使用示例
+
+- 匹配所有库名以 `schema_` 开头的 schema 和 table
+
+    ```yaml
+    schema-pattern： "schema_*"
+    table-pattern： ""
     ```
-    tidb-lightning-ctl --config conf/tidb-lightning.toml --checkpoint-error-destroy=all
-    ```
 
-* 需要寻找办法检测数据源是否存在冲突数据，TiDB Lightning 一般需要处理大量的数据，所以目前还未提供有效的冲突检测和处理措施。
+- 匹配所有库名以 `schema_` 为前缀，并且表名以 `table_` 前缀的表
+
+    ```yaml
+    schema-pattern = "schema_*"
+    table-pattern = "table_*"
+    ```
