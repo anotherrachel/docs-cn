@@ -1,51 +1,146 @@
 ---
-title: crwdns221666:0crwdne221666:0
-category: crwdns221668:0crwdne221668:0
+title: crwdns221514:0crwdne221514:0
+category: crwdns221516:0crwdne221516:0
 aliases:
-  - 'crwdns221670:0crwdne221670:0'
-  - 'crwdns221672:0crwdne221672:0'
+  - 'crwdns221518:0crwdne221518:0'
 ---
 
-# crwdns221674:0crwdne221674:0
+# crwdns221520:0crwdne221520:0
 
-crwdns221676:0crwdne221676:0
+## crwdns221522:0crwdne221522:0
 
-crwdns221678:0crwdne221678:0
+crwdns221524:0crwdne221524:0
 
-| crwdns221680:0crwdne221680:0 | crwdns221682:0crwdne221682:0 | crwdns221684:0crwdne221684:0 |
-| ---------------------------- | ---------------------------- | ---------------------------- |
-| crwdns221686:0crwdne221686:0 | crwdns221688:0crwdne221688:0 |                              |
-| crwdns221690:0crwdne221690:0 | crwdns221692:0crwdne221692:0 | crwdns221694:0crwdne221694:0 |
-| crwdns221696:0crwdne221696:0 | crwdns221698:0crwdne221698:0 | crwdns221700:0crwdne221700:0 |
+crwdns221526:0crwdne221526:0
 
-## crwdns221702:0crwdne221702:0
+* crwdns221528:0crwdne221528:0
+* crwdns221530:0crwdne221530:0
 
-> **crwdns221704:0crwdne221704:0**
-> 
-> crwdns221706:0crwdne221706:0
+## crwdns221532:0crwdne221532:0
 
-crwdns221708:0crwdne221708:0
+crwdns221534:0crwdne221534:0
 
-1. crwdns221710:0crwdne221710:0
-2. crwdns221712:0crwdne221712:0
-3. crwdns221714:0crwdne221714:0
-4. crwdns221716:0crwdne221716:0
-5. crwdns221718:0crwdne221718:0
+![crwdns221538:0crwdne221538:0](crwdns221536:0crwdne221536:0)
 
-    crwdns221720:0crwdne221720:0
+crwdns221540:0crwdne221540:0
 
-    crwdns221722:0crwdne221722:0
+- crwdns221542:0crwdne221542:0
+
+- crwdns221544:0crwdne221544:0
+
+## crwdns221546:0crwdne221546:0
+
+### crwdns221548:0crwdne221548:0
+
+crwdns221550:0crwdne221550:0
+
+### crwdns221552:0crwdne221552:0
+
+#### crwdns221554:0crwdne221554:0
+
+* crwdns221556:0crwdne221556:0
+* crwdns221558:0crwdne221558:0
+
+    crwdns221560:0crwdne221560:0
+
+    ![crwdns221564:0crwdne221564:0](crwdns221562:0crwdne221562:0)
+
+* crwdns221566:0crwdne221566:0
+
+* crwdns221568:0crwdne221568:0
+
+    crwdns221570:0crwdne221570:0
+
+    * crwdns221572:0${drainer_savepoint_dir}crwdnd221572:0${pd_urls}crwdne221572:0
+    * crwdns221574:0crwdne221574:0
+    * crwdns221576:0crwdne221576:0
+    * crwdns221578:0${drainer_savepoint_dir}crwdne221578:0
+
+* crwdns221580:0crwdne221580:0
+
+    ```toml
+    crwdns221582:0[syncer]crwdnd221582:0[syncer.to]crwdne221582:0
+    ```
+
+#### crwdns221584:0crwdne221584:0
+
+* crwdns221586:0crwdne221586:0
+    * crwdns221588:0crwdne221588:0
+        * crwdns221590:0crwdne221590:0
+    * crwdns221592:0crwdne221592:0
+    * crwdns221594:0crwdne221594:0
+        * crwdns221596:0crwdne221596:0
+
+* crwdns221598:0crwdne221598:0
+    * crwdns221600:0crwdne221600:0
+        * crwdns221602:0crwdne221602:0
+    * crwdns221604:0crwdne221604:0
+        * crwdns221606:0crwdne221606:0
+
+#### crwdns221608:0crwdne221608:0
+
+1. crwdns221610:0crwdne221610:0
+
+    ```
+    crwdns221612:0crwdne221612:0
+    ```
+
+ 2. crwdns221614:0crwdne221614:0
+
+    ```toml
+    crwdns221616:0crwdne221616:0
+    crwdns221618:0crwdne221618:0
+    ```
+
+3. crwdns221620:0crwdne221620:0
+
+    crwdns221622:0crwdne221622:0
 
     ```bash
-    crwdns221724:0crwdne221724:0
+    crwdns221624:0crwdne221624:0
     ```
 
+#### crwdns221626:0crwdne221626:0
+
+1. crwdns221628:0crwdne221628:0
+
     ```
-    crwdns221726:0crwdne221726:0
+    crwdns221630:0crwdne221630:0
     ```
 
+2. crwdns221632:0crwdne221632:0
 
-    crwdns221728:0crwdne221728:0
+    ```toml
+    crwdns221634:0crwdne221634:0
 
-6. crwdns221730:0crwdne221730:0
-7. crwdns221732:0crwdne221732:0
+    crwdns221636:0crwdne221636:0
+    crwdns221638:0[syncer]crwdnd221638:0[syncer.replicate-do-table]crwdnd221638:0[syncer.replicate-do-table]crwdnd221638:0[syncer.to]crwdnd221638:0[syncer.to]crwdne221638:0
+    ```
+
+3. crwdns221640:0crwdne221640:0
+
+    crwdns221642:0crwdne221642:0
+
+    ```bash
+    crwdns221644:0crwdne221644:0
+    ```
+
+## crwdns221646:0crwdne221646:0
+
+crwdns221648:0crwdne221648:0
+
+### crwdns221650:0crwdne221650:0
+
+crwdns221652:0crwdne221652:0
+
+crwdns221654:0crwdne221654:0
+
+### crwdns221656:0crwdne221656:0
+
++ crwdns221658:0crwdne221658:0
+
+    crwdns221660:0crwdne221660:0
+
++ crwdns221662:0crwdne221662:0
+
+    crwdns221664:0crwdne221664:0
