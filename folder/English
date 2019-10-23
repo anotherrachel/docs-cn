@@ -1,119 +1,101 @@
 ---
-title: TRUNCATE
-summary: TiDB 数据库中 TRUNCATE 的使用概况。
+title: SET TRANSACTION
+summary: TiDB 数据库中 SET TRANSACTION 的使用概况。
 category: reference
 ---
 
-# TRUNCATE
+# SET TRANSACTION
 
-`TRUNCATE` 语句以非事务方式从表中删除所有数据。可认为 `TRUNCATE` 语句同 `DROP TABLE` + `CREATE TABLE` 组合在语义上相同，定义与 `DROP TABLE` 语句相同。
-
-`TRUNCATE TABLE tableName` 和 `TRUNCATE tableName` 均为有效语法。
+`SET TRANSACTION` 语句用于在 `GLOBAL` 或 `SESSION` 的基础上更改当前的隔离级别，是 `SET transaction_isolation ='new-value'` 的替代语句，提供 MySQL 和 SQL 标准的兼容性。
 
 ## 语法图
 
-**TruncateTableStmt:**
+**SetStmt:**
 
-![TruncateTableStmt](/media/sqlgram/TruncateTableStmt.png)
+![SetStmt](/media/sqlgram/SetStmt.png)
 
-**OptTable:**
+**TransactionChar:**
 
-![OptTable](/media/sqlgram/OptTable.png)
+![TransactionChar](/media/sqlgram/TransactionChar.png)
 
-**TableName:**
+**IsolationLevel:**
 
-![TableName](/media/sqlgram/TableName.png)
+![IsolationLevel](/media/sqlgram/IsolationLevel.png)
 
 ## 示例
 
 {{< copyable "sql" >}}
 
 ```sql
-CREATE TABLE t1 (a INT NOT NULL PRIMARY KEY);
+SHOW SESSION VARIABLES like 'transaction_isolation';
 ```
 
 ```
-Query OK, 0 rows affected (0.11 sec)
-```
-
-{{< copyable "sql" >}}
-
-```sql
-INSERT INTO t1 VALUES (1),(2),(3),(4),(5);
-```
-
-```
-Query OK, 5 rows affected (0.01 sec)
-Records: 5  Duplicates: 0  Warnings: 0
++-----------------------+-----------------+
+| Variable_name         | Value           |
++-----------------------+-----------------+
+| transaction_isolation | REPEATABLE-READ |
++-----------------------+-----------------+
+1 row in set (0.00 sec)
 ```
 
 {{< copyable "sql" >}}
 
 ```sql
-SELECT * FROM t1;
+SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED;
 ```
 
 ```
-+---+
-| a |
-+---+
-| 1 |
-| 2 |
-| 3 |
-| 4 |
-| 5 |
-+---+
-5 rows in set (0.00 sec)
+Query OK, 0 rows affected (0.00 sec)
 ```
 
 {{< copyable "sql" >}}
 
 ```sql
-TRUNCATE t1;
+SHOW SESSION VARIABLES like 'transaction_isolation';
 ```
 
 ```
-Query OK, 0 rows affected (0.11 sec)
-```
-
-{{< copyable "sql" >}}
-
-```sql
-SELECT * FROM t1;
-```
-
-```
-Empty set (0.00 sec)
-```
-
-{{< copyable "sql" >}}
-
-```sqlS
-INSERT INTO t1 VALUES (1),(2),(3),(4),(5);
-```
-
-```
-Query OK, 5 rows affected (0.01 sec)
-Records: 5  Duplicates: 0  Warnings: 0
++-----------------------+----------------+
+| Variable_name         | Value          |
++-----------------------+----------------+
+| transaction_isolation | READ-COMMITTED |
++-----------------------+----------------+
+1 row in set (0.01 sec)
 ```
 
 {{< copyable "sql" >}}
 
 ```sql
-TRUNCATE TABLE t1;
+SET SESSION transaction_isolation = 'REPEATABLE-READ';
 ```
 
 ```
-Query OK, 0 rows affected (0.11 sec)
+Query OK, 0 rows affected (0.00 sec)
+```
+
+{{< copyable "sql" >}}
+
+```sql
+SHOW SESSION VARIABLES like 'transaction_isolation';
+```
+
+```
++-----------------------+-----------------+
+| Variable_name         | Value           |
++-----------------------+-----------------+
+| transaction_isolation | REPEATABLE-READ |
++-----------------------+-----------------+
+1 row in set (0.00 sec)
 ```
 
 ## MySQL 兼容性
 
-`TRUNCATE` 语句与 MySQL 完全兼容。如有任何兼容性差异，请在 GitHub 上提交 [issue](/v3.0/report-issue.md)。
+* TiDB 支持仅在语法中将事务设置为只读的功能。
+* 不支持隔离级别 `READ-UNCOMMITTED` 和 `SERIALIZABLE`。
+* 隔离级别 `REPEATABLE-READ` 在技术上属于快照隔离（Snapshot Isolation）。在 TiDB 中称为 `REPEATABLE-READ` 是为了和 MySQL 保持一致。
 
 ## 另请参阅
 
-* [DROP TABLE](/v3.0/reference/sql/statements/drop-table.md)
-* [DELETE](/v3.0/reference/sql/statements/delete.md)
-* [CREATE TABLE](/v3.0/reference/sql/statements/create-table.md)
-* [SHOW CREATE TABLE](/v3.0/reference/sql/statements/show-create-table.md)
+* [SET \[GLOBAL|SESSION\] <variable>](/v3.0/reference/sql/statements/set-variable.md)
+* [Isolation Levels](/v3.0/reference/transactions/transaction-isolation.md)
