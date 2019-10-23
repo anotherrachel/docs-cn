@@ -1,277 +1,137 @@
 ---
-title: TiDB 1.0 release notes
-category: Releases
+title: 数据迁移概述
+category: advanced
 ---
 
-# TiDB 1.0 Release Notes
+# 数据迁移概述
 
-2017 年 10 月 16 日，TiDB 发布 GA 版（TiDB 1.0）。该版本对 MySQL 兼容性、SQL 优化器、系统稳定性、性能做了大量的工作。
+## 概述
 
-## TiDB
+该文档详细介绍了如何将 MySQL 的数据迁移到 TiDB。
 
-+ SQL 查询优化器
-    - 调整代价模型
-    - Analyze 下推
-    - 函数签名下推
+这里我们假定 MySQL 以及 TiDB 服务信息如下：
 
-+ 优化内部数据格式，减小中间结果大小
-+ 提升 MySQL 兼容性
-+ 支持 `NO_SQL_CACHE` 语法，控制存储引擎对缓存的使用
-+ 重构 Hash Aggregator 算子，降低内存使用
-+ 支持 Stream Aggragator 算子
+| Name  | Address   | Port | User | Password |
+| ----- | --------- | ---- | ---- | -------- |
+| MySQL | 127.0.0.1 | 3306 | root | *        |
+| TiDB  | 127.0.0.1 | 4000 | root | *        |
 
-## PD
+在这个数据迁移过程中，我们会用到下面四个工具:
 
-+ 支持基于读流量的热点调度
-+ 支持设置 Store 权重，以及基于权重的调度
+- checker 检查 schema 能否被 TiDB 兼容
+- mydumper 从 MySQL 导出数据
+- loader 导入数据到 TiDB
+- syncer 增量同步 MySQL 数据到 TiDB
 
-## TiKV
+## 两种迁移场景
 
-+ Coprocessor 支持更多下推函数
-+ 支持取样操作下推
-+ 支持手动触发数据 Compact，用于快速回收空间
-+ 提升性能和稳定性
-+ 增加 Debug API，方便调试
+- 第一种场景：只全量导入历史数据 （需要 checker + mydumper + loader）；
+- 第二种场景：全量导入历史数据后，通过增量的方式同步新的数据 （需要 checker + mydumper + loader + syncer）。该场景需要提前开启 binlog 且格式必须为 ROW。
 
-## TiSpark Beta Release
+## MySQL 开启 binlog
 
-+ 支持可配置框架
-+ 支持 ThriftSever/JDBC 和 Spark SQL 脚本入口
+> **注意：**
+> 
+> 只有上文提到的第二种场景才需要在 dump 数据之前先开启 binlog**
 
-## 源码地址
++   MySQL 开启 binlog 功能，参考 [Setting the Replication Master Configuration](http://dev.mysql.com/doc/refman/5.7/en/replication-howto-masterbaseconfig.html)
++   Binlog 格式必须使用 `ROW` format，这也是 MySQL 5.7 之后推荐的 binlog 格式，可以使用如下语句打开:
 
-[源码地址](https://github.com/pingcap/tidb)
+    ```sql
+    SET GLOBAL binlog_format = ROW;
+    ```
 
-## 鸣谢
+## 使用 checker 进行 Schema 检查
 
-### 特别感谢参与项目的企业和团队
+在迁移之前，我们可以使用 TiDB 的 checker 工具，来预先检查 TiDB 是否能支持需要迁移的 table schema。如果 check 某个 table schema 失败，表明 TiDB 当前并不支持，我们不能对该 table 里面的数据进行迁移。checker 包含在 TiDB 工具集里面，我们可以直接下载。
 
-- Archon
-- Mobike
-- SpeedyCloud
-- UCloud
-- 腾讯云
-- 韩国三星研究院
+### 下载 TiDB 工具集 (Linux)
 
-### 感谢以下组织/个人提供出色的开源软件/服务
+```bash
+# 下载 tool 压缩包
+wget http://download.pingcap.org/tidb-enterprise-tools-latest-linux-amd64.tar.gz
+wget http://download.pingcap.org/tidb-enterprise-tools-latest-linux-amd64.sha256
 
-- Asta Xie
-- CNCF
-- CoreOS
-- Databricks
-- Docker
-- Github
-- Grafana
-- gRPC
-- Jepsen
-- Kubernetes
-- Namazu
-- Prometheus
-- RedHat
-- RocksDB Team
-- Rust Team
+# 检查文件完整性，返回 ok 则正确
+sha256sum -c tidb-enterprise-tools-latest-linux-amd64.sha256
+# 解开压缩包
+tar -xzf tidb-enterprise-tools-latest-linux-amd64.tar.gz
+cd tidb-enterprise-tools-latest-linux-amd64
+```
 
-### 感谢社区个人贡献者 TiDB Contributor
+### 使用 checker 检查的一个示范
 
-- 8cbx
-- Akihiro Suda
-- aliyx
-- alston111111
-- andelf
-- Andy Librian
-- Arthur Yang
-- astaxie
-- Bai, Yang
-- bailaohe
-- Bin Liu
-- Blame cosmos
-- Breezewish
-- Carlos Ferreira
-- Ce Gao
-- Changjian Zhang
-- Cheng Lian
-- Cholerae Hu
-- Chu Chao
-- coldwater
-- Cole R Lawrence
-- cuiqiu
-- cuiyuan
-- Cwen
-- Dagang
-- David Chen
-- David Ding
-- dawxy
-- dcadevil
-- Deshi Xiao
-- Di Tang
-- disksing
-- dongxu
-- dreamquster
-- Drogon
-- Du Chuan
-- Dylan Wen
-- eBoyy
-- Eric Romano
-- Ewan Chou
-- Fiisio
-- follitude
-- Fred Wang
-- follitude
-- fud
-- fudali
-- gaoyangxiaozhu
-- Gogs
-- goroutine
-- Gregory Ian
-- Guanqun Lu
-- Guilherme Hübner Franco
-- Haibin Xie
-- Han Fei
-- Hiroaki Nakamura
-- hiwjd
-- Hongyuan Wang
-- Hu Ming
-- Hu Ziming
-- Huachao Huang
-- HuaiyuXu
-- Huxley Hu
-- iamxy
-- Ian
-- insion
-- iroi44
-- Ivan.Yang
-- Jack Yu
-- jacky liu
-- Jan Mercl
-- Jason W
-- Jay
-- Jay Lee
-- Jianfei Wang
-- Jiaxing Liang
-- Jie Zhou
-- jinhelin
-- Jonathan Boulle
-- Karl Ostendorf
-- knarfeh
-- Kuiba
-- leixuechun
-- li
-- Li Shihai
-- Liao Qiang
-- Light
-- lijian
-- Lilian Lee
-- Liqueur Librazy
-- Liu Cong
-- Liu Shaohui
-- liubo0127
-- liyanan
-- lkk2003rty
-- Louis
-- louishust
-- luckcolors
-- Lynn
-- Mae Huang
-- maiyang
-- maxwell
-- mengshangqi
-- Michael Belenchenko
-- mo2zie
-- morefreeze
-- MQ
-- mxlxm
-- Neil Shen
-- netroby
-- ngaut
-- Nicole Nie
-- nolouch
-- onlymellb
-- overvenus
-- PaladinTyrion
-- paulg
-- Priya Seth
-- qgxiaozhan
-- qhsong
-- Qiannan
-- qiuyesuifeng
-- queenypingcap
-- qupeng
-- Rain Li
-- ranxiaolong
-- Ray
-- Rick Yu
-- shady
-- ShawnLi
-- Shen Li
-- Sheng Tang
-- Shirly
-- Shuai Li
-- ShuNing
-- ShuYu Wang
-- siddontang
-- silenceper
-- Simon J Mudd
-- Simon Xia
-- skimmilk6877
-- sllt
-- soup
-- Sphinx
-- Steffen
-- sumBug
-- sunhao2017
-- Tao Meng
-- Tao Zhou
-- tennix
-- tiancaiamao
-- TianGuangyu
-- Tristan Su
-- ueizhou
-- UncP
-- Unknwon
-- v01dstar
-- Van
-- WangXiangUSTC
-- wangyisong1996
-- weekface
-- wegel
-- Wei Fu
-- Wenbin Xiao
-- Wenting Li
-- Wenxuan Shi
-- winkyao
-- woodpenker
-- wuxuelian
-- Xiang Li
-- xiaojian cai
-- Xuanjia Yang
-- Xuanwo
-- XuHuaiyu
-- Yang Zhexuan
-- Yann Autissier
-- Yanzhe Chen
-- Yiding Cui
-- Yim
-- youyouhu
-- Yu Jun
-- Yuwen Shen
-- Zejun Li
-- Zhang Yuning
-- zhangjinpeng1987
-- ZHAO Yijun
-- ZhengQian
-- ZhengQianFang
-- zhengwanbo
-- Zhe-xuan Yang
-- ZhiFeng Hu
-- Zhiyuan Zheng
-- Zhou Tao
-- Zhoubirdblue
-- zhouningnan
-- Ziyi Yan
-- zs634134578
-- zyguan
-- zz-jason
-- qiukeren
-- hawkingrei
-- wangyanjun
-- zxylvlp
++   在 MySQL 的 test database 里面创建几张表，并插入数据:
+
+    ```sql
+    USE test;
+    CREATE TABLE t1 (id INT, age INT, PRIMARY KEY(id)) ENGINE=InnoDB;
+    CREATE TABLE t2 (id INT, name VARCHAR(256), PRIMARY KEY(id)) ENGINE=InnoDB;
+
+    INSERT INTO t1 VALUES (1, 1), (2, 2), (3, 3);
+    INSERT INTO t2 VALUES (1, "a"), (2, "b"), (3, "c");
+    ```
+
++   使用 checker 检查 test database 里面所有的 table
+
+    ```bash
+    ./bin/checker -host 127.0.0.1 -port 3306 -user root test
+    2016/10/27 13:11:49 checker.go:48: [info] Checking database test
+    2016/10/27 13:11:49 main.go:37: [info] Database DSN: root:@tcp(127.0.0.1:3306)/test?charset=utf8
+    2016/10/27 13:11:49 checker.go:63: [info] Checking table t1
+    2016/10/27 13:11:49 checker.go:69: [info] Check table t1 succ
+    2016/10/27 13:11:49 checker.go:63: [info] Checking table t2
+    2016/10/27 13:11:49 checker.go:69: [info] Check table t2 succ
+    ```
+
++   使用 checker 检查 test database 里面某一个 table
+
+    这里，假设我们只需要迁移 table `t1`。
+
+    ```bash
+    ./bin/checker -host 127.0.0.1 -port 3306 -user root test t1
+    2016/10/27 13:13:56 checker.go:48: [info] Checking database test
+    2016/10/27 13:13:56 main.go:37: [info] Database DSN: root:@tcp(127.0.0.1:3306)/test?charset=utf8
+    2016/10/27 13:13:56 checker.go:63: [info] Checking table t1
+    2016/10/27 13:13:56 checker.go:69: [info] Check table t1 succ
+    Check database succ!
+    ```
+
+### 一个无法迁移的 table 例子
+
+我们在 MySQL 里面创建如下表：
+
+```sql
+CREATE TABLE t_error ( a INT NOT NULL, PRIMARY KEY (a))
+ENGINE=InnoDB TABLESPACE ts1
+PARTITION BY RANGE (a) PARTITIONS 3 (
+PARTITION P1 VALUES LESS THAN (2),
+PARTITION P2 VALUES LESS THAN (4) TABLESPACE ts2,
+PARTITION P3 VALUES LESS THAN (6) TABLESPACE ts3);
+```
+
+使用 `checker` 进行检查，会报错，表明我们没法迁移 `t_error` 这张表。
+
+```bash
+./bin/checker -host 127.0.0.1 -port 3306 -user root test t_error
+2017/08/04 11:14:35 checker.go:48: [info] Checking database test
+2017/08/04 11:14:35 main.go:39: [info] Database DSN: root:@tcp(127.0.0.1:3306)/test?charset=utf8
+2017/08/04 11:14:35 checker.go:63: [info] Checking table t1
+2017/08/04 11:14:35 checker.go:67: [error] Check table t1 failed with err: line 3 column 29 near " ENGINE=InnoDB DEFAULT CHARSET=latin1
+/*!50100 PARTITION BY RANGE (a)
+(PARTITION P1 VALUES LESS THAN (2) ENGINE = InnoDB,
+ PARTITION P2 VALUES LESS THAN (4) TABLESPACE = ts2 ENGINE = InnoDB,
+ PARTITION P3 VALUES LESS THAN (6) TABLESPACE = ts3 ENGINE = InnoDB) */" (total length 354)
+github.com/pingcap/tidb/parser/yy_parser.go:96:
+github.com/pingcap/tidb/parser/yy_parser.go:109:
+/home/jenkins/workspace/build_tidb_tools_master/go/src/github.com/pingcap/tidb-tools/checker/checker.go:122:  parse CREATE TABLE `t1` (
+  `a` int(11) NOT NULL,
+  PRIMARY KEY (`a`)
+) /*!50100 TABLESPACE ts1 */ ENGINE=InnoDB DEFAULT CHARSET=latin1
+/*!50100 PARTITION BY RANGE (a)
+(PARTITION P1 VALUES LESS THAN (2) ENGINE = InnoDB,
+ PARTITION P2 VALUES LESS THAN (4) TABLESPACE = ts2 ENGINE = InnoDB,
+ PARTITION P3 VALUES LESS THAN (6) TABLESPACE = ts3 ENGINE = InnoDB) */ error
+/home/jenkins/workspace/build_tidb_tools_master/go/src/github.com/pingcap/tidb-tools/checker/checker.go:114:
+2017/08/04 11:14:35 main.go:83: [error] Check database test with 1 errors and 0 warnings.
+```
