@@ -1,45 +1,46 @@
 ---
-title: TiDB 2.1.11 Release Notes
+title: TiDB 2.1.1 Release Notes
 category: Releases
 ---
 
-# TiDB 2.1.11 Release Notes
+# TiDB 2.1.1 Release Notes
 
-发版日期：2019 年 6 月 03 日
-
-TiDB 版本：2.1.11
-
-TiDB Ansible 版本：2.1.11
+2018 年 12 月 12 日，TiDB 发布 2.1.1 版。相比 2.1.0 版本，该版本对系统稳定性、优化器、统计信息以及执行引擎做了很多改进。
 
 ## TiDB
 
-- 修复 delete 多表 join 的结果时使用错误 schema 的问题 [#10595](https://github.com/pingcap/tidb/pull/10595)
-- 修复 `CONVERT()` 函数返回错误的字段类型的问题 [#10263](https://github.com/pingcap/tidb/pull/10263)
-- 更新统计信息时合并不重叠的反馈信息 [#10569](https://github.com/pingcap/tidb/pull/10569)
-- 修复  `unix_timestamp()-unix_timestamp(now())` 计算错误的问题 [#10491](https://github.com/pingcap/tidb/pull/10491)
-- 修复 `period_diff` 与 MySQL 8.0 不兼容的问题 [#10501](https://github.com/pingcap/tidb/pull/10501)
-- 收集统计信息的时候，忽略 `Virtual Column`，避免异常报错 [#10628](https://github.com/pingcap/tidb/pull/10628)
-- 支持 `SHOW OPEN TABLES` 语句 [#10374](https://github.com/pingcap/tidb/pull/10374)
-- 修复某些情况下导致的 goroutine 泄露问题 [#10656](https://github.com/pingcap/tidb/pull/10656)
-- 修复某些情况下设置 `tidb_snapshot` 变量时间格式解析出错的问题 [#10637](https://github.com/pingcap/tidb/pull/10637)
++ 优化器/执行器
+    - 修复时间为负值时的四舍五入错误 [#8574](https://github.com/pingcap/tidb/pull/8574)
+    - 修复 `uncompress` 函数未检查数据长度的问题 [#8606](https://github.com/pingcap/tidb/pull/8606)
+    - 在执行 `execute` 命令后重置 `prepare` 语句绑定的变量 [#8652](https://github.com/pingcap/tidb/pull/8652)
+    - 支持对分区表自动收集统计信息 [#8649](https://github.com/pingcap/tidb/pull/8649)
+    - 修复在下推 `abs` 函数时设置错误的整数类型 [#8628](https://github.com/pingcap/tidb/pull/8628)
+    - 修复 JSON 列的数据竞争问题 [#8660](https://github.com/pingcap/tidb/pull/8660)
++ Server
+    - 修复在 PD 故障时获取错误 TSO 的问题 [#8567](https://github.com/pingcap/tidb/pull/8567)
+    - 修复不规范的语句导致启动失败的问题 [#8576](https://github.com/pingcap/tidb/pull/8576)
+    - 修复在事务重试时使用了错误的参数 [#8638](https://github.com/pingcap/tidb/pull/8638)
++ DDL
+    - 将表的默认字符集和排序规则改为 `utf8mb4` 和 `utf8mb4_bin` [#8590](https://github.com/pingcap/tidb/pull/8590)
+    - 增加变量 `ddl_reorg_batch_size` 来控制添加索引的速度 [#8614](https://github.com/pingcap/tidb/pull/8614)
+    - DDL 中的 character set 和 collation 选项内容不再大小写敏感 [#8611](https://github.com/pingcap/tidb/pull/8611)
+    - 修复对于生成列添加索引的问题 [#8655](https://github.com/pingcap/tidb/pull/8655)
 
 ## PD
 
-- 修复因为 `balance-region` 可能会导致热点 Region 没有机会调度的问题 [#1551](https://github.com/pingcap/pd/pull/1551)
-- 将热点相关调度的优先级改为高优先级 [#1551](https://github.com/pingcap/pd/pull/1551)
-- 新增配置项 `hot-region-schedule-limit` 控制同时进行热点调度任务的数量及新增 `hot-region-cache-hits-threshold` 控制判断是否为热点 Region [#1551](https://github.com/pingcap/pd/pull/1551)
+- 修复一些配置项无法在配置文件中设置为 `0` 的问题 [#1334](https://github.com/pingcap/pd/pull/1334)
+- 启动时检查未定义的配置 [#1362](https://github.com/pingcap/pd/pull/1362)
+- 避免 transfer leader 至新创建的 Peer，优化可能产生的延迟增加问题 [#1339](https://github.com/pingcap/pd/pull/1339)
+- 修复 RaftCluster 在退出时可能的死锁问题 [#1370](https://github.com/pingcap/pd/pull/1370)
 
 ## TiKV
 
-- 修复在仅有一个 leader，learner 时，learner 读到空 index 的问题 [#4751](https://github.com/tikv/tikv/pull/4751)
-- 将 `ScanLock` 和 `ResolveLock` 放在高优先级线程池中处理，减少对普通优先级命令的影响 [#4791](https://github.com/tikv/tikv/pull/4791)
-- 同步所有收到的 snapshot 的文件 [#4811](https://github.com/tikv/tikv/pull/4811)
+- 避免 transfer leader 至新创建的 Peer，优化可能产生的延迟增加问题 [#3878](https://github.com/tikv/tikv/pull/3878)
 
 ## Tools
 
-- TiDB Binlog
-    - 新增 GC 删数据限速功能，避免因为删除数据导致 QPS 降低的问题 [#620](https://github.com/pingcap/tidb-binlog/pull/620)
-
-## TiDB Ansible
-
-- 新增 Drainer 参数 [#760](https://github.com/pingcap/tidb-ansible/pull/760)
++ Lightning
+    - 优化对导入表的 `analyze` 机制，提升了导入速度
+    - 支持 checkpoint 信息储存在本地文件
++ TiDB Binlog
+    - 修复 pb files 输出 bug，表只有主键列则无法产生 pb event
