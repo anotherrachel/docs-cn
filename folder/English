@@ -1,38 +1,69 @@
 ---
-title: TiDB 系统表
+title: START TRANSACTION
+summary: TiDB 数据库中 START TRANSACTION 的使用概况。
 category: reference
-aliases:
-  - '/docs-cn/sql/system-database/'
 ---
 
-# TiDB 系统表
+# START TRANSACTION
 
-本文档主要介绍 TiDB 支持的系统表。
+`START TRANSACTION` 语句用于在 TiDB 内部启动新事务。它类似于语句 `BEGIN` 和 `SET autocommit = 0`。
 
-## 权限系统表
+在没有 `START TRANSACTION` 语句的情况下，每个语句都会在各自的事务中自动提交，这样可确保 MySQL 兼容性。
 
-这些系统表里面包含了用户账户以及相应的授权信息：
+## 语法图
 
-* `user` 用户账户，全局权限，以及其它一些非权限的列
-* `db` 数据库级别的权限
-* `tables_priv` 表级的权限
-* `columns_priv` 列级的权限
+**BeginTransactionStmt:**
 
-## 服务端帮助信息系统表
+![BeginTransactionStmt](/media/sqlgram/BeginTransactionStmt.png)
 
-* `help_topic` 目前为空
+## 示例
 
-## 统计信息相关系统表
+{{< copyable "sql" >}}
 
-* `stats_buckets` 统计信息的桶
-* `stats_histograms` 统计信息的直方图
-* `stats_meta` 表的元信息，比如总行数和修改数
+```sql
+CREATE TABLE t1 (a int NOT NULL PRIMARY KEY);
+```
 
-## GC Worker 相关系统表
+```
+Query OK, 0 rows affected (0.12 sec)
+```
 
-* `gc_delete_range`
+{{< copyable "sql" >}}
 
-## 其它系统表
+```sql
+START TRANSACTION;
+```
 
-* `GLOBAL_VARIABLES` 全局系统变量表
-* `tidb` 用于 TiDB 在 bootstrap 的时候记录相关版本信息
+```
+Query OK, 0 rows affected (0.00 sec)
+```
+
+{{< copyable "sql" >}}
+
+```sql
+INSERT INTO t1 VALUES (1);
+```
+
+```
+Query OK, 1 row affected (0.00 sec)
+```
+
+{{< copyable "sql" >}}
+
+```sql
+COMMIT;
+```
+
+```
+Query OK, 0 rows affected (0.01 sec)
+```
+
+## MySQL 兼容性
+
+`START TRANSACTION` 语句与 MySQL 完全兼容。如有任何兼容性差异，请在 GitHub 上提交 [issue](/v3.0/report-issue.md)。
+
+## 另请参阅
+
+* [COMMIT](/v3.0/reference/sql/statements/commit.md)
+* [ROLLBACK](/v3.0/reference/sql/statements/rollback.md)
+* [BEGIN](/v3.0/reference/sql/statements/begin.md)
