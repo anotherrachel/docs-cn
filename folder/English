@@ -1,63 +1,26 @@
 ---
-title: DELETE
-summary: TiDB 数据库中 DELETE 的使用概况。
+title: ALTER DATABASE
+summary: TiDB 数据库中 ALTER DATABASE 的使用概况。
 category: reference
 ---
 
-# DELETE
+# ALTER DATABASE
 
-`DELETE` 语句用于从指定的表中删除行。
-
-## 语法图
-
-**DeleteFromStmt:**
-
-![DeleteFromStmt](/media/sqlgram/DeleteFromStmt.png)
+`ALTER DATABASE` 用于修改指定或当前数据库的默认字符集和排序规则。`ALTER SCHEMA` 跟 `ALTER DATABASE` 操作效果一样。
 
 ## 示例
 
 ```sql
-mysql> CREATE TABLE t1 (id INT NOT NULL PRIMARY KEY auto_increment, c1 INT NOT NULL);
-Query OK, 0 rows affected (0.11 sec)
-
-mysql> INSERT INTO t1 (c1) VALUES (1),(2),(3),(4),(5);
-Query OK, 5 rows affected (0.03 sec)
-Records: 5  Duplicates: 0  Warnings: 0
-
-mysql> SELECT * FROM t1;
-+----+----+
-| id | c1 |
-+----+----+
-|  1 |  1 |
-|  2 |  2 |
-|  3 |  3 |
-|  4 |  4 |
-|  5 |  5 |
-+----+----+
-5 rows in set (0.00 sec)
-
-mysql> DELETE FROM t1 WHERE id = 4;
-Query OK, 1 row affected (0.02 sec)
-
-mysql> SELECT * FROM t1;
-+----+----+
-| id | c1 |
-+----+----+
-|  1 |  1 |
-|  2 |  2 |
-|  3 |  3 |
-|  5 |  5 |
-+----+----+
-4 rows in set (0.00 sec)
+ALTER {DATABASE | SCHEMA} [db_name]
+    alter_specification ...
+alter_specification:
+    [DEFAULT] CHARACTER SET [=] charset_name
+  | [DEFAULT] COLLATE [=] collation_name
 ```
 
-## MySQL 兼容性
-
-`DELETE` 语句与 MySQL 完全兼容。如有任何兼容性差异，请在 GitHub 上提交 [issue](/v2.1/report-issue.md)。
+`alter_specification` 选项用于指定数据库具体的 `CHARACTER SET` 和 `COLLATE`。目前 TiDB 只支持部分的字符集和排序规则，请参照[字符集支持](/v2.1/reference/sql/character-set.md)。
 
 ## 另请参阅
 
-* [INSERT](/v2.1/reference/sql/statements/insert.md)
-* [SELECT](/v2.1/reference/sql/statements/select.md)
-* [UPDATE](/v2.1/reference/sql/statements/update.md)
-* [REPLACE](/v2.1/reference/sql/statements/replace.md)
+* [CREATE DATABASE](/v2.1/reference/sql/statements/create-database.md)
+* [SHOW DATABASES](/v2.1/reference/sql/statements/show-databases.md)
