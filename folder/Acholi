@@ -1,18 +1,23 @@
 ---
-title: crwdns46836:0crwdne46836:0
-category: crwdns46838:0crwdne46838:0
+title: crwdns46816:0crwdne46816:0
+category: crwdns46818:0crwdne46818:0
 ---
 
-# crwdns46840:0crwdne46840:0
+# crwdns46820:0crwdne46820:0
 
-crwdns46842:0crwdne46842:0
+crwdns46822:0crwdne46822:0
 
-![crwdns46846:0crwdne46846:0](crwdns46844:0crwdne46844:0)
-
-crwdns46848:0crwdne46848:0
+crwdns46824:0crwdne46824:0
 
 ```toml
-crwdns46850:0crwdne46850:0
+crwdns46826:0[check-tables]crwdnd46826:0[table-config]crwdnd46826:0[table-config.source-tables]crwdne46826:0
+```
 
-crwdns46852:0[check-tables]crwdnd46852:0[table-config]crwdnd46852:0[table-config.source-tables]crwdnd46852:0[table-config.source-tables]crwdnd46852:0[table-config.source-tables]crwdnd46852:0[source-db]crwdnd46852:0[source-db]crwdnd46852:0[target-db]crwdne46852:0
+crwdns46828:0crwdne46828:0
+
+crwdns46830:0crwdne46830:0
+
+```toml
+crwdns46832:0[check-tables]crwdnd46832:0[table-rules]crwdne46832:0
+    crwdns46834:0crwdne46834:0
 ```
