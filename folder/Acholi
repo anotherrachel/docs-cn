@@ -1,226 +1,40 @@
 ---
-title: crwdns164704:0crwdne164704:0
-category: crwdns164706:0crwdne164706:0
+title: crwdns164666:0crwdne164666:0
+category: crwdns164668:0crwdne164668:0
 ---
 
-# crwdns164708:0crwdne164708:0
+# crwdns164670:0crwdne164670:0
 
-crwdns164710:0crwdne164710:0
+crwdns164672:0crwdne164672:0
 
-## crwdns164712:0crwdne164712:0
+crwdns164674:0crwdne164674:0
 
-crwdns164714:0crwdne164714:0
+## crwdns164676:0crwdne164676:0
 
-crwdns164716:0crwdne164716:0
+### crwdns164678:0crwdne164678:0
 
-- crwdns164718:0crwdne164718:0
-- crwdns164720:0crwdne164720:0
+```
+crwdns164680:0crwdne164680:0
 
-## crwdns164722:0crwdne164722:0
+```
 
-crwdns164724:0crwdne164724:0
+### crwdns164682:0crwdne164682:0
 
-![crwdns164728:0crwdne164728:0](crwdns164726:0crwdne164726:0)
+```toml
+crwdns164684:0{data-dir}crwdnd164684:0{index-name}crwdnd164684:0[dest-db]crwdnd164684:0[replicate-do-table]crwdnd164684:0[replicate-do-table]crwdnd164684:0[dest-db]crwdne164684:0
+```
 
-crwdns164730:0crwdne164730:0
+### crwdns164686:0crwdne164686:0
 
-### crwdns164732:0crwdne164732:0
+```
+crwdns164688:0crwdne164688:0
+```
 
-crwdns164734:0crwdne164734:0
-
-### crwdns164736:0crwdne164736:0
-
-crwdns164738:0crwdne164738:0
-
-### crwdns164740:0crwdne164740:0
-
-crwdns164742:0crwdne164742:0
-
-> **crwdns164744:0crwdne164744:0**
+> **crwdns164690:0crwdne164690:0**
 > 
-> crwdns164746:0crwdne164746:0
-
-## crwdns164748:0crwdne164748:0
-
-crwdns164750:0crwdne164750:0
-
-| crwdns164752:0crwdne164752:0 | crwdns164754:0crwdne164754:0 | crwdns164756:0crwdne164756:0 |
-|:---------------------------- |:---------------------------- |:---------------------------- |
-| crwdns164758:0crwdne164758:0 | crwdns164760:0crwdne164760:0 | crwdns164762:0crwdne164762:0 |
-
-### crwdns164764:0crwdne164764:0
-
-crwdns164766:0crwdne164766:0
-
-```bash
-crwdns164768:0crwdne164768:0
-```
-
-### crwdns164770:0crwdne164770:0
-
-#### crwdns164772:0crwdne164772:0
-
-* crwdns164774:0crwdne164774:0
-
-* crwdns164776:0crwdne164776:0
-
-    crwdns164778:0crwdne164778:0
-
-    ![crwdns164782:0crwdne164782:0](crwdns164780:0crwdne164780:0)
-
-* crwdns164784:0crwdne164784:0
-
-* crwdns164786:0crwdne164786:0
-
-    crwdns164788:0crwdne164788:0
-
-    * crwdns164790:0crwdne164790:0
-    * crwdns164792:0crwdne164792:0
-    * crwdns164794:0crwdne164794:0
-    * crwdns164796:0${position}crwdne164796:0
-
-* crwdns164798:0crwdne164798:0
-
-    ```toml
-    crwdns164800:0[syncer]crwdnd164800:0[syncer.to]crwdne164800:0
-    ```
-
-* crwdns164802:0crwdne164802:0
-
-    ```toml
-    crwdns164804:0[syncer]crwdne164804:0
-    crwdns164806:0[syncer.to]crwdne164806:0
-    ```
-
-    crwdns164808:0crwdne164808:0
-
-* crwdns164810:0crwdne164810:0
-
-#### crwdns164812:0crwdne164812:0
-
-| crwdns164814:0crwdne164814:0 | crwdns164816:0crwdne164816:0 | crwdns164818:0crwdne164818:0 | crwdns164820:0crwdne164820:0 | crwdns164822:0crwdne164822:0 |
-|:----------------------------:|:----------------------------:|:----------------------------:|:----------------------------:|:----------------------------:|
-| crwdns164824:0crwdne164824:0 | crwdns164826:0crwdne164826:0 | crwdns164828:0crwdne164828:0 | crwdns164830:0crwdne164830:0 | crwdns164832:0crwdne164832:0 |
-| crwdns164834:0crwdne164834:0 | crwdns164836:0crwdne164836:0 | crwdns164838:0crwdne164838:0 | crwdns164840:0crwdne164840:0 | crwdns164842:0crwdne164842:0 |
-
-#### crwdns164844:0crwdne164844:0
-
-- crwdns164846:0crwdne164846:0
-- crwdns164848:0crwdne164848:0
-- crwdns164850:0crwdne164850:0
-- crwdns164852:0crwdne164852:0
-
-    * `crwdns164854:0crwdne164854:0`
-    * `crwdns164856:0crwdne164856:0`
-    * `crwdns164858:0crwdne164858:0`
-
-#### crwdns164860:0crwdne164860:0
-
-- crwdns164862:0crwdne164862:0
-- crwdns164864:0crwdne164864:0
-
-crwdns164866:0crwdne164866:0
-
-```ini
-crwdns164868:0crwdne164868:0
-```
-
-#### crwdns164870:0crwdne164870:0
-
-crwdns164872:0crwdne164872:0
-
-crwdns164874:0crwdne164874:0
-
-```ini
-crwdns164876:0crwdne164876:0
-```
-
-crwdns164878:0crwdne164878:0
-
-crwdns164880:0crwdne164880:0
-
-crwdns164882:0crwdne164882:0
-
-1. crwdns164884:0crwdne164884:0
-
-    ```
-    crwdns164886:0crwdne164886:0
-    ```
-
-2. crwdns164888:0crwdne164888:0
-
-    ```toml
-    crwdns164890:0crwdne164890:0
-
-    crwdns164892:0crwdne164892:0
-    ```
-
-3. crwdns164894:0crwdne164894:0
-
-    ```bash
-    crwdns164896:0crwdne164896:0
-    ```
-
-#### crwdns164898:0crwdne164898:0
-
-1. crwdns164900:0crwdne164900:0
-
-    ```
-    crwdns164902:0crwdne164902:0
-    ```
-
-2. crwdns164904:0crwdne164904:0
-
-    ```toml
-    crwdns164906:0crwdne164906:0
-
-    crwdns164908:0crwdne164908:0
-    crwdns164910:0[syncer]crwdnd164910:0[syncer.replicate-do-table]crwdnd164910:0[syncer.replicate-do-table]crwdnd164910:0[syncer.to]crwdnd164910:0[syncer.to]crwdne164910:0
-    ```
-
-3. crwdns164912:0crwdne164912:0
-
-    ```bash
-    crwdns164914:0crwdne164914:0
-    ```
-
-## crwdns164916:0crwdne164916:0
-
-crwdns164918:0crwdne164918:0
-
-crwdns164920:0crwdne164920:0
-
-```bash
-crwdns164922:0crwdne164922:0
-```
-
-crwdns164924:0crwdne164924:0
-
-```bash
-crwdns164926:0${path}crwdne164926:0
-```
-
-## crwdns164928:0crwdne164928:0
-
-crwdns164930:0crwdne164930:0
-
-### crwdns164932:0crwdne164932:0
-
-crwdns164934:0crwdne164934:0
-
-- crwdns164936:0crwdne164936:0
-- crwdns164938:0crwdne164938:0
-
-### crwdns164940:0crwdne164940:0
-
-+ crwdns164942:0crwdne164942:0
-
-    crwdns164944:0crwdne164944:0
-
-    > **crwdns164946:0crwdne164946:0**
-    > 
-    > crwdns164948:0crwdne164948:0
-
-+ crwdns164950:0crwdne164950:0
-
-    crwdns164952:0crwdne164952:0
+> - crwdns164692:0crwdne164692:0
+> - crwdns164694:0crwdne164694:0
+> - crwdns164696:0crwdne164696:0
+> - crwdns164698:0[dest-db]crwdnd164698:0[dest-db]crwdne164698:0
+> - crwdns164700:0crwdne164700:0
+> - crwdns164702:0crwdne164702:0
