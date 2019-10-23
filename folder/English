@@ -1,90 +1,143 @@
 ---
-title: 日志收集
+title: 恢复 Kubernetes 上的 TiDB 集群数据
+summary: 使用 TiDB Lightning 快速恢复 Kubernetes 上的 TiDB 集群数据。
 category: how-to
 ---
 
-# 日志收集
+# 恢复 Kubernetes 上的 TiDB 集群数据
 
-系统与程序的运行日志对排查问题以及实现一些自动化操作可能非常有用。本文将简要说明收集 TiDB 及相关组件日志的方法。
+本文介绍了如何使用 [TiDB Lightning](https://github.com/pingcap/tidb-lightning) 快速恢复 Kubernetes 上的 TiDB 集群数据。
 
-## TiDB 与 Kubernetes 组件运行日志
+TiDB Lightning 包含两个组件：tidb-lightning 和 tikv-importer。在 Kubernetes 上，tikv-importer 位于 TiDB 集群的 Helm chart 内，被部署为一个副本数为 1 (`replicas=1`) 的 `StatefulSet`；tidb-lightning 位于单独的 Helm chart 内，被部署为一个 `Job`。
 
-通过 TiDB Operator 部署的 TiDB 各组件默认将日志输出在容器的 `stdout` 和 `stderr` 中。对于 Kubernetes 而言，这些日志会被存放在宿主机的 `/var/log/containers` 目录下，并且文件名中包含了 Pod 和容器名称等信息。因此，对容器中应用的日志收集可以直接在宿主机上完成。
+为了使用 TiDB Lightning 恢复数据，tikv-importer 和 tidb-lightning 都必须分别部署。
 
-如果在你的现有基础设施中已经有用于收集日志的系统，只需要通过常规方法将 Kubernetes 所在的宿主机上的 `/var/log/containers/*.log` 文件加入采集范围即可；如果没有可用的日志收集系统，或者希望部署一套独立的系统用于收集相关日志，也可以使用你熟悉的任意日志收集系统或方案。
+## 部署 tikv-importer
 
-Kubernetes 官方文档中提供了 [ElasticSearch](https://kubernetes.io/docs/tasks/debug-application-cluster/logging-elasticsearch-kibana/) 和 [Stackdriver](https://kubernetes.io/docs/tasks/debug-application-cluster/logging-stackdriver/) 两种日志收集方案可供参考。
+tikv-importer 可以在一个现有的 TiDB 集群上启用，或者在新建 TiDB 集群时启用。
 
-常见的可用于收集 Kubernetes 日志的开源工具有：
+* 在新建一个 TiDB 集群时启用 tikv-importer：
 
-- [Fluentd](https://www.fluentd.org/)
-- [Fluent-bit](https://fluentbit.io/)
-- [Filebeat](https://www.elastic.co/products/beats/filebeat)
-- [Logstash](https://www.elastic.co/products/logstash)
+    1. 在 `tidb-cluster` 的 `values.yaml` 文件中将 `importer.create` 设置为 `true`。
 
-收集到的日志通常可以汇总存储在某一特定的服务器上，或存放到 ElasticSearch 等专用的存储、分析系统当中。
+    2. 部署该集群。
 
-一些云服务商或专门的性能监控服务提供商也有各自的免费或收费的日志收集方案可以选择。
+        {{< copyable "shell-regular" >}}
 
-如果不通过单独的日志收集工具汇总日志，你也可以直接使用 `kubectl` 工具查看某个容器的运行日志，但这一方法无法查看已销毁容器的日志：
+        ```shell
+        helm install pingcap/tidb-cluster --name=<tidb-cluster-release-name> --namespace=<namespace> -f values.yaml --version=<chart-version>
+        ```
 
-{{< copyable "shell-regular" >}}
+* 配置一个现有的 TiDB 集群以启用 tikv-importer：
 
-```shell
-kubectl logs -n <namespace> <tidbPodName>
-```
+    1. 在该 TiDB 集群的 `values.yaml` 文件中将 `importer.create` 设置为 `true`。
 
-若需查看容器重启之前的日志，可以在执行上述命令时添加 `-p` 参数。
+    2. 升级该 TiDB 集群。
 
-如果需要从多个 Pod 获取日志，可以使用 [`stern`](https://github.com/wercker/stern)：
+        {{< copyable "shell-regular" >}}
 
-{{< copyable "shell-regular" >}}
+        ```shell
+        helm upgrade <tidb-cluster-release-name> pingcap/tidb-cluster -f values.yaml --version=<chart-version>
+        ```
 
-```shell
-stern -n <namespace> tidb -c slowlog
-```
+## 部署 tidb-lightning
 
-## TiDB 慢查询日志
+1. 配置 TiDB Lightning
 
-对于 3.0 之前的版本，在默认情况下，TiDB 会打印慢查询日志到标准输出，和应用日志混在一起。
-
-- 如果 TiDB 版本 <= v2.1.7，你可以通过关键字 `SLOW_QUERY` 来筛选慢查询日志，例如：
+    使用如下命令获得 TiDB Lightning 的默认配置。
 
     {{< copyable "shell-regular" >}}
 
     ```shell
-    kubectl logs -n <namespace> <tidbPodName> | grep SLOW_QUERY
+    helm inspect values pingcap/tidb-lightning --version=<chart-version> > tidb-lightning-values.yaml
     ```
 
-- 如果 TiDB 版本 >= v2.1.8，由于慢查询日志格式发生变化，不太方便分离慢查询日志，建议参考下面内容配置 `separateSlowLog: true` 单独查看慢查询日志。
+    tidb-lightning Helm chart 支持恢复本地或远程的备份数据。
 
-在一些情况下，你可能希望使用一些工具或自动化系统对日志内容进行分析、处理。TiDB 各组件的应用日志使用了[统一的日志格式](https://github.com/tikv/rfcs/blob/master/text/2018-12-19-unified-log-format.md)以便于程序解析，但由于慢查询日志使用的是与 MySQL 兼容的多行格式，与应用日志混在一起时可能会对解析造成困难。
+    * 本地模式
 
-如果希望将慢查询日志和应用日志区分开，可以在 `values.yaml` 文件中配置 `separateSlowLog` 参数，将慢查询日志输出到一个专用的旁路容器中，这样慢查询日志在宿主机上会被输出到一个单独的文件，和应用日志分开。
+        本地模式要求 Mydumper 备份数据位于其中一个 Kubernetes 节点上。要启用该模式，你需要将 `dataSource.local.nodeName` 设置为该节点名称，将 `dataSource.local.hostPath` 设置为 Mydumper 备份数据目录路径，该路径中需要包含名为 `metadata` 的文件。
 
-修改方法为编辑 `values.yaml` 文件，将 `separateSlowLog` 参数设置为 `true`：
+    * 远程模式
 
-```yaml
-# Uncomment the following line to enable separate output of the slow query log
-    separateSlowLog: true
-```
+        与本地模式不同，远程模式需要使用 [rclone](https://rclone.org) 将 Mydumper 备份 tarball 文件从网络存储中下载到 PV 中。远程模式能在 rclone 支持的任何云存储下工作，目前已经有以下存储进行了相关测试：[Google Cloud Storage (GCS)](https://cloud.google.com/storage/)、[AWS S3](https://aws.amazon.com/s3/) 和 [Ceph Object Storage](https://ceph.com/ceph-storage/object-storage/)。
 
-之后再运行 `helm upgrade` 使配置生效，然后可以通过名为 `slowlog` 的 sidecar 容器查看慢查询日志：
+        1. 确保 `values.yaml` 中的 `dataSource.local.nodeName` 和 `dataSource.local.hostPath` 被注释掉。
 
-{{< copyable "shell-regular" >}}
+        2. 新建一个包含 rclone 配置的 `Secret`。rclone 配置示例如下。一般只需要配置一种云存储。有关其他的云存储，请参考 [rclone 官方文档](https://rclone.org/)。
 
-```shell
-kubectl logs -n <namespace> <tidbPodName> -c slowlog
-```
+            {{< copyable "" >}}
 
-对于 3.0 及更新的版本，TiDB 将慢查询日志输出到独立的 `slowlog.log` 文件中，并且 `separateSlowLog` 是默认开启的，所以可以直接通过 sidecar 容器查看慢查询日志，无需额外设置。
+            ```yaml
+            apiVersion: v1
+            kind: Secret
+            metadata:
+              name: cloud-storage-secret
+            type: Opaque
+            stringData:
+              rclone.conf: |
+              [s3]
+              type = s3
+              provider = AWS
+              env_auth = false
+              access_key_id = <my-access-key>
+              secret_access_key = <my-secret-key>
+              region = us-east-1
+              [ceph]
+              type = s3
+              provider = Ceph
+              env_auth = false
+              access_key_id = <my-access-key>
+              secret_access_key = <my-secret-key>
+              endpoint = <ceph-object-store-endpoint>
+              region = :default-placement
+              [gcs]
+              type = google cloud storage
+              # 该服务账号必须被授予 Storage Object Viewer 角色。
+              # 该内容可以通过 `cat <service-account-file.json> | jq -c .` 命令获取。
+              service_account_credentials = <service-account-json-file-content>
+            ```
+
+            使用你的实际配置替换上述配置中的占位符，并将该文件存储为 `secret.yaml`。然后通过 `kubectl apply -f secret.yaml -n <namespace>` 命令创建该 `Secret`。
+
+        3. 将 `dataSource.remote.storageClassName` 设置为 Kubernetes 集群中现有的一个存储类型。
+
+2. 部署 TiDB Lightning
+
+    {{< copyable "shell-regular" >}}
+
+    ```shell
+    helm install pingcap/tidb-lightning --name=<tidb-lightning-release-name> --namespace=<namespace> --set failFast=true -f tidb-lightning-values.yaml --version=<chart-version>
+    ```
+
+当 TiDB Lightning 未能成功恢复数据时，不能简单地直接重启进程，必须进行**手动干预**，否则将很容易出现错误。因此，tidb-lightning 的 `Job` 重启策略被设置为 `Never`。
 
 > **注意：**
 > 
-> 慢查询日志的格式与 MySQL 的慢查询日志相同，但由于 TiDB 自身的特点，其中的一些具体字段可能存在差异，因此解析 MySQL 慢查询日志的工具不一定能完全兼容 TiDB 的慢查询日志。
+> 目前，即使数据被成功恢复，TiDB Lightning 也会[报出非零错误码并退出](https://github.com/pingcap/tidb-lightning/pull/230)，这会导致 `Job` 失败。因此，数据恢复成功与否需要通过查看 tidb-lightning pod 的日志进行确认。
 
-## 系统日志
+如果 TiDB Lightning 未能成功恢复数据，需要采用以下步骤进行手动干预：
 
-系统日志可以通过常规方法在 Kubernetes 宿主机上收集，如果在你的现有基础设施中已经有用于收集日志的系统，只需要通过常规方法将相关服务器和日志文件添加到收集范围即可；如果没有可用的日志收集系统，或者希望部署一套独立的系统用于收集相关日志，也可以使用你熟悉的任意日志收集系统或方案。
+1. 运行 `kubectl delete job -n <namespace> <tidb-lightning-release-name>-tidb-lightning`，删除 lightning `Job`。
 
-上文提到的几种常见日志收集工具均支持对系统日志的收集，一些云服务商或专门的性能监控服务提供商也有各自的免费或收费的日志收集方案可以选择。
+2. 运行 `helm template pingcap/tidb-lightning --name <tidb-lightning-release-name> --set failFast=false -f tidb-lightning-values.yaml | kubectl apply -n <namespace> -f -`，重新创建禁用 `failFast` 的 lightning `Job`。
+
+3. 当 lightning pod 重新运行时，在 lightning 容器中执行 `kubectl exec -it -n <namesapce> <tidb-lightning-pod-name> sh` 命令。
+
+4. 运行 `cat /proc/1/cmdline`，获得启动脚本。
+
+5. 参考[故障排除指南](/dev/how-to/troubleshoot/tidb-lightning.md#tidb-lightning-troubleshooting)，对 lightning 进行诊断。
+
+## 销毁 TiDB Lightning
+
+目前，TiDB Lightning 只能在线下恢复数据。当恢复过程结束、TiDB 集群需要向外部应用提供服务时，可以销毁 TiDB Lightning 以节省开支。
+
+删除 tikv-importer 的步骤：
+
+1. 在 TiDB 集群 chart 的 `values.yaml` 文件中将 `importer.create` 设置为 `false`。
+
+2. 然后运行 `helm upgrade <tidb-cluster-release-name> pingcap/tidb-cluster -f values.yaml`。
+
+删除 tidb-lightning 的方法：
+
+* 运行 `helm delete <tidb-lightning-release-name> --purge`。
