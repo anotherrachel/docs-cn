@@ -1,89 +1,42 @@
 ---
-title: Overview 面板重要监控指标详解
+title: GC 机制简介
 category: reference
 aliases:
-  - '/docs-cn/op-guide/dashboard-overview-info/'
+  - '/docs-cn/op-guide/gc/'
 ---
 
-# Overview 面板重要监控指标详解
+# GC 机制简介
 
-使用 Ansible 部署 TiDB 集群时，一键部署监控系统 (Prometheus/Grafana)，监控架构请看 [TiDB 监控框架概述](/v3.0/how-to/monitor/overview.md)。
+TiDB 的事务的实现采用了 MVCC（多版本并发控制）机制，当新写入的数据覆盖旧的数据时，旧的数据不会被替换掉，而是与新写入的数据同时保留，并以时间戳来区分版本。GC 的任务便是清理不再需要的旧数据。
 
-目前 Grafana Dashboard 整体分为 PD、TiDB、TiKV、Node\_exporter、Overview 等。
+## 整体流程
 
-对于日常运维，我们单独挑选出重要的 Metrics 放在 Overview 页面，方便日常运维人员观察集群组件 (PD, TiDB, TiKV) 使用状态以及集群使用状态。
+一个 TiDB 集群中会有一个 TiDB 实例被选举为 GC leader，GC 的运行由 GC leader 来控制。
 
-以下为 Overview Dashboard 监控说明：
+GC 会被定期触发，默认情况下每 10 分钟一次。每次 GC 时，首先，TiDB 会计算一个称为 safe point 的时间戳（默认为当前时间减去 10 分钟），接下来 TiDB 会在保证 safe point 之后的快照全部拥有正确数据的前提下，删除更早的过期数据。具体而言，分为以下三个步骤：
 
-## Services Port Status
+1. Resolve Locks
+2. Delete Ranges
+3. Do GC
 
-- Services Online：各服务在线节点数量
-- Services Offline：各服务 Down 掉节点数量
+### Resolve Locks
 
-## PD
+TiDB 的事务是基于 [Google Percolator](https://ai.google/research/pubs/pub36726) 模型实现的，事务的提交是一个两阶段提交的过程。第一阶段完成时，所有涉及的 key 会加上一个锁，其中一个锁会被设定为 Primary，其余的锁（Secondary）则会指向 Primary；第二阶段会将 Primary 锁所在的 key 加上一个 Write 记录，并去除锁。这里的 Write 记录就是历史上对该 key 进行写入或删除，或者该 key 上发生事务回滚的记录。Primary 锁被替换为何种 Write 记录标志着该事务提交成功与否。接下来，所有 Secondary 锁也会被依次替换。如果替换这些 Secondary 锁的线程死掉了，锁就残留了下来。
 
-- Storage Capacity：TiDB 集群总可用数据库空间大小
-- Current Storage Size：TiDB 集群目前已用数据库空间大小
-- Number of Regions：当前集群的 Region 总量
-- Leader Balance Ratio：Leader 数量最多和最少节点相差的百分比，一般小于 5%，节点重启时会有比较大的波动
-- Region Balance Ratio：Region 数量最多和最少节点相差的百分比，一般小于 5%，新增/下线节点时相差比较大
-- Store Status：集群 TiKV 节点的状态
-    - Up Stores：正常运行的 TiKV 节点数量
-    - Disconnect Stores：短时间内通信异常的 TiKV 节点数量
-    - LowSpace Stores：剩余可用空间小于 20% 的 TiKV 节点数量
-    - Down Stores：停止工作的 TiKV 节点数量，如果大于 0，说明有节点不正常
-    - Offline Stores：正在下线的 TiKV 节点数量（正在下线的 TiKV 节点还在提供服务）
-    - Tombstone Stores：下线成功的 TiKV 节点数量
-- 99% completed\_cmds\_duration\_seconds：单位时间内，99% 的 pd-server 请求执行时间小于监控曲线的值，一般 <= 5ms
-- handle\_requests\_duration\_seconds：PD 发送请求的网络耗时
+Resolve Locks 这一步的任务即对 safe point 之前的锁进行回滚或提交，取决于其 Primary 是否被提交。如果一个 Primary 锁也残留了下来，那么该事务应当视为超时并进行回滚。这一步是必不可少的，因为如果其 Primary 的 Write 记录由于太老而被 GC 清除掉了，那么就再也无法知道该事务是否成功。如果该事务存在残留的 Secondary 锁，那么也无法知道它应当被回滚还是提交，也就无法保证一致性。
 
-## TiDB
+Resolve Locks 的执行方式是由 GC leader 对所有的 Region 发送请求进行处理。从 3.0 起，这个过程默认会并行地执行，并发数量默认与 TiKV 节点个数相同。
 
-- Statement OPS：SQL 执行数量统计（包含 select、insert、update 等）
-- Duration：SQL 执行的时间
-- QPS By Instance：每个 TiDB 上的 QPS
-- Failed Query OPM：失败 SQL 的统计，例如语法错误、主键冲突等
-- Connection count：每个 TiDB 的连接数
-- Heap Memory Usage：每个 TiDB 使用的堆内存大小
-- Transaction OPS：事务执行数量统计
-- Transaction Duration：事务执行的时间
-- KV Cmd OPS：KV 命令执行数量统计
-- KV Cmd Duration 99：KV 命令执行的时间
-- PD TSO OPS：TiDB 从 PD 获取 TSO 的数量
-- PD TSO Wait Duration：TiDB 从 PD 获取 TS 的时间
-- TiClient Region Error OPS：TiKV 返回 Region 相关错误信息的数量
-- Lock Resolve OPS：事务冲突相关的数量
-- Load Schema Duration：TiDB 从 TiKV 获取 Schema 的时间
-- KV Backoff OPS：TiKV 返回错误信息的数量（事务冲突等）
+## Delete Ranges
 
-## TiKV
+在执行 `DROP TABLE/INDEX` 等操作时，会有大量连续的数据被删除。如果对每个 key 都进行删除操作、再对每个 key 进行 GC 的话，那么执行效率和空间回收速度都可能非常的低下。事实上，这种时候 TiDB 并不会对每个 key 进行删除操作，而是将这些待删除的区间及删除操作的时间戳记录下来。Delete Ranges 会将这些时间戳在 safe point 之前的区间进行快速的物理删除。
 
-- leader：各个 TiKV 节点上 Leader 的数量分布
-- region：各个 TiKV 节点上 Region 的数量分布
-- CPU：各个 TiKV 节点的 CPU 使用率
-- Memory：各个 TiKV 节点的内存使用量
-- store size：各个 TiKV 节点存储的数据量
-- cf size：集群不同 CF 存储的数据量
-- channel full：正常情况显示 No data，如果有了监控值，说明对应 TiKV 节点的消息处理不过来了
-- server report failures：正常情况显示 No data，如果出现了 Unreachable，说明 TiKV 之间通信有问题
-- scheduler pending commands：写入堆积的数量，偶尔出现峰值属于正常现象
-- coprocessor pending requests：正常情况监控为 0 或者数量很少
-- coprocessor executor count：不同类型的查询操作数量
-- coprocessor request duration：TiKV 中查询消耗的时间
-- raft store CPU：raftstore 线程的 CPU 使用率，线程数量默认为 2 (通过 `raftstore.store-pool-size` 配置)。如果单个线程使用率超过 80%，说明使用率很高
-- Coprocessor CPU：TiKV 查询线程的 CPU 使用率，和业务相关，复杂查询会使用大量的 CPU 资源
+## Do GC
 
-## System Info
+这一步即删除所有 key 的过期版本。为了保证 safe point 之后的任何时间戳都具有一致的快照，这一步删除 safe point 之前提交的数据，但是会保留 safe point 前的最后一次写入（除非最后一次写入是删除）。
 
-- Vcores：CPU 核心数量
-- Memory：内存总大小
-- CPU Usage：CPU 使用率，最大为 100%
-- Load [1m]：1 分钟的负载情况
-- Memory Available：剩余内存大小
-- Network Traffic：网卡流量统计
-- TCP Retrans：网络监控，TCP 相关信息统计
-- IO Util：磁盘使用率，最高为 100%，一般到 80% - 90% 就需要考虑加节点
+TiDB 2.1 及更早版本使用的 GC 方式是由 GC leader 向所有 Region 发送 GC 请求。从 3.0 起，GC leader 只需将 safe point 上传至 PD。每个 TiKV 节点都会各自从 PD 获取 safe point。当 TiKV 发现 safe point 发生更新时，便会对当前节点上所有作为 leader 的 Region 进行 GC。与此同时，GC leader 可以继续触发下一轮 GC。
 
-## 图例
-
-![overview](/media/overview.png)
+> **注意：**
+> 
+> 通过修改配置可以继续使用旧的 GC 方式，详情请参考 [GC 配置](/v3.0/reference/garbage-collection/configuration.md)。
