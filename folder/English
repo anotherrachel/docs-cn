@@ -1,29 +1,46 @@
 ---
-title: ALTER TABLE
-summary: TiDB 数据库中 ALTER TABLE 的使用概况。
+title: CREATE VIEW
+summary: TiDB 数据库中 CREATE VIEW 的使用概况。
 category: reference
 ---
 
-# ALTER TABLE
+# CREATE VIEW
 
-`ALTER TABLE` 语句用于对已有表进行修改，以符合新表结构。`ALTER TABLE` 语句可用于：
-
-* [`ADD`](/v3.0/reference/sql/statements/add-index.md)，[`DROP`](/v3.0/reference/sql/statements/drop-index.md)，或 [`RENAME`](/v3.0/reference/sql/statements/rename-index.md) 索引
-* [`ADD`](/v3.0/reference/sql/statements/add-column.md)，[`DROP`](/v3.0/reference/sql/statements/drop-column.md)，[`MODIFY`](/v3.0/reference/sql/statements/modify-column.md) 或 [`CHANGE`](/v3.0/reference/sql/statements/change-column.md) 列
+使用 `CREATE VIEW` 语句将 `SELECT` 语句保存为类似于表的可查询对象。TiDB 中的视图是非物化的，这意味着在查询视图时，TiDB 将在内部重写查询，以将视图定义与 SQL 查询结合起来。
 
 ## 语法图
 
-**AlterTableStmt:**
+**CreateViewStmt:**
 
-![AlterTableStmt](/media/sqlgram/AlterTableStmt.png)
+![CreateViewStmt](/media/sqlgram/CreateViewStmt.png)
 
-**TableName:**
+**OrReplace:**
 
-![TableName](/media/sqlgram/TableName.png)
+![OrReplace](/media/sqlgram/OrReplace.png)
 
-**AlterTableSpec:**
+**ViewAlgorithm:**
 
-![AlterTableSpec](/media/sqlgram/AlterTableSpec.png)
+![ViewAlgorithm](/media/sqlgram/ViewAlgorithm.png)
+
+**ViewDefiner:**
+
+![ViewDefiner](/media/sqlgram/ViewDefiner.png)
+
+**ViewSQLSecurity:**
+
+![ViewSQLSecurity](/media/sqlgram/ViewSQLSecurity.png)
+
+**ViewName:**
+
+![ViewName](/media/sqlgram/ViewName.png)
+
+**ViewFieldList:**
+
+![ViewFieldList](/media/sqlgram/ViewFieldList.png)
+
+**ViewCheckOption:**
+
+![ViewCheckOption](/media/sqlgram/ViewCheckOption.png)
 
 ## 示例
 
@@ -51,58 +68,93 @@ Records: 5  Duplicates: 0  Warnings: 0
 {{< copyable "sql" >}}
 
 ```sql
-EXPLAIN SELECT * FROM t1 WHERE c1 = 3;
+CREATE VIEW v1 AS SELECT * FROM t1 WHERE c1 > 2;
 ```
 
 ```
-+---------------------+----------+------+-------------------------------------------------------------+
-| id                  | count    | task | operator info                                               |
-+---------------------+----------+------+-------------------------------------------------------------+
-| TableReader_7       | 10.00    | root | data:Selection_6                                            |
-| └─Selection_6       | 10.00    | cop  | eq(test.t1.c1, 3)                                           |
-|   └─TableScan_5     | 10000.00 | cop  | table:t1, range:[-inf,+inf], keep order:false, stats:pseudo |
-+---------------------+----------+------+-------------------------------------------------------------+
+Query OK, 0 rows affected (0.11 sec)
+```
+
+{{< copyable "sql" >}}
+
+```sql
+SELECT * FROM t1;
+```
+
+```
++----+----+
+| id | c1 |
++----+----+
+|  1 |  1 |
+|  2 |  2 |
+|  3 |  3 |
+|  4 |  4 |
+|  5 |  5 |
++----+----+
+5 rows in set (0.00 sec)
+```
+
+{{< copyable "sql" >}}
+
+```sql
+SELECT * FROM v1;
+```
+
+```
++----+----+
+| id | c1 |
++----+----+
+|  3 |  3 |
+|  4 |  4 |
+|  5 |  5 |
++----+----+
 3 rows in set (0.00 sec)
 ```
 
 {{< copyable "sql" >}}
 
 ```sql
-ALTER TABLE t1 ADD INDEX (c1);
+INSERT INTO t1 (c1) VALUES (6);
 ```
 
 ```
-Query OK, 0 rows affected (0.30 sec)
+Query OK, 1 row affected (0.01 sec)
 ```
 
 {{< copyable "sql" >}}
 
 ```sql
-EXPLAIN SELECT * FROM t1 WHERE c1 = 3;
+SELECT * FROM v1;
 ```
 
 ```
-+-------------------+-------+------+-----------------------------------------------------------------+
-| id                | count | task | operator info                                                   |
-+-------------------+-------+------+-----------------------------------------------------------------+
-| IndexReader_6     | 10.00 | root | index:IndexScan_5                                               |
-| └─IndexScan_5     | 10.00 | cop  | table:t1, index:c1, range:[3,3], keep order:false, stats:pseudo |
-+-------------------+-------+------+-----------------------------------------------------------------+
-2 rows in set (0.00 sec)
++----+----+
+| id | c1 |
++----+----+
+|  3 |  3 |
+|  4 |  4 |
+|  5 |  5 |
+|  6 |  6 |
++----+----+
+4 rows in set (0.00 sec)
+```
+
+{{< copyable "sql" >}}
+
+```sql
+INSERT INTO v1 (c1) VALUES (7);
+```
+
+```
+ERROR 1105 (HY000): insert into view v1 is not supported now.
 ```
 
 ## MySQL 兼容性
 
-* 支持除空间类型外的所有数据类型。
-* 不支持 `FULLTEXT`，`HASH` 和 `SPATIAL` 索引。
+* 目前 TiDB 中的视图不可插入且不可更新。
 
 ## 另请参阅
 
-* [ADD COLUMN](/v3.0/reference/sql/statements/add-column.md)
-* [DROP COLUMN](/v3.0/reference/sql/statements/drop-column.md)
-* [ADD INDEX](/v3.0/reference/sql/statements/add-index.md)
-* [DROP INDEX](/v3.0/reference/sql/statements/drop-index.md)
-* [RENAME INDEX](/v3.0/reference/sql/statements/rename-index.md)
 * [CREATE TABLE](/v3.0/reference/sql/statements/create-table.md)
-* [DROP TABLE](/v3.0/reference/sql/statements/drop-table.md)
 * [SHOW CREATE TABLE](/v3.0/reference/sql/statements/show-create-table.md)
+* [DROP TABLE](/v3.0/reference/sql/statements/drop-table.md)
