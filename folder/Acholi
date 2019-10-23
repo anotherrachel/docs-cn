@@ -1,52 +1,293 @@
 ---
-title: crwdns50596:0crwdne50596:0
-category: crwdns50598:0crwdne50598:0
+title: crwdns39720:0crwdne39720:0
+category: crwdns39722:0crwdne39722:0
 ---
 
-# crwdns50600:0crwdne50600:0
+# crwdns39724:0crwdne39724:0
 
-crwdns50602:0crwdne50602:0
+crwdns39726:0crwdne39726:0
 
-## crwdns50604:0crwdne50604:0
+crwdns39728:0crwdne39728:0
 
-- crwdns50606:0crwdne50606:0
-    - crwdns50608:0crwdne50608:0
-- crwdns50610:0crwdne50610:0
-    - crwdns50612:0crwdne50612:0
-    - crwdns50614:0crwdne50614:0
-    - crwdns50616:0crwdne50616:0
-    - crwdns50618:0crwdne50618:0
-    - crwdns50620:0crwdne50620:0
-- crwdns50622:0crwdne50622:0
-    - crwdns50624:0crwdne50624:0
-    - crwdns50626:0crwdne50626:0
-    - crwdns50628:0crwdne50628:0
-    - crwdns50630:0crwdne50630:0
-    - crwdns50632:0crwdne50632:0
-    - crwdns50634:0crwdne50634:0
-    - crwdns50636:0crwdne50636:0
-- crwdns50638:0crwdne50638:0
-    - crwdns50640:0crwdne50640:0
+## crwdns39730:0crwdne39730:0
 
-## crwdns50642:0crwdne50642:0
+crwdns39732:0crwdne39732:0
 
-- crwdns50644:0crwdne50644:0
-- crwdns50646:0crwdne50646:0
-- crwdns50648:0crwdne50648:0
-- crwdns50650:0crwdne50650:0
-- crwdns50652:0crwdne50652:0
+![crwdns39736:0crwdne39736:0](crwdns39734:0crwdne39734:0)
 
-## crwdns50654:0crwdne50654:0
++ crwdns39738:0crwdne39738:0
++ crwdns39740:0crwdne39740:0
++ crwdns39742:0crwdne39742:0
++ crwdns39744:0crwdne39744:0
 
-- crwdns50656:0crwdne50656:0
-- crwdns50658:0crwdne50658:0
-- crwdns50660:0crwdne50660:0
-- crwdns50662:0crwdne50662:0
-- crwdns50664:0crwdne50664:0
-- crwdns50666:0crwdne50666:0
-- crwdns50668:0crwdne50668:0
-- crwdns50670:0crwdne50670:0
-- crwdns50672:0crwdne50672:0
-- crwdns50674:0crwdne50674:0
-- crwdns50676:0crwdne50676:0
-- crwdns50678:0crwdne50678:0
+## crwdns39746:0crwdne39746:0
+
+crwdns39748:0crwdne39748:0
+
+crwdns39750:0crwdne39750:0
+
+crwdns39752:0crwdne39752:0
+
+## crwdns39754:0crwdne39754:0
+
+crwdns39756:0crwdne39756:0
+
+### crwdns39758:0crwdne39758:0
+
+crwdns39760:0crwdne39760:0
+
++ crwdns39762:0crwdne39762:0
+
+    crwdns39764:0crwdne39764:0
+
+### crwdns39766:0crwdne39766:0
+
+crwdns39768:0crwdne39768:0
+
+crwdns39770:0crwdne39770:0
+
+crwdns39772:0crwdne39772:0
+
+crwdns39774:0crwdne39774:0
+
+crwdns39776:0crwdne39776:0
+
+```
+crwdns39778:0crwdne39778:0
+```
+
+crwdns39780:0crwdne39780:0
+
+crwdns39782:0crwdne39782:0
+
+```
+crwdns39784:0$your_pd_serverscrwdne39784:0
+```
+
+crwdns39786:0crwdne39786:0
+
+crwdns39788:0crwdne39788:0
+
+### crwdns39790:0crwdne39790:0
+
+crwdns39792:0crwdne39792:0
+
+## crwdns39794:0crwdne39794:0
+
+crwdns39796:0crwdne39796:0
+
+### crwdns39798:0crwdne39798:0
+
+crwdns39800:0crwdne39800:0
+
+crwdns39802:0crwdne39802:0
+
+```shell
+crwdns39804:0$TISPARK_FOLDERcrwdnd39804:0${name_with_version}crwdne39804:0
+```
+
+### crwdns39806:0crwdne39806:0
+
+crwdns39808:0crwdne39808:0
+
+#### crwdns39810:0crwdne39810:0
+
+crwdns39812:0crwdne39812:0
+
+crwdns39814:0crwdne39814:0
+
+crwdns39816:0${SPARKPATH}crwdne39816:0
+
+#### crwdns39818:0crwdne39818:0
+
+crwdns39820:0crwdne39820:0
+
+crwdns39822:0crwdne39822:0
+
+```bash
+crwdns39824:0$SPARKPATHcrwdne39824:0
+```
+
+crwdns39826:0crwdne39826:0
+
+```bash
+crwdns39828:0crwdne39828:0
+```
+
+crwdns39830:0crwdne39830:0
+
+#### crwdns39832:0crwdne39832:0
+
+crwdns39834:0crwdne39834:0
+
+crwdns39836:0crwdne39836:0
+
+```bash
+crwdns39838:0crwdne39838:0
+```
+
+crwdns39840:0crwdne39840:0
+
+#### crwdns39842:0crwdne39842:0
+
+crwdns39844:0crwdne39844:0
+
+## crwdns39846:0crwdne39846:0
+
+crwdns39848:0crwdne39848:0
+
+crwdns39850:0$SPARK_HOMEcrwdne39850:0
+
+crwdns39852:0crwdne39852:0
+
+```
+crwdns39854:0crwdne39854:0
+```
+
+crwdns39856:0crwdne39856:0
+
+```
+crwdns39858:0crwdne39858:0
+```
+
+crwdns39860:0crwdne39860:0
+
+crwdns39862:0crwdne39862:0
+
+```scala
+crwdns39864:0crwdne39864:0
+```
+
+crwdns39866:0crwdne39866:0
+
+```scala
+crwdns39868:0crwdne39868:0
+```
+
+crwdns39870:0crwdne39870:0
+
+```
+crwdns39872:0crwdne39872:0
+```
+
+crwdns39874:0crwdne39874:0
+
+crwdns39876:0crwdne39876:0
+
+```shell
+crwdns39878:0crwdne39878:0
+```
+
+```
+crwdns39880:0crwdne39880:0
+```
+
+crwdns39882:0crwdne39882:0
+
+```shell
+crwdns39884:0crwdne39884:0
+```
+
+```
+crwdns39886:0crwdne39886:0
+```
+
+crwdns39888:0crwdne39888:0
+
+crwdns39890:0crwdne39890:0
+
+```shell
+crwdns39892:0crwdne39892:0
+```
+
+```
+crwdns39894:0crwdne39894:0
+```
+
+crwdns39896:0crwdne39896:0
+
+```shell
+crwdns39898:0crwdne39898:0
+```
+
+crwdns39900:0crwdne39900:0
+
+```shell
+crwdns39902:0crwdne39902:0
+```
+
+```
+crwdns39904:0crwdne39904:0
+```
+
+crwdns39906:0crwdne39906:0
+
+```sql
+crwdns39908:0crwdne39908:0
+```
+
+```
+crwdns39910:0crwdne39910:0
+```
+
+## crwdns39912:0crwdne39912:0
+
+crwdns39914:0$SPARK_HOMEcrwdne39914:0
+
+```
+crwdns39916:0crwdne39916:0
+```
+
+## crwdns39918:0crwdne39918:0
+
+crwdns39920:0crwdne39920:0
+
+```scala
+crwdns39922:0crwdne39922:0
+crwdns39924:0crwdne39924:0
+```
+
+crwdns39926:0crwdne39926:0
+
+## crwdns39928:0crwdne39928:0
+
+crwdns39930:0crwdne39930:0
+
+1. crwdns39932:0crwdne39932:0
+2. crwdns39934:0crwdne39934:0
+
+crwdns39936:0crwdne39936:0
+
+crwdns39938:0crwdne39938:0
+
+crwdns39940:0crwdne39940:0
+
+| crwdns39942:0crwdne39942:0 | crwdns39944:0crwdne39944:0 | crwdns39946:0crwdne39946:0 |
+| -------------------------- | --------------------------:|:--------------------------:|
+| crwdns39948:0crwdne39948:0 | crwdns39950:0crwdne39950:0 | crwdns39952:0crwdne39952:0 |
+
+## crwdns39954:0crwdne39954:0
+
+- crwdns39956:0crwdne39956:0 crwdns39958:0crwdne39958:0
+
+    crwdns39960:0crwdne39960:0 crwdns39962:0crwdne39962:0
+
+- crwdns39964:0crwdne39964:0 crwdns39966:0crwdne39966:0
+
+    crwdns39968:0crwdne39968:0 crwdns39970:0crwdne39970:0
+
+- crwdns39972:0crwdne39972:0 crwdns39974:0crwdne39974:0
+
+    crwdns39976:0crwdne39976:0 crwdns39978:0crwdne39978:0
+
+- crwdns39980:0crwdne39980:0 crwdns39982:0crwdne39982:0
+
+    crwdns39984:0crwdne39984:0 crwdns39986:0crwdne39986:0
+
+- crwdns39988:0crwdne39988:0 crwdns39990:0crwdne39990:0
+
+    crwdns39992:0crwdne39992:0 crwdns39994:0crwdne39994:0
+
+- crwdns39996:0crwdne39996:0 crwdns39998:0crwdne39998:0
+
+    crwdns40000:0crwdne40000:0 crwdns40002:0crwdne40002:0
