@@ -1,280 +1,144 @@
 ---
-title: TiDB Sysbench 性能对比测试报告 - v3.0 对比 v2.1
+title: TiDB Sysbench 性能对比测试报告 - v2.1 对比 v2.0
 category: benchmark
 aliases:
-  - '/docs-cn/benchmark/sysbench-v4/'
+  - '/docs-cn/benchmark/sysbench-v3/'
 ---
 
-# TiDB Sysbench 性能对比测试报告 - v3.0 对比 v2.1
+# TiDB Sysbench 性能对比测试报告 - v2.1 对比 v2.0
 
 ## 测试目的
 
-对比 TiDB 3.0 版本和 2.1 版本在 OLTP 场景下的性能。
+对比 TiDB 2.1 版本和 2.0 版本在 OLTP 场景下的性能。
 
 ## 测试版本、时间、地点
 
-TiDB 版本：v3.0.0 vs. v2.1.13
+TiDB 版本：v2.1.0-rc.2 vs. v2.0.6
 
-时间：2019 年 6 月
+时间：2018 年 9 月
 
 地点：北京
 
 ## 测试环境
 
-测试在 AWS EC2 上进行，使用 CentOS-7.6.1810-Nitro (ami-028946f4cffc8b916) 镜像，各组件实例类型如下：
+IDC 机器：
 
-| 组件   | 实例类型        |
-|:---- |:----------- |
-| PD   | r5d.xlarge  |
-| TiKV | c5d.4xlarge |
-| TiDB | c5.4xlarge  |
+|  类别  |                         名称                          |
+|:----:|:---------------------------------------------------:|
+|  OS  |               Linux (CentOS 7.3.1611)               |
+| CPU  | 40 vCPUs, Intel(R) Xeon(R) CPU E5-2630 v4 @ 2.20GHz |
+| RAM  |                        128GB                        |
+| DISK |               Optane 500GB SSD \* 1               |
 
-Sysbench 版本：1.0.17
+Sysbench 版本：1.1.0
 
 ## 测试方案
 
-使用 Sysbench 向集群导入 **16 张表，每张数据 1000 万**。起 3 个 sysbench 分别向 3 个 TiDB 发压，请求并发数逐步增加，单次测试时间 5 分钟。
-
-准备数据命令：
-
-{{< copyable "shell-regular" >}}
-
-```sh
-sysbench oltp_common \
-    --threads=16 \
-    --rand-type=uniform \
-    --db-driver=mysql \
-    --mysql-db=sbtest \
-    --mysql-host=$tidb_host \
-    --mysql-port=$tidb_port \
-    --mysql-user=root \
-    prepare --tables=16 --table-size=10000000
-```
-
-执行测试命令：
-
-{{< copyable "shell-regular" >}}
-
-```sh
-sysbench $testname \
-    --threads=$threads \
-    --time=300 \
-    --report-interval=15 \
-    --rand-type=uniform \
-    --rand-seed=$RANDOM \
-    --db-driver=mysql \
-    --mysql-db=sbtest \
-    --mysql-host=$tidb_host \
-    --mysql-port=$tidb_port \
-    --mysql-user=root \
-    run --tables=16 --table-size=10000000
-```
+使用 Sysbench 向集群导入 **16 张表，每张数据 1000 万**。通过 HAProxy 代理，分别以递增并发数向集群发送请求，单次并发测试时间 5 分钟。
 
 ### TiDB 版本信息
 
-### v3.0.0
+### v2.1.0-rc.2
 
-| 组件   | GitHash                                    |
-|:---- |:------------------------------------------ |
-| TiDB | `8efbe62313e2c1c42fd76d35c6f020087eef22c2` |
-| TiKV | `a467f410d235fa9c5b3c355e3b620f81d3ac0e0c` |
-| PD   | `70aaa5eee830e21068f1ba2d4c9bae59153e5ca3` |
+|  组件  |                 GitHash                  |
+|:----:|:----------------------------------------:|
+| TiDB | 08e56cd3bae166b2af3c2f52354fbc9818717f62 |
+| TiKV | 57e684016dafb17dc8a6837d30224be66cbc7246 |
+|  PD  | 6a7832d2d6e5b2923c79683183e63d030f954563 |
 
-### v2.1.13
+### v2.0.6
 
-| 组件   | GitHash                                    |
-|:---- |:------------------------------------------ |
-| TiDB | `6b5b1a6802f9b8f5a22d8aab24ac80729331e1bc` |
-| TiKV | `b3cf3c8d642534ea6fa93d475a46da285cc6acbf` |
-| PD   | `886362ebfb26ef0834935afc57bcee8a39c88e54` |
+|  组件  |                 GitHash                  |
+|:----:|:----------------------------------------:|
+| TiDB | b13bc08462a584a085f377625a7bab0cc0351570 |
+| TiKV | 57c83dc4ebc93d38d77dc8f7d66db224760766cc |
+|  PD  | b64716707b7279a4ae822be767085ff17b5f3fea |
 
 ### TiDB 参数配置
 
-2.1 和 3.0 中开启 prepared plan cache (出于优化考虑，2.1 的 point select 与 read write 并未开启)：
-
-```toml
-[prepared-plan-cache]
-enabled = true
-```
-
-并设置全局变量：
-
-{{< copyable "sql" >}}
-
-```sql
-set global tidb_hashagg_final_concurrency=1;
-set global tidb_hashagg_partial_concurrency=1;
-set global tidb_disable_txn_auto_retry=0;
-```
-
-此外 3.0 还做了如下配置：
-
-```toml
-[tikv-client]
-max-batch-wait-time = 2000000
-```
+两版本 TiDB 均使用**默认配置**。
 
 ### TiKV 参数配置
 
-2.1 和 3.0 使用如下配置：
+两版本 TiKV 均使用如下配置：
 
-```toml
-log-level = "error"
+```txt
 [readpool.storage]
-normal-concurrency = 10
+normal-concurrency = 8
 [server]
-grpc-concurrency = 6
-[rocksdb.defaultcf]
-block-cache-size = "14GB"
-[rocksdb.writecf]
-block-cache-size = "8GB"
-[rocksdb.lockcf]
-block-cache-size = "1GB"
-```
-
-3.0 还做了如下配置：
-
-```toml
+grpc-concurrency = 8
 [raftstore]
-apply-pool-size = 3
-store-pool-size = 3
+sync-log = false
+[rocksdb.defaultcf]
+block-cache-size = "60GB"
+[rocksdb.writecf]
+block-cache-size = "20GB"
 ```
 
 ### 集群拓扑
 
-| 机器 IP                                    | 部署实例         |
-|:---------------------------------------- |:------------ |
-| 172.31.8.8                               | 3 * Sysbench |
-| 172.31.7.80, 172.31.5.163, 172.31.11.123 | PD           |
-| 172.31.4.172, 172.31.1.155, 172.31.9.210 | TiKV         |
-| 172.31.7.80, 172.31.5.163, 172.31.11.123 | TiDB         |
+|    机器 IP     |            部署实例             |
+|:------------:|:---------------------------:|
+| 172.16.30.31 | 1\*Sysbench 1\*HAProxy  |
+| 172.16.30.32 | 1\*TiDB 1\*pd 1\*TiKV |
+| 172.16.30.33 |     1\*TiDB 1\*TiKV     |
+| 172.16.30.34 |     1\*TiDB 1\*TiKV     |
 
 ## 测试结果
 
 ### Point Select 测试
 
-**v2.1**
+|  版本  | threads |    qps    | 95% latency(ms) |
+|:----:|:-------:|:---------:|:---------------:|
+| v2.1 |   64    | 111481.09 |      1.16       |
+| v2.1 |   128   | 145102.62 |      2.52       |
+| v2.1 |   256   | 161311.9  |      4.57       |
+| v2.1 |   512   | 184991.19 |      7.56       |
+| v2.1 |  1024   | 230282.74 |      10.84      |
+| v2.0 |   64    | 75285.87  |      1.93       |
+| v2.0 |   128   | 92141.79  |      3.68       |
+| v2.0 |   256   | 107464.93 |      6.67       |
+| v2.0 |   512   | 121350.61 |      11.65      |
+| v2.0 |  1024   | 150036.31 |      17.32      |
 
-| Threads | QPS       | 95% latency(ms) |
-|:------- |:--------- |:--------------- |
-| 150     | 240304.06 | 1.61            |
-| 300     | 276635.75 | 2.97            |
-| 600     | 307838.06 | 5.18            |
-| 900     | 323667.93 | 7.30            |
-| 1200    | 330925.73 | 9.39            |
-| 1500    | 336250.38 | 11.65           |
+![point select](/media/sysbench_v3_point_select.png)
 
-
-<!-- plan cache enabled
-| Threads |    QPS    | 95% latency(ms) |
-| :------- | :--------| :-------------- |
-| 150     | 175247.08 |            2.35 |
-| 300     | 189423.99 |            4.41 |
-| 600     | 197425.51 |            8.43 |
-| 900     | 202451.18 |           12.08 |
-| 1200    | 204908.95 |           15.83 |
-| 1500    | 206572.53 |           19.65 |
--->
-
-**v3.0**
-
-| Threads | QPS       | 95% latency(ms) |
-|:------- |:--------- |:--------------- |
-| 150     | 334219.04 | 0.64            |
-| 300     | 456444.86 | 1.10            |
-| 600     | 512177.48 | 2.11            |
-| 900     | 525945.13 | 3.13            |
-| 1200    | 534577.36 | 4.18            |
-| 1500    | 533944.64 | 5.28            |
-
-![point select](/media/sysbench_v4_point_select.png)
+v2.1 比 v2.0 在 Point Select 查询性能上，**提升了 50%**。
 
 ### Update Non-Index 测试
 
-**v2.1**
+|  版本  | threads |   qps    | 95% latency(ms) |
+|:----:|:-------:|:--------:|:---------------:|
+| v2.1 |   64    | 18946.09 |      5.77       |
+| v2.1 |   128   | 22022.82 |      12.08      |
+| v2.1 |   256   | 24679.68 |      25.74      |
+| v2.1 |   512   | 25107.1  |      51.94      |
+| v2.1 |  1024   | 27144.92 |     106.75      |
+| v2.0 |   64    | 16316.85 |      6.91       |
+| v2.0 |   128   | 20944.6  |      11.45      |
+| v2.0 |   256   | 24017.42 |      23.1       |
+| v2.0 |   512   | 25994.33 |      46.63      |
+| v2.0 |  1024   | 27917.52 |      92.42      |
 
-| threads |      qps | 95% latency(ms) |
-| ------- | --------:| ---------------:|
-| 150     | 21785.37 |            8.58 |
-| 300     | 28979.27 |           13.70 |
-| 600     | 34629.72 |           24.83 |
-| 900     | 36410.06 |           43.39 |
-| 1200    | 37174.15 |           62.19 |
-| 1500    | 37408.88 |           87.56 |
+![update non-index](/media/sysbench_v3_update_non_index.png)
 
-**v3.0**
-
-| threads |      qps | 95% latency(ms) |
-| ------- | --------:| ---------------:|
-| 150     | 28045.75 |            6.67 |
-| 300     | 39237.77 |            9.91 |
-| 600     | 49536.56 |           16.71 |
-| 900     | 55963.73 |           22.69 |
-| 1200    | 59904.02 |           29.72 |
-| 1500    | 62247.95 |           42.61 |
-
-![update non-index](/media/sysbench_v4_update_non_index.png)
+v2.1 与 v2.0 在 Update Non-Index 写入性能上基本一致。
 
 ### Update Index 测试
 
-**v2.1**
+|  版本  | threads |   qps    | 95% latency(ms) |
+|:----:|:-------:|:--------:|:---------------:|
+| v2.1 |   64    | 9934.49  |      12.08      |
+| v2.1 |   128   | 10505.95 |      25.28      |
+| v2.1 |   256   | 11007.7  |      55.82      |
+| v2.1 |   512   | 11198.81 |     106.75      |
+| v2.1 |  1024   | 11591.89 |     200.47      |
+| v2.0 |   64    | 9754.68  |      11.65      |
+| v2.0 |   128   | 10603.31 |      24.38      |
+| v2.0 |   256   | 11011.71 |      50.11      |
+| v2.0 |   512   | 11162.63 |     104.84      |
+| v2.0 |  1024   | 12067.63 |     179.94      |
 
-| Threads | QPS      | 95% latency(ms) |
-|:------- |:-------- |:--------------- |
-| 150     | 14378.24 | 13.22           |
-| 300     | 16916.43 | 24.38           |
-| 600     | 17636.11 | 57.87           |
-| 900     | 17740.92 | 95.81           |
-| 1200    | 17929.24 | 130.13          |
-| 1500    | 18012.80 | 161.51          |
+![update index](/media/sysbench_v3_update_index.png)
 
-**v3.0**
-
-| Threads | QPS      | 95% latency(ms) |
-|:------- |:-------- |:--------------- |
-| 150     | 19047.32 | 10.09           |
-| 300     | 24467.64 | 16.71           |
-| 600     | 28882.66 | 31.94           |
-| 900     | 30298.41 | 57.87           |
-| 1200    | 30419.40 | 92.42           |
-| 1500    | 30643.55 | 125.52          |
-
-![update index](/media/sysbench_v4_update_index.png)
-
-### Read Write 测试
-
-**v2.1**
-
-| Threads | QPS       | 95% latency(ms) |
-|:------- |:--------- |:--------------- |
-| 150     | 85140.60  | 44.98           |
-| 300     | 96773.01  | 82.96           |
-| 600     | 105139.81 | 153.02          |
-| 900     | 110041.83 | 215.44          |
-| 1200    | 113242.70 | 277.21          |
-| 1500    | 114542.19 | 337.94          |
-
-
-<!-- plan cache enabled
-| Treads |    QPS    | 95% latency(ms) |
-| :------- | :-------- | :-------------- |
-| 150     |  81339.88 |           47.47 |
-| 300     |  94455.29 |           86.00 |
-| 600     | 103125.91 |          161.51 |
-| 900     | 105984.81 |          235.74 |
-| 1200    | 106639.19 |          320.17 |
-| 1500    | 107312.93 |          390.30 |
--->
-
-**v3.0**
-
-| Threads | QPS       | 95% latency(ms) |
-|:------- |:--------- |:--------------- |
-| 150     | 105692.08 | 35.59           |
-| 300     | 129769.69 | 58.92           |
-| 600     | 141430.86 | 114.72          |
-| 900     | 144371.76 | 170.48          |
-| 1200    | 143344.37 | 223.34          |
-| 1500    | 144567.91 | 277.21          |
-
-![read write](/media/sysbench_v4_read_write.png)
+v2.1 与 v2.0 在 Update Index 写入性能上基本一致。
