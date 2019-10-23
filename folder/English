@@ -1,141 +1,154 @@
 ---
-title: TiDB 历史数据回溯
-category: advanced
+title: 生成自签名证书
+category: deployment
 ---
 
-# TiDB 历史数据回溯
+# 生成自签名证书
 
-本文档用于描述 TiDB 如何读取历史版本数据，包括具体的操作流程以及历史数据的保存策略。
+## 概述
 
-## 功能说明
+本文档提供使用 `cfssl` 生成自签名证书的示例。
 
-TiDB 实现了通过标准 SQL 接口读取历史数据功能，无需特殊的 client 或者 driver。当数据被更新、删除后，依然可以通过 SQL 接口将更新/删除前的数据读取出来。
+假设实例集群拓扑如下：
 
-另外即使在更新数据之后，表结构发生了变化，TiDB 依旧能用旧的表结构将数据读取出来。
+| Name  | Host IP     | Services   |
+| ----- | ----------- | ---------- |
+| node1 | 172.16.10.1 | PD1, TiDB1 |
+| node2 | 172.16.10.2 | PD2, TiDB2 |
+| node3 | 172.16.10.3 | PD3        |
+| node4 | 172.16.10.4 | TiKV1      |
+| node5 | 172.16.10.5 | TiKV2      |
+| node6 | 172.16.10.6 | TiKV3      |
 
-## 操作流程
+## 下载 cfssl
 
-为支持读取历史版本数据， 引入了一个新的 system variable: tidb_snapshot ，这个变量是 Session 范围有效，可以通过标准的 Set 语句修改其值。其值为文本，能够存储 TSO 和日期时间。TSO 即是全局授时的时间戳，是从 PD 端获取的; 日期时间的格式可以为： “2016-10-08 16:45:26.999”，一般来说可以只写到秒，比如”2016-10-08 16:45:26”。 当这个变量被设置时，TiDB 会用这个时间戳建立 Snapshot（没有开销，只是创建数据结构），随后所有的 Select 操作都会在这个 Snapshot 上读取数据。
+假设使用 x86_64 Linux 主机：
 
-> **注意：**
-> 
-> TiDB 的事务是通过 PD 进行全局授时，所以存储的数据版本也是以 PD 所授时间戳作为版本号。在生成 Snapshot 时，是以 tidb_snapshot 变量的值作为版本号，如果 TiDB Server 所在机器和 PD Server 所在机器的本地时间相差较大，需要以 PD 的时间为准。
+```bash
+mkdir ~/bin
+curl -s -L -o ~/bin/cfssl https://pkg.cfssl.org/R1.2/cfssl_linux-amd64
+curl -s -L -o ~/bin/cfssljson https://pkg.cfssl.org/R1.2/cfssljson_linux-amd64
+chmod +x ~/bin/{cfssl,cfssljson}
+export PATH=$PATH:~/bin
+```
 
-当读取历史版本操作结束后，可以结束当前 Session 或者是通过 Set 语句将 tidb_snapshot 变量的值设为 ""，即可读取最新版本的数据。
+## 初始化证书颁发机构
 
-## 历史数据保留策略
+生成 cfssl 的默认配置，以便于之后修改：
 
-TiDB 使用 MVCC 管理版本，当更新/删除数据时，不会做真正的数据删除，只会添加一个新版本数据，所以可以保留历史数据。历史数据不会全部保留，超过一定时间的历史数据会被彻底删除，以减小空间占用以及避免历史版本过多引入的性能开销。
+```bash
+mkdir ~/cfssl
+cd ~/cfssl
+cfssl print-defaults config > ca-config.json
+cfssl print-defaults csr > ca-csr.json
+```
 
-TiDB 使用周期性运行的 GC（Garbage Collection，垃圾回收）来进行清理，关于 GC 的详细介绍参见 [TiDB 垃圾回收 (GC)](../op-guide/gc.md)。
+## 生成证书
 
-这里需要重点关注的是 `tikv_gc_life_time` 和 `tikv_gc_safe_point` 这条。`tikv_gc_life_time` 用于配置历史版本保留时间，可以手动修改；`tikv_gc_safe_point` 记录了当前的 safePoint，用户可以安全地使用大于 safePoint 的时间戳创建 snapshot 读取历史版本。safePoint 在每次 GC 开始运行时自动更新。
+### 证书介绍
 
-## 示例
+- tidb-server certificate 由 TiDB 使用，为其他组件和客户端验证 TiDB 身份。
+- tikv-server certificate 由 TiKV 使用，为其他组件和客户端验证 TiKV 身份。
+- pd-server certificate 由 PD 使用，为其他组件和客户端验证 PD 身份。
+- client certificate 用于通过 PD、TiKV、TiDB 验证客户端。例如 `pd-ctl`，`tikv-ctl`，`pd-recover`。
 
-1. 初始化阶段，创建一个表，并插入几行数据：
+### 配置 CA 选项
 
-    ```sql
-    mysql> create table t (c int);
-    Query OK, 0 rows affected (0.01 sec)
+根据实际需求修改 `ca-config.json`：
 
-    mysql> insert into t values (1), (2), (3);
-    Query OK, 3 rows affected (0.00 sec)
-    ```
+```json
+{
+    "signing": {
+        "default": {
+            "expiry": "43800h"
+        },
+        "profiles": {
+            "server": {
+                "expiry": "43800h",
+                "usages": [
+                    "signing",
+                    "key encipherment",
+                    "server auth",
+                    "client auth"
+                ]
+            },
+            "client": {
+                "expiry": "43800h",
+                "usages": [
+                    "signing",
+                    "key encipherment",
+                    "client auth"
+                ]
+            }
+        }
+    }
+}
+```
 
-2. 查看表中的数据：
+根据实际需求修改 `ca-csr.json` ：
 
-    ```sql
-    mysql> select * from t;
-    +------+
-    | c    |
-    +------+
-    |    1 |
-    |    2 |
-    |    3 |
-    +------+
-    3 rows in set (0.00 sec)
-    ```
+```json
+{
+    "CN": "My own CA",
+    "key": {
+        "algo": "rsa",
+        "size": 2048
+    },
+    "names": [
+        {
+            "C": "CN",
+            "L": "Beijing",
+            "O": "PingCAP",
+            "ST": "Beijing"
+        }
+    ]
+}
+```
 
-3. 查看当前时间：
+#### 生成 CA 证书
 
-    ```sql
-    mysql> select now();
-    +---------------------+
-    | now()               |
-    +---------------------+
-    | 2016-10-08 16:45:26 |
-    +---------------------+
-    1 row in set (0.00 sec)
-    ```
+```bash
+cfssl gencert -initca ca-csr.json | cfssljson -bare ca -
+```
 
-4. 更新某一行数据：
+将会生成以下几个文件：
 
-    ```sql
-    mysql> update t set c=22 where c=2;
-    Query OK, 1 row affected (0.00 sec)
-    ```
+```bash
+ca-key.pem
+ca.csr
+ca.pem
+```
 
-5. 确认数据已经被更新：
+### 生成服务器端证书
 
-    ```sql
-    mysql> select * from t;
-    +------+
-    | c    |
-    +------+
-    |    1 |
-    |   22 |
-    |    3 |
-    +------+
-    3 rows in set (0.00 sec)
-    ```
+`hostname` 中为各组件的 IP 地址，以及 `127.0.0.1`
 
-6. 设置一个特殊的环境变量，这个是一个 session scope 的变量，其意义为读取这个时间之前的最新的一个版本。
+```bash
+echo '{"CN":"tidb-server","hosts":[""],"key":{"algo":"rsa","size":2048}}' | cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=server -hostname="172.16.10.1,172.16.10.2,127.0.0.1" - | cfssljson -bare tidb-server
 
-    ```sql
-    mysql> set @@tidb_snapshot="2016-10-08 16:45:26";
-    Query OK, 0 rows affected (0.00 sec)
-    ```
+echo '{"CN":"tikv-server","hosts":[""],"key":{"algo":"rsa","size":2048}}' | cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=server -hostname="172.16.10.4,172.16.10.5,172.16.10.6,127.0.0.1" - | cfssljson -bare tikv-server
 
-    > **注意：**
-    > 
-    > - 这里的时间设置的是 update 语句之前的那个时间。
-    > - 在 `tidb_snapshot` 前须使用 `@@` 而非 `@`，因为 `@@` 表示系统变量，`@` 表示用户变量。
+echo '{"CN":"pd-server","hosts":[""],"key":{"algo":"rsa","size":2048}}' | cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=server -hostname="172.16.10.1,172.16.10.2,172.16.10.3,127.0.0.1" - | cfssljson -bare pd-server
+```
 
-    这里读取到的内容即为 update 之前的内容，也就是历史版本：
+将会生成以下几个文件：
 
-    ```sql
-    mysql> select * from t;
-    +------+
-    | c    |
-    +------+
-    |    1 |
-    |    2 |
-    |    3 |
-    +------+
-    3 rows in set (0.00 sec)
-    ```
+```Bash
+tidb-server-key.pem     tikv-server-key.pem      pd-server-key.pem
+tidb-server.csr         tikv-server.csr          pd-server.csr
+tidb-server.pem         tikv-server.pem          pd-server.pem
+```
 
-7. 清空这个变量后，即可读取最新版本数据：
+### 生成客户端证书
 
-    ```sql
-    mysql> set @@tidb_snapshot="";
-    Query OK, 0 rows affected (0.00 sec)
-    ```
+```bash
+echo '{"CN":"client","hosts":[""],"key":{"algo":"rsa","size":2048}}' | cfssl gencert -ca=ca.pem -ca-key=ca-key.pem -config=ca-config.json -profile=client -hostname="" - | cfssljson -bare client
+```
 
-    ```sql
-    mysql> select * from t;
-    +------+
-    | c    |
-    +------+
-    |    1 |
-    |   22 |
-    |    3 |
-    +------+
-    3 rows in set (0.00 sec)
-    ```
+将会生成以下几个文件：
 
-
-    > **注意：**
-    >
-    > 在 `tidb_snapshot` 前须使用 `@@` 而非 `@`，因为 `@@` 表示系统变量，`@` 表示用户变量。
+```bash
+client-key.pem
+client.csr
+client.pem
+```
