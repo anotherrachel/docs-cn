@@ -1,255 +1,74 @@
 ---
-title: TiDB 系统数据库
+title: 字符串函数
 category: user guide
 ---
 
-# TiDB 系统数据库
-
-TiDB 的系统数据库跟 MySQL 类似，里面包含一些服务器运行时需要的信息。
-
-### 权限系统表
-
-这些系统表里面包含了用户账户以及相应的授权信息：
-
-* `user` 用户账户，全局权限，以及其它一些非权限的列
-* `db` 数据库级别的权限
-* `tables_priv` 表级的权限
-* `columns_priv` 列级的权限
-
-### 服务端帮助信息系统表
-
-* `help_topic` 目前为空
-
-### 统计信息相关系统表
-
-* `stats_buckets` 统计信息的桶
-* `stats_histograms` 统计信息的直方图
-* `stats_meta` 表的元信息，比如总行数和修改数
-
-### GC Worker 相关系统表
-
-* `gc_delete_range`
-
-### 其它系统表
-
-* `GLOBAL_VARIABLES` 全局系统变量表
-* `tidb` 用于 TiDB 在 bootstrap 的时候记录相关版本信息
-
-## INFORMATION\_SCHEMA 里面的表
-
-INFORMATION\_SCHEMA 库里面的表主要是为了兼容 MySQL 而存在，有些第三方软件会查询里面的信息。在目前 TiDB 的实现中，里面大部分只是一些空表。
-
-### CHARACTER\_SETS Table
-
-提供字符集相关的信息，其实数据是假的。TiDB 默认支持并且只支持 utf8mb4 。
-
-```sql
-mysql> select * from CHARACTER_SETS;
-+--------------------|----------------------|-----------------------|--------+
-| CHARACTER_SET_NAME | DEFAULT_COLLATE_NAME | DESCRIPTION           | MAXLEN |
-+--------------------|----------------------|-----------------------|--------+
-| ascii              | ascii_general_ci     | US ASCII              |      1 |
-| binary             | binary               | Binary pseudo charset |      1 |
-| latin1             | latin1_swedish_ci    | cp1252 West European  |      1 |
-| utf8               | utf8_general_ci      | UTF-8 Unicode         |      3 |
-| utf8mb4            | utf8mb4_general_ci   | UTF-8 Unicode         |      4 |
-+--------------------|----------------------|-----------------------|--------+
-5 rows in set (0.00 sec)
-```
-
-### COLLATIONS Table
-
-同上。
-
-### COLLATION\_CHARACTER\_SET\_APPLICABILITY Table
-
-空表。
-
-### COLUMNS Table
-
-COLUMNS 表提供了关于所有表的列的信息。这张表里面的信息不准确，推荐使用 SHOW 语句查询：
-
-```sql
-SHOW COLUMNS FROM table_name [FROM db_name] [LIKE 'wild']
-```
-
-### COLUMNS\_PRIVILEGE Table
-
-空表。
-
-### ENGINES Table
-
-ENGINES 表提供了关于存储引擎的信息。目前这张表里面的数据是假的。生产环境中，TiDB 只推荐使用 TiKV 引擎。
-
-### EVENTS Table
-
-空表。
-
-### FILES Table
-
-空表。
-
-### GLOBAL\_STATUS Table
-
-空表。
-
-### GLOBAL\_VARIABLES Table
-
-空表。
-
-### KEY\_COLUMN\_USAGE Table
-
-KEY\_COLUMN\_USAGE 这张表描述了关于列的 key 的约束，比如是否是主键列。
-
-### OPTIMIZER\_TRACE Table
-
-空表。
-
-### PARAMETERS Table
-
-空表。
-
-### PARTITIONS Table
-
-空表。
-
-### PLUGINS Table
-
-空表。
-
-### PROFILING Table
-
-空表。
-
-### REFERENTIAL\_CONSTRAINTS Table
-
-空表。
-
-### ROUTINES Table
-
-空表。
-
-### SCHEMATA Table
-
-SCHEMATA 表提供了关于数据库的信息。表中的内容和 SHOW DATABASES 基本等价。
-
-```sql
-mysql> select * from SCHEMATA;
-+--------------|--------------------|----------------------------|------------------------|----------+
-| CATALOG_NAME | SCHEMA_NAME        | DEFAULT_CHARACTER_SET_NAME | DEFAULT_COLLATION_NAME | SQL_PATH |
-+--------------|--------------------|----------------------------|------------------------|----------+
-| def          | INFORMATION_SCHEMA | utf8                       | utf8_bin               | NULL     |
-| def          | mysql              | utf8                       | utf8_bin               | NULL     |
-| def          | PERFORMANCE_SCHEMA | utf8                       | utf8_bin               | NULL     |
-| def          | test               | utf8                       | utf8_bin               | NULL     |
-+--------------|--------------------|----------------------------|------------------------|----------+
-4 rows in set (0.00 sec)
-```
-
-### SCHEMA\_PRIVILEGES Table
-
-空表。
-
-### SESSION\_STATUS Table
-
-空表。
-
-### SESSION\_VARIABLES Table
-
-SESSION\_VARIABLES 表提供了关于 session 变量的信息。表中的数据跟 SHOW SESSION VARIABLES 类似。
-
-### STATISTICS Table
-
-统计信息的表。
-
-```sql
-mysql> desc statistics;
-+---------------|---------------------|------|------|---------|-------+
-| Field         | Type                | Null | Key  | Default | Extra |
-+---------------|---------------------|------|------|---------|-------+
-| TABLE_CATALOG | varchar(512)        | YES  |      | NULL    |       |
-| TABLE_SCHEMA  | varchar(64)         | YES  |      | NULL    |       |
-| TABLE_NAME    | varchar(64)         | YES  |      | NULL    |       |
-| NON_UNIQUE    | varchar(1)          | YES  |      | NULL    |       |
-| INDEX_SCHEMA  | varchar(64)         | YES  |      | NULL    |       |
-| INDEX_NAME    | varchar(64)         | YES  |      | NULL    |       |
-| SEQ_IN_INDEX  | bigint(2) UNSIGNED  | YES  |      | NULL    |       |
-| COLUMN_NAME   | varchar(21)         | YES  |      | NULL    |       |
-| COLLATION     | varchar(1)          | YES  |      | NULL    |       |
-| CARDINALITY   | bigint(21) UNSIGNED | YES  |      | NULL    |       |
-| SUB_PART      | bigint(3) UNSIGNED  | YES  |      | NULL    |       |
-| PACKED        | varchar(10)         | YES  |      | NULL    |       |
-| NULLABLE      | varchar(3)          | YES  |      | NULL    |       |
-| INDEX_TYPE    | varchar(16)         | YES  |      | NULL    |       |
-| COMMENT       | varchar(16)         | YES  |      | NULL    |       |
-| INDEX_COMMENT | varchar(1024)       | YES  |      | NULL    |       |
-+---------------|---------------------|------|------|---------|-------+
-```
-
-下列操作是等价的。
-
-```sql
-SELECT * FROM INFORMATION_SCHEMA.STATISTICS
-  WHERE table_name = 'tbl_name'
-  AND table_schema = 'db_name'
-
-SHOW INDEX
-  FROM tbl_name
-  FROM db_name
-```
-
-### TABLES Table
-
-TABLES 表提供了数据库里面关于表的信息。
-
-以下操作是等价的：
-
-```sql
-SELECT table_name FROM INFORMATION_SCHEMA.TABLES
-  WHERE table_schema = 'db_name'
-  [AND table_name LIKE 'wild']
-
-SHOW TABLES
-  FROM db_name
-  [LIKE 'wild']
-```
-
-### TABLESPACES Table
-
-空表。
-
-### TABLE\_CONSTRAINTS Table
-
-TABLE\_CONSTRAINTS 记录了表的约束信息。其中：
-
-* `CONSTRAINT_TYPE` 的取值可以是 UNIQUE, PRIMARY KEY, 或者 FOREIGN KEY。
-* UNIQUE 和 PRIMARY KEY 信息跟 SHOW INDEX 看到的是一样的。
-
-### TABLE\_PRIVILEGES Table
-
-空表。
-
-### TRIGGERS Table
-
-空表。
-
-### USER\_PRIVILEGES Table
-
-USER\_PRIVILEGES 表提供了关于全局权限的信息。这张表的内容是根据 mysql.user 表生成的。
-
-```sql
-mysql> desc USER_PRIVILEGES;
-+----------------|--------------|------|------|---------|-------+
-| Field          | Type         | Null | Key  | Default | Extra |
-+----------------|--------------|------|------|---------|-------+
-| GRANTEE        | varchar(81)  | YES  |      | NULL    |       |
-| TABLE_CATALOG  | varchar(512) | YES  |      | NULL    |       |
-| PRIVILEGE_TYPE | varchar(64)  | YES  |      | NULL    |       |
-| IS_GRANTABLE   | varchar(3)   | YES  |      | NULL    |       |
-+----------------|--------------|------|------|---------|-------+
-4 rows in set (0.00 sec)
-```
-
-### VIEWS Table
-
-空表。TiDB 暂不支持视图。
+# 字符串函数
+
+| 函数名                                                                                                               | 功能描述                                                                                                                          |
+|:----------------------------------------------------------------------------------------------------------------- |:----------------------------------------------------------------------------------------------------------------------------- |
+| [`ASCII()`](https://dev.mysql.com/doc/refman/5.7/en/string-functions.html#function_ascii)                         | 返回最左字符的数值                                                                                                                     |
+| [`CHAR()`](https://dev.mysql.com/doc/refman/5.7/en/string-functions.html#function_char)                           | 返回由整数的代码值所给出的字符组成的字符串                                                                                                         |
+| [`BIN()`](https://dev.mysql.com/doc/refman/5.7/en/string-functions.html#function_bin)                             | 返回一个数的二进制值的字符串表示                                                                                                              |
+| [`HEX()`](https://dev.mysql.com/doc/refman/5.7/en/string-functions.html#function_hex)                             | 返回十进制值或字符串值的十六进制表示                                                                                                            |
+| [`OCT()`](https://dev.mysql.com/doc/refman/5.7/en/string-functions.html#function_oct)                             | 返回一个数的八进制值的字符串表示                                                                                                              |
+| [`UNHEX()`](https://dev.mysql.com/doc/refman/5.7/en/string-functions.html#function_unhex)                         | 返回 HEX 表示的数字所代表的字符串                                                                                                           |
+| [`TO_BASE64()`](https://dev.mysql.com/doc/refman/5.7/en/string-functions.html#function_to-base64)                 | 返回转换为 BASE64 的字符串参数                                                                                                           |
+| [`FROM_BASE64()`](https://dev.mysql.com/doc/refman/5.7/en/string-functions.html#function_from-base64)             | 解码为 BASE64 的字符串并返回结果                                                                                                          |
+| [`LOWER()`](https://dev.mysql.com/doc/refman/5.7/en/string-functions.html#function_lower)                         | 返回小写字母的字符                                                                                                                     |
+| [`LCASE()`](https://dev.mysql.com/doc/refman/5.7/en/string-functions.html#function_lcase)                         | 与 `LOWER()` 功能相同                                                                                                              |
+| [`UPPER()`](https://dev.mysql.com/doc/refman/5.7/en/string-functions.html#function_upper)                         | 返回大写字母的字符                                                                                                                     |
+| [`UCASE()`](https://dev.mysql.com/doc/refman/5.7/en/string-functions.html#function_ucase)                         | 与 `UPPER()` 功能相同                                                                                                              |
+| [`LPAD()`](https://dev.mysql.com/doc/refman/5.7/en/string-functions.html#function_lpad)                           | 返回左边由指定字符串填充的字符串参数                                                                                                            |
+| [`RPAD()`](https://dev.mysql.com/doc/refman/5.7/en/string-functions.html#function_rpad)                           | 返回右边由指定字符串填充的字符串参数                                                                                                            |
+| [`TRIM()`](https://dev.mysql.com/doc/refman/5.7/en/string-functions.html#function_trim)                           | 删除字符串的前缀和后缀                                                                                                                   |
+| [`LTRIM()`](https://dev.mysql.com/doc/refman/5.7/en/string-functions.html#function_ltrim)                         | 删除前面的空格字符                                                                                                                     |
+| [`RTRIM()`](https://dev.mysql.com/doc/refman/5.7/en/string-functions.html#function_rtrim)                         | 删除结尾的空格字符                                                                                                                     |
+| [`BIT_LENGTH()`](https://dev.mysql.com/doc/refman/5.7/en/string-functions.html#function_bit-length)               | 返回字符串的位长度                                                                                                                     |
+| [`CHAR_LENGTH()`](https://dev.mysql.com/doc/refman/5.7/en/string-functions.html#function_char-length)             | 返回字符串的字符长度                                                                                                                    |
+| [`CHARACTER_LENGTH()`](https://dev.mysql.com/doc/refman/5.7/en/string-functions.html#function_character-length)   | 与 `CHAR_LENGTH()` 功能相同                                                                                                        |
+| [`LENGTH()`](https://dev.mysql.com/doc/refman/5.7/en/string-functions.html#function_length)                       | 返回字符串的字节长度                                                                                                                    |
+| [`OCTET_LENGTH()`](https://dev.mysql.com/doc/refman/5.7/en/string-functions.html#function_octet-length)           | 与 `LENGTH()` 功能相同                                                                                                             |
+| [`INSERT()`](https://dev.mysql.com/doc/refman/5.7/en/string-functions.html#function_insert)                       | 在指定位置插入一个子字符串，直到指定的字符数                                                                                                        |
+| [`REPLACE()`](https://dev.mysql.com/doc/refman/5.7/en/string-functions.html#function_replace)                     | 替换指定的字符串                                                                                                                      |
+| [`SUBSTR()`](https://dev.mysql.com/doc/refman/5.7/en/string-functions.html#function_substr)                       | 返回指定的子字符串                                                                                                                     |
+| [`SUBSTRING()`](https://dev.mysql.com/doc/refman/5.7/en/string-functions.html#function_substring)                 | 返回指定的子字符串                                                                                                                     |
+| [`SUBSTRING_INDEX()`](https://dev.mysql.com/doc/refman/5.7/en/string-functions.html#function_substring-index)     | 返回最终定界符左边或右边的子字符串                                                                                                             |
+| [`MID()`](https://dev.mysql.com/doc/refman/5.7/en/string-functions.html#function_mid)                             | 返回从指定位置开始的子字符串                                                                                                                |
+| [`LEFT()`](https://dev.mysql.com/doc/refman/5.7/en/string-functions.html#function_left)                           | 返回指定的最左字符                                                                                                                     |
+| [`RIGHT()`](https://dev.mysql.com/doc/refman/5.7/en/string-functions.html#function_right)                         | 返回指定的最右字符                                                                                                                     |
+| [`INSTR()`](https://dev.mysql.com/doc/refman/5.7/en/string-functions.html#function_instr)                         | 返回子字符串的第一个出现位置                                                                                                                |
+| [`LOCATE()`](https://dev.mysql.com/doc/refman/5.7/en/string-functions.html#function_locate)                       | 返回子字符串的第一个出现位置，与 `INSTR()` 的参数位置相反                                                                                            |
+| [`POSITION()`](https://dev.mysql.com/doc/refman/5.7/en/string-functions.html#function_position)                   | 与 `LOCATE()` 功能相同                                                                                                             |
+| [`REPEAT()`](https://dev.mysql.com/doc/refman/5.7/en/string-functions.html#function_repeat)                       | 返回重复指定次数的字符串                                                                                                                  |
+| [`CONCAT()`](https://dev.mysql.com/doc/refman/5.7/en/string-functions.html#function_concat)                       | 返回连接的字符串                                                                                                                      |
+| [`CONCAT_WS()`](https://dev.mysql.com/doc/refman/5.7/en/string-functions.html#function_concat-ws)                 | 返回由分隔符连接的字符串                                                                                                                  |
+| [`REVERSE()`](https://dev.mysql.com/doc/refman/5.7/en/string-functions.html#function_reverse)                     | 返回和字符顺序相反的字符串                                                                                                                 |
+| [`SPACE()`](https://dev.mysql.com/doc/refman/5.7/en/string-functions.html#function_space)                         | 返回指定数目的空格组成的字符串                                                                                                               |
+| [`FIELD()`](https://dev.mysql.com/doc/refman/5.7/en/string-functions.html#function_field)                         | 返回参数在后续参数中出现的第一个位置                                                                                                            |
+| [`ELT()`](https://dev.mysql.com/doc/refman/5.7/en/string-functions.html#function_elt)                             | 返回指定位置的字符串                                                                                                                    |
+| [`EXPORT_SET()`](https://dev.mysql.com/doc/refman/5.7/en/string-functions.html#function_export-set)               | 返回一个字符串，其中值位中设置的每个位，可以得到一个 on 字符串，而每个未设置的位，可以得到一个 off 字符串                                                                     |
+| [`MAKE_SET()`](https://dev.mysql.com/doc/refman/5.7/en/string-functions.html#function_make-set)                   | 返回一组逗号分隔的字符串，由位集合中具有相应位的字符串组成                                                                                                 |
+| [`FIND_IN_SET()`](https://dev.mysql.com/doc/refman/5.7/en/string-functions.html#function_find-in-set)             | 返回第一个参数在第二个参数中出现的位置                                                                                                           |
+| [`FORMAT()`](https://dev.mysql.com/doc/refman/5.7/en/string-functions.html#function_format)                       | 返回指定小数位数格式的数字                                                                                                                 |
+| [`ORD()`](https://dev.mysql.com/doc/refman/5.7/en/string-functions.html#function_ord)                             | 返回参数中最左字符的字符代码                                                                                                                |
+| [`QUOTE()`](https://dev.mysql.com/doc/refman/5.7/en/string-functions.html#function_quote)                         | 引用一个字符串，返回一个在 SQL 语句中可用作正确转义的数据值的结果                                                                                           |
+| [`SOUNDEX()`](https://dev.mysql.com/doc/refman/5.7/en/string-functions.html#function_soundex)                     | 返回一个 soundex 字符串                                                                                                              |
+| [`SOUNDS LIKE`](https://dev.mysql.com/doc/refman/5.7/en/string-functions.html#operator_sounds-like)               | 按发音比较字符串                                                                                                                      |
+
+## 字符串比较函数
+
+| 函数名                                                                                                      | 功能描述     |
+|:-------------------------------------------------------------------------------------------------------- |:-------- |
+| [`LIKE`](https://dev.mysql.com/doc/refman/5.7/en/string-comparison-functions.html#operator_like)         | 进行简单模式匹配 |
+| [`NOT LIKE`](https://dev.mysql.com/doc/refman/5.7/en/string-comparison-functions.html#operator_not-like) | 否定简单模式匹配 |
+| [`STRCMP()`](https://dev.mysql.com/doc/refman/5.7/en/string-comparison-functions.html#function_strcmp)   | 比较两个字符串  |
+| [`MATCH`](https://dev.mysql.com/doc/refman/5.7/en/fulltext-search.html#function_match)                   | 执行全文搜索   |
+
+## 正则表达式
+
+| 表达式名                                                                                    | 功能描述            |
+|:--------------------------------------------------------------------------------------- |:--------------- |
+| [`REGEXP`](https://dev.mysql.com/doc/refman/5.7/en/regexp.html#operator_regexp)         | 使用正则表达式进行模式匹配   |
+| [`RLIKE`](https://dev.mysql.com/doc/refman/5.7/en/regexp.html#operator_regexp)          | 与 `REGEXP` 功能相同 |
+| [`NOT REGEXP`](https://dev.mysql.com/doc/refman/5.7/en/regexp.html#operator_not-regexp) | 否定 `REGEXP`     |
