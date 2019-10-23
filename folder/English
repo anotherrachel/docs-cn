@@ -1,131 +1,176 @@
 ---
-title: TiDB Sysbench 性能对比测试报告 - v2.0.0 对比 v1.0.0
+title: 如何对 TiDB 进行 TPC-C 测试
 category: benchmark
-aliases:
-  - '/docs-cn/benchmark/sysbench-v2/'
 ---
 
-# TiDB Sysbench 性能对比测试报告 - v2.0.0 对比 v1.0.0
+# 如何对 TiDB 进行 TPC-C 测试
 
-## 测试目的
+本文介绍如何对 TiDB 进行 [TPC-C](http://www.tpc.org/tpcc/) 测试。
 
-对比 TiDB 2.0 版本和 1.0 版本在 OLTP 场景下的性能。
+## 准备测试程序
 
-## 测试版本、时间、地点
+TPC-C 是一个对 OLTP（联机交易处理）系统进行测试的规范，使用一个商品销售模型对 OLTP 系统进行测试，其中包含五类事务：
 
-TiDB 版本：v1.0.8 Vs v2.0.0-rc6
+* NewOrder – 新订单的生成
+* Payment – 订单付款
+* OrderStatus – 最近订单查询
+* Delivery – 配送
+* StockLevel – 库存缺货状态分析
 
-时间：2018 年 4 月
+在测试开始前，TPC-C Benchmark 规定了数据库的初始状态，也就是数据库中数据生成的规则，其中 ITEM 表中固定包含 10 万种商品，仓库的数量可进行调整，假设 WAREHOUSE 表中有 W 条记录，那么：
 
-地点：北京
+* STOCK 表中应有 W \* 10 万条记录（每个仓库对应 10 万种商品的库存数据）
+* DISTRICT 表中应有 W \* 10 条记录（每个仓库为 10 个地区提供服务）
+* CUSTOMER 表中应有 W \* 10 \* 3000 条记录（每个地区有 3000 个客户）
+* HISTORY 表中应有 W \* 10 \* 3000 条记录（每个客户一条交易历史）
+* ORDER 表中应有 W \* 10 \* 3000 条记录（每个地区 3000 个订单），并且最后生成的 900 个订单被添加到 NEW-ORDER 表中，每个订单随机生成 5 ~ 15 条 ORDER-LINE 记录。
 
-## 测试环境
+我们将以 1000 WAREHOUSE 为例进行测试。
 
-IDC 机器
+TPC-C 使用 tpmC 值（Transactions per Minute）来衡量系统最大有效吞吐量 (MQTh, Max Qualified Throughput)，其中 Transactions 以 NewOrder Transaction 为准，即最终衡量单位为每分钟处理的新订单数。
+
+本文使用开源的 BenchmarkSQL 5.0 作为 TPC-C 测试实现并添加了对 MySQL 协议的支持，可以通过以下命令下载测试程序:
+
+{{< copyable "shell-regular" >}}
+
+```shell
+git clone -b 5.0-mysql-support-opt-2.1 https://github.com/pingcap/benchmarksql.git
+```
+
+安装 java 和 ant，以 CentOS 为例，可以执行以下命令进行安装
+
+{{< copyable "shell-regular" >}}
+
+```shell
+sudo yum install -y java ant
+```
+
+进入 benchmarksql 目录并执行 ant 构建
+
+{{< copyable "shell-regular" >}}
+
+```shell
+cd benchmarksql
+ant
+```
+
+## 部署 TiDB 集群
+
+对于 1000 WAREHOUSE 我们将在 3 台服务器上部署集群。
+
+在 3 台服务器的条件下，建议每台机器部署 1 个 TiDB，1 个 PD 和 1 个 TiKV 实例。
+
+比如这里采用的机器硬件配置是：
 
 |  类别  |                         名称                          |
 |:----:|:---------------------------------------------------:|
 |  OS  |               Linux (CentOS 7.3.1611)               |
 | CPU  | 40 vCPUs, Intel(R) Xeon(R) CPU E5-2630 v4 @ 2.20GHz |
 | RAM  |                        128GB                        |
-| DISK |                Optane 500GB SSD * 1                 |
+| DISK |                  Optane 500GB SSD                   |
 
-## 测试方案
+因为该型号 CPU 是 NUMA 架构，建议先用 `taskset` 进行绑核，首先用 `lscpu` 查看 NUMA node，比如：
 
-### TiDB 版本信息
+```text
+NUMA node0 CPU(s):     0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38
+NUMA node1 CPU(s):     1,3,5,7,9,11,13,15,17,19,21,23,25,27,29,31,33,35,37,39
+```
 
-### v1.0.8
+之后可以通过下面的命令来启动 TiDB：
 
-|  组件  |                 GitHash                  |
-|:----:|:----------------------------------------:|
-| TiDB | 571f0bbd28a0b8155a5ee831992c986b90d21ab7 |
-| TiKV | 4ef5889947019e3cb55cc744f487aa63b42540e7 |
-|  PD  | 776bcd940b71d295a2c7ed762582bc3aff7d3c0e |
+{{< copyable "shell-regular" >}}
 
-### v2.0.0-rc6
+```shell
+nohup taskset -c 0,2,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38 bin/tidb-server && \
+nohup taskset -c 1,3,5,7,9,11,13,15,17,19,21,23,25,27,29,31,33,35,37,39 bin/tidb-server
+```
 
-|  组件  |                 GitHash                  |
-|:----:|:----------------------------------------:|
-| TiDB | 82d35f1b7f9047c478f4e1e82aa0002abc8107e7 |
-| TiKV | 7ed4f6a91f92cad5cd5323aaebe7d9f04b77cc79 |
-|  PD  | 2c8e7d7e33b38e457169ce5dfb2f461fced82d65 |
+最后，可以选择部署一个 HAproxy 来进行多个 TiDB node 的负载均衡，推荐配置 nbproc 为 CPU 核数。
 
-### TiKV 参数配置
+## 配置调整
 
-* v1.0.8
+### TiDB 配置
 
-    ```
-    sync-log = false
-    grpc-concurrency = 8
-    grpc-raft-conn-num = 24
-    ```
+```toml
+[log]
+level = "error"
 
-* v2.0.0-rc6
+[performance]
+# 根据 NUMA 配置，设置单个 TiDB 最大使用的 CPU 核数
+max-procs = 20
 
-    ```
-    sync-log = false
-    grpc-concurrency = 8
-    grpc-raft-conn-num = 24
-    use-delete-range: false
-    ```
+[prepared_plan_cache]
+# 开启 TiDB 配置中的 prepared plan cache，以减少优化执行计划的开销
+enabled = true
+```
 
-### 集群拓扑
+### TiKV 配置
 
-| 机器 IP       | 部署实例                   |
-| ----------- | ---------------------- |
-| 172.16.21.1 | 1*tidb 1*pd 1*sysbench |
-| 172.16.21.2 | 1*tidb 1*pd 1*sysbench |
-| 172.16.21.3 | 1*tidb 1*pd 1*sysbench |
-| 172.16.11.4 | 1*tikv                 |
-| 172.16.11.5 | 1*tikv                 |
-| 172.16.11.6 | 1*tikv                 |
-| 172.16.11.7 | 1*tikv                 |
-| 172.16.11.8 | 1*tikv                 |
-| 172.16.11.9 | 1*tikv                 |
+开始可以使用基本的配置，压测运行后可以通过观察 Grafana 并参考 [TiKV 调优说明](/v3.0/reference/performance/tune-tikv.md)进行调整。
 
-## 测试结果
+### BenchmarkSQL 配置
 
-### 标准 Select 测试
+修改 `benchmarksql/run/props.mysql`：
 
-|     版本     | table count | table size | sysbench threads |  qps   |   latency(avg / .95)    |
-|:----------:|:-----------:|:----------:|:----------------:|:------:|:-----------------------:|
-| v2.0.0-rc6 |     32      |   1000 万   |     128 * 3      | 201936 | 1.9033 ms / 5.67667 ms  |
-| v2.0.0-rc6 |     32      |   1000 万   |     256 * 3      | 208130 | 3.69333 ms / 8.90333 ms |
-| v2.0.0-rc6 |     32      |   1000 万   |     512 * 3      | 211788 |  7.23333 ms / 15.59 ms  |
-| v2.0.0-rc6 |     32      |   1000 万   |     1024 * 3     | 212868 | 14.5933 ms / 43.2133 ms |
-|   v1.0.8   |     32      |   1000 万   |     128 * 3      | 188686 |  2.03667 ms /  5.99 ms  |
-|   v1.0.8   |     32      |   1000 万   |     256 * 3      | 195090 |    3.94 ms / 9.12 ms    |
-|   v1.0.8   |     32      |   1000 万   |     512 * 3      | 203012 | 7.57333 ms / 15.3733 ms |
-|   v1.0.8   |     32      |   1000 万   |     1024 * 3     | 205932 | 14.9267 ms / 40.7633 ms |
+```text
+conn=jdbc:mysql://{HAPROXY-HOST}:{HAPROXY-PORT}/tpcc?useSSL=false&useServerPrepStmts=true&useConfigs=maxPerformance
+warehouses=1000 # 使用 1000 个 warehouse
+terminals=500   # 使用 500 个终端
+loadWorkers=32  # 导入数据的并发数
+```
 
-GA2.0 比 GA1.0 在 Select 查询性能上，最高提升了 10% 左右。
+## 导入数据
 
-### 标准 OLTP 测试
+首先用 MySQL 客户端连接到 TiDB-Server 并执行：
 
-|     版本     | table count | table size | sysbench threads |   tps    |   qps    |   latency(avg / .95)    |
-|:----------:|:-----------:|:----------:|:----------------:|:--------:|:--------:|:-----------------------:|
-| v2.0.0-rc6 |     32      |   1000 万   |     128 * 3      | 5404.22  | 108084.4 |   87.2033 ms / 110 ms   |
-| v2.0.0-rc6 |     32      |   1000 万   |     256 * 3      | 5578.165 | 111563.3 | 167.673 ms / 275.623 ms |
-| v2.0.0-rc6 |     32      |   1000 万   |     512 * 3      | 5874.045 | 117480.9 | 315.083 ms / 674.017 ms |
-| v2.0.0-rc6 |     32      |   1000 万   |     1024 * 3     |  6290.7  |  125814  | 529.183 ms / 857.007 ms |
-|   v1.0.8   |     32      |   1000 万   |     128 * 3      | 5523.91  |  110478  |  69.53 ms / 88.6333 ms  |
-|   v1.0.8   |     32      |   1000 万   |     256 * 3      | 5969.43  |  119389  |  128.63 ms / 162.58 ms  |
-|   v1.0.8   |     32      |   1000 万   |     512 * 3      | 6308.93  |  126179  | 243.543 ms / 310.913 ms |
-|   v1.0.8   |     32      |   1000 万   |     1024 * 3     | 6444.25  |  128885  | 476.787ms / 635.143 ms  |
+{{< copyable "sql" >}}
 
-GA2.0 比 GA1.0 在 OLTP 性能上，性能基本一致。
+```sql
+create database tpcc
+```
 
-### 标准 Insert 测试
+之后在 shell 中运行 BenchmarkSQL 建表脚本：
 
-|     版本     | table count | table size | sysbench threads |   qps   |   latency(avg / .95)    |
-|:----------:|:-----------:|:----------:|:----------------:|:-------:|:-----------------------:|
-| v2.0.0-rc6 |     32      |   1000 万   |     128 * 3      | 31707.5 |  12.11 ms / 21.1167 ms  |
-| v2.0.0-rc6 |     32      |   1000 万   |     256 * 3      | 38741.2 |  19.8233 ms / 39.65 ms  |
-| v2.0.0-rc6 |     32      |   1000 万   |     512 * 3      | 45136.8 |  34.0267 ms / 66.84 ms  |
-| v2.0.0-rc6 |     32      |   1000 万   |     1024 * 3     |  48667  | 63.1167 ms / 121.08 ms  |
-|   v1.0.8   |     32      |   1000 万   |     128 * 3      | 31125.7 |  12.3367 ms / 19.89 ms  |
-|   v1.0.8   |     32      |   1000 万   |     256 * 3      |  36800  | 20.8667 ms / 35.3767 ms |
-|   v1.0.8   |     32      |   1000 万   |     512 * 3      |  44123  |  34.8067 ms / 63.32 ms  |
-|   v1.0.8   |     32      |   1000 万   |     1024 * 3     |  48496  | 63.3333 ms / 118.92 ms  |
+{{< copyable "shell-regular" >}}
 
-GA2.0 比 GA1.0 在 Insert 性能上略有提升。
+```shell
+cd run && \
+./runSQL.sh props.mysql sql.mysql/tableCreates.sql && \
+./runSQL.sh props.mysql sql.mysql/indexCreates.sql
+```
+
+运行导入数据脚本：
+
+{{< copyable "shell-regular" >}}
+
+```shell
+./runLoader.sh props.mysql
+```
+
+根据机器配置这个过程可能会持续几个小时。
+
+数据导入完成之后，可以运行 `sql.common/test.sql` 进行数据正确性验证，如果所有 SQL 语句都返回结果为空，即为数据导入正确。
+
+## 运行测试
+
+执行 BenchmarkSQL 测试脚本：
+
+{{< copyable "shell-regular" >}}
+
+```shell
+nohup ./runBenchmark.sh props.mysql &> test.log &
+```
+
+运行结束后通过 `test.log` 查看结果：
+
+```text
+07:09:53,455 [Thread-351] INFO   jTPCC : Term-00, Measured tpmC (NewOrders) = 77373.25
+07:09:53,455 [Thread-351] INFO   jTPCC : Term-00, Measured tpmTOTAL = 171959.88
+07:09:53,455 [Thread-351] INFO   jTPCC : Term-00, Session Start     = 2019-03-21 07:07:52
+07:09:53,456 [Thread-351] INFO   jTPCC : Term-00, Session End       = 2019-03-21 07:09:53
+07:09:53,456 [Thread-351] INFO   jTPCC : Term-00, Transaction Count = 345240
+```
+
+tpmC 部分即为测试结果。
+
+测试完成之后，也可以运行 `sql.common/test.sql` 进行数据正确性验证，如果所有 SQL 语句的返回结果都为空，即为数据测试过程正确。
