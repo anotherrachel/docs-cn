@@ -1,156 +1,130 @@
 ---
-title: TiDB 2.0 release notes
-category: Releases
+title: TiDB 事务隔离级别
+category: reference
 ---
 
-# TiDB 2.0 Release Notes
+# TiDB 事务隔离级别
 
-2018 年 4 月 27 日，TiDB 发布 2.0 GA 版。相比 1.0 版本，该版本对 MySQL 兼容性、系统稳定性、优化器和执行器做了很多改进。
+事务隔离级别是数据库事务处理的基础，ACID 中 I，即 Isolation，指的就是事务的隔离性。
 
-## TiDB
+SQL 92 标准定义了 4 种隔离级别：读未提交、读已提交、可重复读、串行化。详见下表：
 
-- SQL 优化器
-    - 精简统计信息数据结构，减小内存占用
-    - 加快进程启动时加载统计信息速度
-    - 支持统计信息动态更新 [experimental]
-    - 优化代价模型，对代价估算更精准
-    - 使用 `Count-Min Sketch` 更精确地估算点查的代价
-    - 支持分析更复杂的条件，尽可能充分的使用索引
-    - 支持通过 `STRAIGHT_JOIN` 语法手动指定 Join 顺序
-    - `GROUP BY`子句为空时使用 Stream Aggregation 算子，提升性能
-    - 支持使用索引计算 `Max/Min` 函数
-    - 优化关联子查询处理算法，支持将更多类型的关联子查询解关联并转化成 `Left Outer Join`
-    - 扩大 `IndexLookupJoin` 的使用范围，索引前缀匹配的场景也可以使用该算法
-- SQL 执行引擎
-    - 使用 Chunk 结构重构所有执行器算子，提升分析型语句执行性能，减少内存占用，显著提升 TPC-H 结果
-    - 支持 Streaming Aggregation 算子下推
-    - 优化 `Insert Into Ignore` 语句性能，提升 10 倍以上
-    - 优化 `Insert On Duplicate Key Update` 语句性能，提升 10 倍以上
-    - 下推更多的数据类型和函数到 TiKV 计算
-    - 优化 `Load Data` 性能，提升 10 倍以上
-    - 支持对物理算子内存使用进行统计，通过配置文件以及系统变量指定超过阈值后的处理行为
-    - 支持限制单条 SQL 语句使用内存的大小，减少程序 OOM 风险
-    - 支持在 CRUD 操作中使用隐式的行 ID
-    - 提升点查性能
-- Server
-    - 支持 Proxy Protocol
-    - 添加大量监控项, 优化日志
-    - 支持配置文件的合法性检测
-    - 支持 HTTP API 获取 TiDB 参数信息
-    - 使用 Batch 方式 Resolve Lock，提升垃圾回收速度
-    - 支持多线程垃圾回收
-    - 支持 TLS
-- 兼容性
-    - 支持更多 MySQL 语法
-    - 支持配置文件修改 `lower_case_table_names` 系统变量，用于支持 OGG 数据同步工具
-    - 提升对 Navicat 的兼容性
-    - 在 `Information_Schema` 中支持显示建表时间
-    - 修复部分函数/表达式返回类型和 MySQL 不同的问题
-    - 提升对 JDBC 兼容性
-    - 支持更多的 `SQL_MODE`
-- DDL
-    - 优化 `Add Index` 的执行速度，部分场景下速度大幅度提升
-    - `Add Index` 操作变更为低优先级，降低对线上业务影响
-    - `Admin Show DDL Jobs` 输出更详细的 DDL 任务状态信息
-    - 支持 `Admin Show DDL Job Queries JobID` 查询当前正在运行的 DDL 任务的原始语句
-    - 支持 `Admin Recover Index` 命令，用于灾难恢复情况下修复索引数据
-    - 支持通过 `Alter` 语句修改 Table Options
+| Isolation Level  | Dirty Write  | Dirty Read   | Fuzzy Read   | Phantom      |
+| ---------------- | ------------ | ------------ | ------------ | ------------ |
+| READ UNCOMMITTED | Not Possible | Possible     | Possible     | Possible     |
+| READ COMMITTED   | Not Possible | Not possible | Possible     | Possible     |
+| REPEATABLE READ  | Not Possible | Not possible | Not possible | Possible     |
+| SERIALIZABLE     | Not Possible | Not possible | Not possible | Not possible |
 
-## PD
+TiDB 实现了快照隔离 (Snapshot Isolation) 级别的一致性。为与 MySQL 保持一致，又称其为“可重复读”。该隔离级别不同于 [ANSI 可重复读隔离级别](#与-ansi-可重复读隔离级别的区别)和 [MySQL 可重复读隔离级别](#与-mysql-可重复读隔离级别的区别)。
 
-- 增加 `Region Merge` 支持，合并数据删除后产生的空 Region [experimental]
-- 增加 `Raft Learner` 支持 [experimental]
-- 调度器优化
-    - 调度器适应不同的 Region size
-    - 提升 TiKV 宕机时数据恢复的优先级和恢复速度
-    - 提升下线 TiKV 节点搬迁数据的速度
-    - 优化 TiKV 节点空间不足时的调度策略，尽可能防止空间不足时磁盘被写满
-    - 提升 balance-leader scheduler 的调度效率
-    - 减少 balance-region scheduler 调度开销
-    - 优化 hot-region scheduler 的执行效率
-- 运维接口及配置
-    - 增加 TLS 支持
-    - 支持设置 PD leader 优先级
-    - 支持基于 label 配置属性
-    - 支持配置特定 label 的节点不调度 Region leader
-    - 支持手动 Split Region，可用于处理单 Region 热点的问题
-    - 支持打散指定 Region，用于某些情况下手动调整热点 Region 分布
-    - 增加配置参数检查规则，完善配置项的合法性较验
-- 调试接口
-    - 增加 `Drop Region` 调试接口
-    - 增加枚举各个 PD health 状态的接口
-- 统计相关
-    - 添加异常 Region 的统计
-    - 添加 Region 隔离级别的统计
-    - 添加调度相关 metrics
-- 性能优化
-    - PD leader 尽量与 etcd leader 保持同步，提升写入性能
-    - 优化 Region heartbeat 性能，现可支持超过 100 万 Region
+> **注意：**
+> 
+> 在 3.0 默认设置中，事务的自动重试已经默认关闭。关于该项功能的补充信息和应如何开启该项功能，请参考[自动重试导致的事务异常](#自动重试导致的事务异常)和[事务重试](#事务重试)。
 
-## TiKV
+TiDB 使用 [Percolator 事务模型](https://research.google.com/pubs/pub36726.html)，当事务启动时会获取全局读时间戳，事务提交时也会获取全局提交时间戳，并以此确定事务的执行顺序，如果想了解 TiDB 事务模型的实现可以详细阅读以下两篇文章：[TiKV 的 MVCC (Multi-Version Concurrency Control) 机制](https://pingcap.com/blog-cn/mvcc-in-tikv/)，[Percolator 和 TiDB 事务算法](https://pingcap.com/blog-cn/percolator-and-txn/)。
 
-- 功能
-    - 保护关键配置，防止错误修改
-    - 支持 `Region Merge` [experimental]
-    - 添加 `Raw DeleteRange` API
-    - 添加 `GetMetric` API
-    - 添加 `Raw Batch Put`，`Raw Batch Get`，`Raw Batch Delete` 和 `Raw Batch Scan`
-    - 给 Raw KV API 增加 Column Family 参数，能对特定 Column Family 进行操作
-    - Coprocessor 支持 streaming 模式，支持 streaming 聚合
-    - 支持配置 Coprocessor 请求的超时时间
-    - 心跳包携带时间戳
-    - 支持在线修改 RocksDB 的一些参数，包括 `block-cache-size` 大小等
-    - 支持配置 Coprocessor 遇到某些错误时的行为
-    - 支持以导数据模式启动，减少导数据过程中的写放大
-    - 支持手动对 region 进行对半 split
-    - 完善数据修复工具 tikv-ctl
-    - Coprocessor 返回更多的统计信息，以便指导 TiDB 的行为
-    - 支持 ImportSST API，可以用于 SST 文件导入 [experimental]
-    - 新增 TiKV Importer 二进制，与 TiDB Lightning 集成用于快速导入数据 [experimental]
-- 性能
-    - 使用 ReadPool 优化读性能，`raw_get/get/batch_get` 提升 30%
-    - 提升 metrics 的性能
-    - Raft snapshot 处理完之后立即通知 PD，加快调度速度
-    - 解决 RocksDB 刷盘导致性能抖动问题
-    - 提升在数据删除之后的空间回收
-    - 加速启动过程中的垃圾清理过程
-    - 使用 `DeleteFilesInRanges` 减少副本迁移时 I/O 开销
-- 稳定性
-    - 解决在 PD leader 发送切换的情况下 gRPC call 不返回问题
-    - 解决由于 snapshot 导致下线节点慢的问题
-    - 限制搬移副本临时占用的空间大小
-    - 如果有 Region 长时间没有 Leader，进行上报
-    - 根据 compaction 事件及时更新统计的 Region size
-    - 限制单次 scan lock 请求的扫描的数据量，防止超时
-    - 限制接收 snapshot 过程中的内存占用，防止 OOM
-    - 提升 CI test 的速度
-    - 解决由于 snapshot 太多导致的 OOM 问题
-    - 配置 gRPC 的 `keepalive` 参数
-    - 修复 Region 增多容易 OOM 的问题
+## 可重复读
 
-## TiSpark
+当事务隔离级别为可重复读时，只能读到该事务启动时已经提交的其他事务修改的数据，未提交的数据或在事务启动后其他事务提交的数据是不可见的。对于本事务而言，事务语句可以看到之前的语句做出的修改。
 
-TiSpark 使用独立的版本号，现为 1.0 GA。TiSpark 1.0 版本组件提供了针对 TiDB 上的数据使用 Apache Spark 进行分布式计算的能力。
+对于运行于不同节点的事务而言，不同事务启动和提交的顺序取决于从 PD 获取时间戳的顺序。
 
-- 提供了针对 TiKV 读取的 gRPC 通信框架
-- 提供了对 TiKV 组件数据的和通信协议部分的编码解码
-- 提供了计算下推功能，包含：
-    - 聚合下推
-    - 谓词下推
-    - TopN 下推
-    - Limit 下推
-- 提供了索引相关的支持
-    - 谓词转化聚簇索引范围
-    - 谓词转化次级索引
-    - Index Only 查询优化
-    - 运行时索引退化扫表优化
-- 提供了基于代价的优化
-    - 统计信息支持
-    - 索引选择
-    - 广播表代价估算
-- 多种 Spark Interface 的支持
-    - Spark Shell 支持
-    - ThriftServer/JDBC 支持
-    - Spark-SQL 交互支持
-    - PySpark Shell 支持
-    - SparkR 支持
+处于可重复读隔离级别的事务不能并发的更新同一行，当时事务提交时发现该行在该事务启动后，已经被另一个已提交的事务更新过，那么该事务会回滚并启动自动重试。示例如下：
+
+```sql
+create table t1(id int);
+insert into t1 values(0);
+
+start transaction;              |               start transaction;
+select * from t1;               |               select * from t1;
+update t1 set id=id+1;          |               update t1 set id=id+1;
+commit;                         |
+                                |               commit; -- 事务提交失败，回滚
+```
+
+### 与 ANSI 可重复读隔离级别的区别
+
+尽管名称是可重复读隔离级别，但是 TiDB 中可重复读隔离级别和 ANSI 可重复隔离级别是不同的。按照 [A Critique of ANSI SQL Isolation Levels](https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/tr-95-51.pdf) 论文中的标准，TiDB 实现的是论文中的 Snapshot 隔离级别 (SI)。该隔离级别不会出现狭义上的幻读 (A3)，但不会阻止广义上的幻读 (P3)，同时，SI 还会出现写偏斜，而 ANSI 可重复读隔离级别不会出现写偏斜，会出现幻读。
+
+### 与 MySQL 可重复读隔离级别的区别
+
+MySQL 可重复读隔离级别在更新时并不检验当前版本是否可见，也就是说，即使该行在事务启动后被更新过，同样可以继续更新。这种情况在 TiDB 会导致事务回滚，导致事务最终失败，而 MySQL 是可以更新成功的。MySQL 的可重复读隔离级别并非 Snapshot 隔离级别，MySQL 可重复读隔离级别的一致性要弱于 Snapshot 隔离级别，也弱于 TiDB 的可重复读隔离级别。
+
+## 事务重试
+
+TiDB 默认不会进行事务重试，因为重试事务可能会导致更新丢失。如果业务可以容忍事务重试导致的异常，或者说并不关注事务是否以 SI 隔离级别来执行，可以开启自动重试。通过设置 `tidb_disable_txn_auto_retry = off` 可开启该项功能，同时要注意 `tidb_retry_limit` 的值不能为 0，否则，也会禁用自动重试。开启自动重试以后，事务遇到提交出错的可能性会降低。
+
+## 自动重试导致的事务异常
+
+因为 TiDB 不会[默认](#事务重试)自动重试事务，如果开启自动重试，显式的事务在遇到冲突后，可能会导致最终结果不符合预期。
+
+比如下面这两个例子:
+
+| Session1                                             | Session2                                            |
+| ---------------------------------------------------- | --------------------------------------------------- |
+| `begin;`                                             | `begin;`                                            |
+| `select balance from t where id = 1;`                | `update t set balance = balance -100 where id = 1;` |
+|                                                      | `update t set balance = balance -100 where id = 2;` |
+| // 使用 select 的结果决定后续的逻辑                              | `commit;`                                           |
+| `if balance > 100 {`                              |                                                     |
+| `update t set balance = balance + 100 where id = 2;` |                                                     |
+| `}`                                                  |                                                     |
+| `commit;` // 自动重试                                    |                                                     |
+
+| Session1                                              | Session2                      |
+| ----------------------------------------------------- | ----------------------------- |
+| `begin;`                                              | `begin;`                      |
+| `update t set balance = balance - 100  where id = 1;` | `delete from t where id = 1;` |
+|                                                       | `commit;`                     |
+| // 使用 affected_rows 的结果决定后续的逻辑                        |                               |
+| `if affected_rows > 0 {`                           |                               |
+| `update t set balance = balance + 100 where id = 2;`  |                               |
+| `}`                                                   |                               |
+| `commit;` // 自动重试                                     |                               |
+
+因为 TiDB 自动重试机制会把事务第一次执行的所有语句重新执行一遍，当一个事务里的后续语句是否执行取决于前面语句执行结果的时候，自动重试会违反快照隔离，导致更新丢失。这种情况下，需要在应用层重试整个事务。
+
+通过配置 `tidb_disable_txn_auto_retry = on` 变量可以关掉显示事务的重试。
+
+{{< copyable "sql" >}}
+
+```sql
+SET GLOBAL tidb_disable_txn_auto_retry = on;
+```
+
+改变 `tidb_disable_txn_auto_retry` 变量不会影响 `auto_commit = 1` 的单语句的隐式事务，因为该语句的自动重试，不会造成丢失更新等异常，即不会破坏事务的隔离性。
+
+关掉显式事务重试后，如果出现事务冲突，commit 语句会返回错误，错误信息会包含 `try again later` 这个字符串，应用层可以用来判断遇到的错误是否是可以重试的。
+
+如果事务执行过程中包含了应用层的逻辑，建议在应用层添加显式事务的重试，并关闭自动重试。
+
+`tidb_retry_limit` 变量决定了事务重试的最大次数，默认值为 10，当它被设置为 0 时，所有事务都不会自动重试，包括自动提交的单语句隐式事务。这是彻底禁用 TiDB 中自动重试机制的方法。当用户相比于事务隔离性，更关心事务执行的延迟时，可以将它设置为 0，所有冲突的事务都会以最快的方式上报失败给应用层。
+
+## 语句回滚
+
+在事务内部执行一个语句，遇到错误时，该语句不会生效。
+
+{{< copyable "sql" >}}
+
+```sql
+begin;
+insert into test values (1);
+insert into tset values (2);  -- tset 拼写错了，这条语句出错。
+insert into test values (3);
+commit;
+```
+
+上面的例子里面，第二个语句失败，其它插入 1 和 3 仍然能正常提交。
+
+{{< copyable "sql" >}}
+
+```sql
+begin;
+insert into test values (1);
+insert into tset values (2);  -- tset 拼写错了，这条语句出错。
+insert into test values (3);
+rollback;
+```
+
+这个例子中，第二个语句失败，最后由于调用了 rollback，事务不会将任何数据写入数据库。
