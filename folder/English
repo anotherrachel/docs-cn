@@ -1,70 +1,99 @@
 ---
-title: 跨数据中心部署方案
-category: how-to
+title: TiDB 用户文档
+category: user guide
 ---
 
-# 跨数据中心部署方案
+# TiDB 用户文档
 
-作为 NewSQL 数据库，TiDB 兼顾了传统关系型数据库的优秀特性以及 NoSQL 数据库可扩展性，以及跨数据中心（下文简称“中心”）场景下的高可用。本文档旨在介绍跨数据中心部署的不同解决方案。
+TiDB 支持 SQL92 标准并兼容 MySQL 语法，为了帮您更好地使用 TiDB, 该文档沿用了 MySQL 大部分的文档结构， 同时针对 TiDB 特有的功能作了详细的描述。
 
-## 三中心部署方案
+## TiDB 数据库管理
 
-TiDB, TiKV, PD 分别分布在 3 个不同的中心，这是最常规，可用性最高的方案。
+- [TiDB 服务](tidb-server.md)
+- [TiDB 进程启动参数](server-command-option.md)
+- [TiDB 数据目录](tidb-server.md#tidb-数据目录)
+- [TiDB 系统数据库](system-database.md)
+- [TiDB 系统变量](variable.md)
+- [TiDB 专用系统变量和语法](tidb-specific.md)
+- [TiDB 服务器日志文件](tidb-server.md#tidb-服务器日志文件)
+- [TiDB 访问权限管理](privilege.md)
+- [TiDB 用户账户管理](user-account-management.md)
+- [使用加密连接](encrypted-connections.md)
 
-![三中心部署](/media/deploy-3dc.png)
+## SQL 优化
 
-### 优点
+- [理解 TiDB 执行计划](understanding-the-query-execution-plan.md)
+- [统计信息](statistics.md)
 
-所有数据的副本分布在三个数据中心，任何一个数据中心失效后，另外两个数据中心会自动发起 leader election，并在合理长的时间内（通常情况 20s 以内）恢复服务，并且不会产生数据丢失。
+## 语言结构
 
-![三中心部署容灾](/media/deploy-3dc-dr.png)
++ 字面值
+    - [字符串字面值](literal-value-string-literals.md)
+    - [数字字面值](literal-value-numeric-literals.md)
+    - [NULL 值](literal-value-null-values.md)
+    - [十六进制字面值](literal-value-hex-decimal.md)
+    - [date 和 time 字面值](literal-value-date-and-time-literals.md)
+    - [布尔值](literal-value-boolean.md)
+    - [bit-val 字面值](literal-value-bit-value.md)
+- [数据库、表、索引、列和别名](schema-object-names.md)
+- [关键字和保留字](keywords-and-reserved-words.md)
+- [用户变量](user-defined-variables.md)
+- [表达式语法](expression-syntax.md)
+- [注释语法](comment-syntax.md)
 
-### 缺点
+## 字符集和时区
 
-性能受网络延迟影响。
+- [字符集支持](character-set-support.md)
+- [字符集配置](character-set-configuration.md)
+- [时区](time-zone.md)
 
-- 对于写入的场景，所有写入的数据需要同步复制到至少 2 个数据中心，由于 TiDB 写入过程使用两阶段提交，故写入延迟至少需要 2 倍数据中心间的延迟。
-- 对于读请求来说，如果数据 leader 与发起读取的 TiDB 节点不在同一个数据中心，也会受网络延迟影响。
-- TiDB 中的每个事务都需要向 PD leader 获取 TSO，当 TiDB 与 PD leader 不在同一个数据中心时，它上面运行的事务也会因此受网络延迟影响，每个有写入的事务会获取两次 TSO。
+## 数据类型
 
-### 读性能优化
+- [数值类型](datatype.md#数值类型)
+- [日期和时间类型](date-and-time-types.md)
+- [字符串类型](datatype.md#字符串类型)
+- [JSON 数据类型](datatype.md#json-类型)
+- [数据类型默认值](datatype.md#数据类型的默认值)
 
-如果不需要每个数据中心同时对外提供服务，可以将业务流量全部派发到一个数据中心，并通过调度策略把 Region leader 和 PD leader 都迁移到同一个数据中心（我们在上文所述的测试中也做了这个优化）。这样一来，不管是从 PD 获取 TSO 还是读取 Region 都不受数据中心间网络的影响。当该数据中心失效后，PD leader 和 Region leader 会自动在其它数据中心选出，只需要把业务流量转移至其他存活的数据中心即可。
+## 函数和操作符
 
-![三中心部署读性能优化](/media/deploy-3dc-optimize.png)
+- [函数和操作符概述](functions-and-operators-reference.md)
+- [表达式求值的类型转换](type-conversion-in-expression-evaluation.md)
+- [操作符](operators.md)
+- [控制流程函数](control-flow-functions.md)
+- [字符串函数](string-functions.md)
+- [数值函数与操作符](numeric-functions-and-operators.md)
+- [日期和时间函数](date-and-time-functions.md)
+- [位函数和操作符](bit-functions-and-operators.md)
+- [Cast 函数和操作符](cast-functions-and-operators.md)
+- [加密和压缩函数](encryption-and-compression-functions.md)
+- [信息函数](information-functions.md)
+- [JSON 函数](json-functions.md)
+- [信息函数](information-functions.md)
+- 全局事务 ID 函数 [TBD]
+- [GROUP BY 聚合函数](aggregate-group-by-functions.md)
+- [其他函数](miscellaneous-functions.md)
+- [精度数学](precision-math.md)
 
-## 两地三中心部署方案
+## SQL 语句语法
 
-两地三中心的方案与三数据中心类似，算是三机房方案根据业务特点进行的优化，区别是其中有两个数据中心距离很近（通常在同一个城市），网络延迟相对很小。这种场景下，我们可以把业务流量同时派发到同城的两个数据中心，同时控制 Region leader 和 PD leader 也分布在同城的两个数据中心。
+- [数据定义语句(DDL)](ddl.md)
+- [数据操作语句(DML)](dml.md)
+- [事务语句](transaction.md)
+- [数据库管理语句](admin.md)
+- [Prepared SQL 语句语法](prepare.md)
+- [实用工具语句](util.md)
+- [TiDB SQL 语法图](https://pingcap.github.io/sqlgram/)
 
-![两地三中心部署方案](/media/deploy-2city3dc.png)
+## JSON 支持
+- [JSON 支持](json-functions.md)
 
-与三数据中心方案相比，两地三中心有以下优势：
+## Connectors 和 API
+- [Connectors 和 API](connection-and-APIs.md)
 
-- 写入速度更优
-- 两中心同时提供服务资源利用率更高
-- 依然能保证任何一个数据中心失效后保持可用并且不发生数据丢失
+## 错误码与故障诊断
+- [错误码与故障诊断](error.md)
 
-但是，缺陷是如果同城的两个数据中心同时失效（理论上讲要高于异地三数据中心损失 2 个的概率），将会导致不可用以及部分数据丢失。
+## 与 MySQL 兼容性对比
+- [与 MySQL 兼容性对比](mysql-compatibility.md)
 
-## 两数据中心 + binlog 同步方案
-
-两数据中心 + binlog 同步类似于传统的 MySQL 中 master/slave 方案。两个数据中心分别部署一套完整的 TiDB 集群，我们称之为主集群和从集群。正常情况下所有的请求都在主集群，写入的数据通过 binlog 异步同步至从集群并写入。
-
-![binlog 同步部署方案](/media/deploy-binlog.png)
-
-当主集群整个数据中心失效后，业务可以切换至从集群，与 MySQL 类似，这种情况下会有一些数据缺失。对比 MySQL，这个方案的优势是数据中心内的 HA -- 少部分节点故障时，通过重新选举 leader 自动恢复服务，不需要人工干预。
-
-![两中心 binlog 相互备份方案](/media/deploy-backup.png)
-
-另外部分用户采用这种方式做双数据中心多活，两个数据中心各有一个集群，将业务分为两个库，每个库服务一部分数据，每个数据中心的业务只会访问一个库，两个集群之间通过 binlog 将本数据中心业务所涉及的库中的数据变更同步到对端机房，形成环状备份。
-
-> **注意：**
-> 
-> 在两数据中心 + binlog 同步部署方案中，数据中心之间只有 binlog 异步复制。在数据中心间的延迟较高的情况下，从集群落后主集群的数据量会增大。当主集群故障后（DR），会造成数据丢失，丢失的数据量受网络延迟等因素影响。
-
-## 高可用和容灾分析
-
-对于三数据中心方案和两地三中心方案，我们能得到的保障是任意一个数据中心故障时，集群能自动恢复服务，不需要人工介入，并能保证数据一致性。注意各种调度策略都是用于帮助性能优化的，当发生故障时调度机制总是第一优先考虑可用性而不是性能。
-
-对于两数据中心 + binlog 同步的方案，主集群内少量节点故障时也能自动恢复服务，不需要人工介入，并能保证数据一致性。当整个主集群故障时，需要人工切换至从集群，并可能发生一些数据丢失，数据丢失的数量取决于同步延迟，和网络条件有关。
