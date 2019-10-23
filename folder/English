@@ -1,67 +1,164 @@
 ---
-title: 基于角色的访问控制
+title: 权限管理
 category: reference
+aliases:
+  - '/docs-cn/sql/privilege/'
 ---
 
-# 基于角色的访问控制
+# 权限管理
 
-TiDB 的基于角色的访问控制 (RBAC) 系统的实现类似于 MySQL 8.0 的 RBAC 系统。TiDB 兼容大部分 MySQL RBAC 系统的语法。
+TiDB 的权限管理系统按照 MySQL 的权限管理进行实现，TiDB 支持大部分的 MySQL 的语法和权限类型。
 
-本文档主要介绍 TiDB 基于角色的访问控制相关操作及实现。
+本文档主要介绍 TiDB 权限相关操作、各项操作需要的权限以及权限系统的实现。
 
-> **警告：**
-> 
-> 基于角色的访问控制功能还在测试阶段，请不要在生产环境中使用。
+## 权限相关操作
 
-## 角色访问控制相关操作
+### 授予权限
 
-角色是一系列权限的集合。用户可以创建角色、删除角色、将权限赋予角色；也可以将角色授予给其他用户，被授予的用户在启用角色后，可以得到角色所包含的权限。
-
-### 创建角色
-
-创建角色 r_1 和 r_2：
+授予 `xxx` 用户对数据库 `test` 的读权限：
 
 {{< copyable "sql" >}}
 
 ```sql
-CREATE ROLE `r_1`@`%`, `r_2`@`%`;
+GRANT SELECT ON test.* TO 'xxx'@'%';
 ```
 
-角色名的格式和规范可以参考 [TiDB 用户账户管理](/v3.0/reference/security/user-account-management.md)。
-
-角色会被保存在 `mysql.user` 表中，如果表中有同名角色或用户，角色会创建失败并报错。 创建角色的用户需要拥有 `CREATE ROLE` 或 `CREATE USER` 权限。
-
-### 删除角色
-
-删除角色 r_1 和 r_2：
+为 `xxx` 用户授予所有数据库，全部权限：
 
 {{< copyable "sql" >}}
 
 ```sql
-DROP ROLE `r_1`@`%`, `r_2`@`%`;
+GRANT ALL PRIVILEGES ON *.* TO 'xxx'@'%';
 ```
 
-这个操作会清除角色在 `mysql.user` 表里面的记录项，并且清除在授权表里面的相关记录，解除和其相关的授权关系。 执行删除角色的用户需要拥有 `DROP ROLE` 或 `DROP USER` 权限。
-
-### 授予角色权限
-
-为角色授予权限和为用户授予权限操作相同，可参考 [TiDB 权限管理](/v3.0/reference/security/privilege-system.md)。
-
-为 `analyst` 角色授予数据库 `test` 的读权限：
+`GRANT` 为一个不存在的用户授予权限时，默认并不会自动创建用户。该行为受 SQL Mode 中的 `NO_AUTO_CREATE_USER` 控制。 如果从 SQL Mode 中去掉 `NO_AUTO_CREATE_USER`，当 `GRANT` 的目标用户不存在时，TiDB 会自动创建用户。
 
 {{< copyable "sql" >}}
 
 ```sql
-GRANT SELECT ON test.* TO 'analyst'@'%';
+mysql> select @@sql_mode;
 ```
 
-为 `analyst` 角色授予所有数据库的全部权限：
+```+-------------------------------------------------------------------------------------------------------------------------------------------+
+| @@sql_mode                                                                                                                                |
++-------------------------------------------------------------------------------------------------------------------------------------------+
+| ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION |
++-------------------------------------------------------------------------------------------------------------------------------------------+
+1 row in set (0.00 sec)
+```
 
 {{< copyable "sql" >}}
 
 ```sql
-GRANT ALL PRIVILEGES ON *.* TO 'analyst'@'%';
+set @@sql_mode='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
 ```
+
+```
+Query OK, 0 rows affected (0.00 sec)
+```
+
+{{< copyable "sql" >}}
+
+```sql
+SELECT * FROM mysql.user WHERE user='xxxx';
+```
+
+```
+Empty set (0.00 sec)
+```
+
+{{< copyable "sql" >}}
+
+```sql
+GRANT ALL PRIVILEGES ON test.* TO 'xxxx'@'%' IDENTIFIED BY 'yyyyy';
+```
+
+```
+Query OK, 0 rows affected (0.00 sec)
+```
+
+{{< copyable "sql" >}}
+
+```sql
+SELECT user,host FROM mysql.user WHERE user='xxxx';
+```
+
+```
++------|------+
+| user | host |
++------|------+
+| xxxx | %    |
++------|------+
+1 row in set (0.00 sec)
+```
+
+上述示例中，`xxxx@%` 即自动添加的用户。
+
+`GRANT` 对于数据库或者表的授权，不检查数据库或表是否存在。
+
+{{< copyable "sql" >}}
+
+```sql
+SELECT * FROM test.xxxx;
+```
+
+```
+ERROR 1146 (42S02): Table 'test.xxxx' doesn't exist
+```
+
+{{< copyable "sql" >}}
+
+```sql
+GRANT ALL PRIVILEGES ON test.xxxx TO xxxx;
+```
+
+```
+Query OK, 0 rows affected (0.00 sec)
+```
+
+{{< copyable "sql" >}}
+
+```sql
+mysql> SELECT user,host FROM mysql.tables_priv WHERE user='xxxx';
+```
+
+```
++------|------+
+| user | host |
++------|------+
+| xxxx | %    |
++------|------+
+1 row in set (0.00 sec)
+```
+
+`GRANT` 可以模糊匹配地授予数据库和表：
+
+{{< copyable "sql" >}}
+
+```sql
+mysql> GRANT ALL PRIVILEGES ON `te%`.* TO genius;
+```
+
+```
+Query OK, 0 rows affected (0.00 sec)
+```
+
+{{< copyable "sql" >}}
+
+```sql
+SELECT user,host,db FROM mysql.db WHERE user='genius';
+```
+
+```
++--------|------|-----+
+| user   | host | db  |
++--------|------|-----+
+| genius | %    | te% |
++--------|------|-----+
+1 row in set (0.00 sec)
+```
+
+这个例子中通过 `%` 模糊匹配，所有 `te` 开头的数据库，都被授予了权限。
 
 ### 收回权限
 
@@ -70,316 +167,316 @@ GRANT ALL PRIVILEGES ON *.* TO 'analyst'@'%';
 {{< copyable "sql" >}}
 
 ```sql
-REVOKE ALL PRIVILEGES ON `test`.* FROM 'analyst'@'%';
-```
-
-具体可参考 [TiDB 权限管理](/v3.0/reference/security/privilege-system.md)。
-
-### 将角色授予给用户
-
-将角色 role1 和 role2 同时授予给用户 `user1@localhost` 和 `user2@localhost`。
-
-{{< copyable "sql" >}}
-
-```sql
-GRANT 'role1', 'role2' TO 'user1'@'localhost', 'user2'@'localhost';
-```
-
-用户执行将角色授予给其他用户或者收回角色的命令，需要用户拥有 `SUPER` 权限。 将角色授予给用户时并不会启用该角色，启用角色需要额外的操作。
-
-以下操作可能会形成一个“关系环”：
-
-```sql
-CREATE USER 'u1', 'u2';
-CREATE ROLE 'r1', 'r2';
-
-GRANT 'u1' TO 'u1';
-GRANT 'r1' TO 'r1';
-
-GRANT 'r2' TO 'u2';
-GRANT 'u2' TO 'r2';
-```
-
-TiDB 允许这种多层授权关系存在，可以使用多层授权关系实现权限继承。
-
-### 收回角色
-
-解除角色 role1、role2 与用户 `user1@localhost`、`user2@localhost` 的授权关系。
-
-{{< copyable "sql" >}}
-
-```sql
-REVOKE 'role1', 'role2' FROM 'user1'@'localhost', 'user2'@'localhost';
-```
-
-解除角色授权具有原子性，如果在撤销授权操作中失败会回滚。
-
-### 设置默认启用角色
-
-角色在授予给用户之后，并不会生效；只有在用户启用了某些角色之后，才可以使用角色拥有的权限。
-
-可以对用户设置默认启用的角色；用户在登陆时，默认启用的角色会被自动启用。
-
-{{< copyable "sql" >}}
-
-```sql
-SET DEFAULT ROLE
-    {NONE | ALL | role [, role ] ...}
-    TO user [, user ]
-```
-
-比如将 administrator 和 developer 设置为 `test@localhost` 的默认启用角色：
-
-{{< copyable "sql" >}}
-
-```sql
-SET DEFAULT ROLE administrator, developer TO 'test'@'localhost';
-```
-
-将 `test@localhost` 的所有角色，设为其默认启用角色：
-
-{{< copyable "sql" >}}
-
-```sql
-SET DEFAULT ROLE ALL TO 'test'@'localhost';
-```
-
-关闭 `test@localhost` 的所有默认启用角色：
-
-{{< copyable "sql" >}}
-
-```sql
-SET DEFAULT ROLE NONE TO 'test'@'localhost';
-```
-
-需要注意的是，设置为默认启用角色的角色必须已经授予给那个用户。
-
-### 在当前 session 启用角色
-
-除了使用 `SET DEFAULT ROLE` 启用角色外，TiDB 还提供让用户在当前 session 启用某些角色的功能。
-
-```sql
-SET ROLE {
-    DEFAULT
-  | NONE
-  | ALL
-  | ALL EXCEPT role [, role ] ...
-  | role [, role ] ...
-}
-```
-
-例如，为当前用户启用角色 role1 和 role2 ，仅在当前 session 有效：
-
-{{< copyable "sql" >}}
-
-```sql
-SET ROLE 'role1', 'role2';
-```
-
-启用当前用户的默认角色：
-
-{{< copyable "sql" >}}
-
-```sql
-SET ROLE DEFAULT
-```
-
-启用授予给当前用户的所有角色：
-
-{{< copyable "sql" >}}
-
-```sql
-SET ROLE ALL
-```
-
-不启用任何角色：
-
-{{< copyable "sql" >}}
-
-```sql
-SET ROLE NONE
-```
-
-启用除 role1 和 role2 外的角色：
-
-{{< copyable "sql" >}}
-
-```sql
-SET ROLE ALL EXCEPT 'role1', 'role2'
+REVOKE ALL PRIVILEGES ON `test`.* FROM 'genius'@'localhost';
 ```
 
 > **注意：**
 > 
-> 使用 `SET ROLE` 启用的角色只有在当前 session 才会有效。
-
-### 查看当前启用角色
-
-当前用户可以通过 `CURRENT_ROLE()` 函数查看当前用户启用了哪些角色。
-
-例如，先对 `u1'@'localhost` 授予角色：
+> `REVOKE` 收回权限时只做精确匹配，若找不到记录则报错。而 `GRANT` 授予权限时可以使用模糊匹配。
 
 {{< copyable "sql" >}}
 
 ```sql
-GRANT 'r1', 'r2' TO 'u1'@'localhost';
+REVOKE ALL PRIVILEGES ON `te%`.* FROM 'genius'@'%';
 ```
+
+```
+ERROR 1141 (42000): There is no such grant defined for user 'genius' on host '%'
+```
+
+关于模糊匹配和转义，字符串和 identifier：
 
 {{< copyable "sql" >}}
 
 ```sql
-SET DEFAULT ROLE ALL TO 'u1'@'localhost';
+mysql> GRANT ALL PRIVILEGES ON `te\%`.* TO 'genius'@'localhost';
 ```
 
-在 u1 登陆后：
+```
+Query OK, 0 rows affected (0.00 sec)
+```
+
+上述例子是精确匹配名为 `te%` 的数据库，注意使用 `\` 转义字符。
+
+以单引号包含的部分，是一个字符串。以反引号包含的部分，是一个 identifier。注意下面的区别：
 
 {{< copyable "sql" >}}
 
 ```sql
-SELECT CURRENT_ROLE();
+GRANT ALL PRIVILEGES ON 'test'.* TO 'genius'@'localhost';
 ```
 
 ```
-+-------------------+
-| CURRENT_ROLE()    |
-+-------------------+
-| `r1`@`%`,`r2`@`%` |
-+-------------------+
-```
-
-{{< copyable "sql" >}}
-
-```sql
-SET ROLE 'r1'; SELECT CURRENT_ROLE();
-```
-
-```
-+----------------+
-| CURRENT_ROLE() |
-+----------------+
-| `r1`@`%`       |
-+----------------+
-```
-
-### 查看角色拥有的权限
-
-可以通过 `SHOW GRANTS` 语句查看用户被授予了哪些角色。 当用户查看其他用户权限相关信息时，需要对 `mysql` 数据库拥有 `SELECT` 权限。
-
-{{< copyable "sql" >}}
-
-```sql
-SHOW GRANTS FOR 'u1'@'localhost';
-```
-
-```
-+---------------------------------------------+
-| Grants for u1@localhost                     |
-+---------------------------------------------+
-| GRANT USAGE ON *.* TO `u1`@`localhost`      |
-| GRANT `r1`@`%`,`r2`@`%` TO `u1`@`localhost` |
-+---------------------------------------------+
-```
-
-可以通过使用 `SHOW GRANTS` 的 `USING` 选项来查看角色对应的权限。
-
-{{< copyable "sql" >}}
-
-```sql
-SHOW GRANTS FOR 'u1'@'localhost' USING 'r1';
-```
-
-```
-+---------------------------------------------+
-| Grants for u1@localhost                     |
-+---------------------------------------------+
-| GRANT USAGE ON *.* TO `u1`@`localhost`      |
-| GRANT Select ON `db1`.* TO `u1`@`localhost` |
-| GRANT `r1`@`%`,`r2`@`%` TO `u1`@`localhost` |
-+---------------------------------------------+
+ERROR 1064 (42000): You have an error in your SQL syntax; check the
+manual that corresponds to your MySQL server version for the right
+syntax to use near ''test'.* to 'genius'@'localhost'' at line 1
 ```
 
 {{< copyable "sql" >}}
 
 ```sql
-SHOW GRANTS FOR 'u1'@'localhost' USING 'r2';
+GRANT ALL PRIVILEGES ON `test`.* TO 'genius'@'localhost';
 ```
 
 ```
-+-------------------------------------------------------------+
-| Grants for u1@localhost                                     |
-+-------------------------------------------------------------+
-| GRANT USAGE ON *.* TO `u1`@`localhost`                      |
-| GRANT Insert, Update, Delete ON `db1`.* TO `u1`@`localhost` |
-| GRANT `r1`@`%`,`r2`@`%` TO `u1`@`localhost`                 |
-+-------------------------------------------------------------+
+Query OK, 0 rows affected (0.00 sec)
 ```
+
+如果想将一些特殊的关键字做为表名，可以用反引号包含起来。比如：
 
 {{< copyable "sql" >}}
 
 ```sql
-SHOW GRANTS FOR 'u1'@'localhost' USING 'r1', 'r2';
+mysql> CREATE TABLE `select` (id int);
 ```
 
 ```
-+---------------------------------------------------------------------+
-| Grants for u1@localhost                                             |
-+---------------------------------------------------------------------+
-| GRANT USAGE ON *.* TO `u1`@`localhost`                              |
-| GRANT Select, Insert, Update, Delete ON `db1`.* TO `u1`@`localhost` |
-| GRANT `r1`@`%`,`r2`@`%` TO `u1`@`localhost`                         |
-+---------------------------------------------------------------------+
+Query OK, 0 rows affected (0.27 sec)
 ```
 
-可以使用 `SHOW GRANTS` 或 `SHOW GRANTS FOR CURRENT_USER()` 查看当前用户的权限。 这两个语句有细微的差异，`SHOW GRANTS` 会显示当前用户的启用角色的权限，而 `SHOW GRANTS FOR CURRENT_USER()` 则不会显示启用角色的权限。
+### 查看为用户分配的权限
+
+`SHOW GRANTS` 语句可以查看为用户分配了哪些权限。例如：
+
+查看当前用户的权限：
+
+{{< copyable "sql" >}}
+
+```sql
+SHOW GRANTS;
+```
+
+查看某个特定用户的权限：
+
+{{< copyable "sql" >}}
+
+```sql
+SHOW GRANTS for 'root'@'%';
+```
+
+更精确的方式，可以通过直接查看授权表的数据实现。比如想知道，名为 `test@%` 的用户是否拥有对 `db1.t` 的 `Insert` 权限：
+
+1. 先查看该用户是否拥有全局 `Insert` 权限：
+
+    {{< copyable "sql" >}}
+
+    ```sql
+    SELECT Insert_priv FROM mysql.user WHERE user='test' AND host='%';
+    ```
+
+2. 如果没有，再查看该用户是否拥有 `db1` 数据库级别的 `Insert` 权限：
+
+    {{< copyable "sql" >}}
+
+    ```sql
+    SELECT Insert_priv FROM mysql.db WHERE user='test' AND host='%';
+    ```
+
+3. 如果仍然没有，则继续判断是否拥有 `db1.t` 这张表的 `Insert` 权限：
+
+    {{< copyable "sql" >}}
+
+    ```sql
+    SELECT table_priv FROM mysql.tables_priv WHERE user='test' AND host='%' AND db='db1';
+    ```
+
+## TiDB 各操作需要的权限
+
+TiDB 用户目前拥有的权限可以在 `INFORMATION_SCHEMA.USER_PRIVILEGES` 表中查找到。
+
+| 权限类型           | 权限变量名          | 权限简述                |
+|:-------------- |:-------------- |:------------------- |
+| ALL            | AllPriv        | 所有权限                |
+| Drop           | DropPriv       | 删除 schema/table     |
+| Index          | IndexPriv      | 创建/删除 index         |
+| Alter          | AlterPriv      | 执行 `ALTER` 语句       |
+| Super          | SuperPriv      | 所有权限                |
+| Grant          | GrantPriv      | 授予其他用户权限            |
+| Create         | CreatePriv     | 创建 schema/table     |
+| Select         | SelectPriv     | 读取表内容               |
+| Insert         | InsertPriv     | 插入数据到表              |
+| Update         | UpdatePriv     | 更新表中数据              |
+| Delete         | DeletePriv     | 删除表中数据              |
+| Trigger        | TriggerPriv    | 尚未使用                |
+| Process        | ProcessPriv    | 显示正在运行的任务           |
+| Execute        | ExecutePriv    | 执行 execute 语句       |
+| Drop Role      | DropRolePriv   | 执行 drop role        |
+| Show View      | ShowViewPriv   | 执行 show create view |
+| References     | ReferencesPriv | 尚未使用                |
+| Create View    | CreateViewPriv | 创建视图                |
+| Create User    | CreateUserPriv | 创建用户                |
+| Create Role    | CreateRolePriv | 执行 create role      |
+| Show Databases | ShowDBPriv     | 显示 database 内的表情况   |
+
+### ALTER
+
+- 对于所有的 `ALTER` 语句，均需要用户对所操作的表拥有 `ALTER` 权限。
+- 除 `ALTER...DROP` 和 `ALTER...RENAME TO` 外，均需要对所操作表拥有 `INSERT` 和 `CREATE` 权限。
+- 对于 `ALTER...DROP` 语句，需要对表拥有 `DROP` 权限。
+- 对于 `ALTER...RENAME TO` 语句，需要对重命名前的表拥有 `DROP` 权限，对重命名后的表拥有 `CREATE` 和 `INSERT` 权限。
+
+> **注意：**
+> 
+> 根据 MySQL 5.7 文档中的说明，对表进行 `ALTER` 操作需要 `INSERT` 和 `CREATE` 权限，但在 MySQL 5.7.25 版本实际情况中，该操作仅需要 `ALTER` 权限。目前，TiDB 中的 `ALTER` 权限与 MySQL 实际行为保持一致。
+
+### CREATE DATABASE
+
+需要对数据库拥有 `CREATE` 权限。
+
+### CREATE INDEX
+
+需要对所操作的表拥有 `INDEX` 权限。
+
+### CREATE TABLE
+
+需要对所操作的表拥有 `CREATE` 权限；若使用 `CREATE TABLE...LIKE...` 需要对相关的表拥有 `SELECT` 权限。
+
+### CREATE VIEW
+
+需要拥有 `CREATE VIEW` 权限。
+
+> **注意：**
+> 
+> 如果当前登录用户与创建视图的用户不同，除需要 `CREATE VIEW` 权限外，还需要 `SUPER` 权限。
+
+### DROP DATABASE
+
+需要对数据库拥有 `DROP` 权限。
+
+### DROP INDEX
+
+需要对所操作的表拥有 `INDEX` 权限。
+
+### DROP TABLES
+
+需要对所操作的表拥有 `DROP` 权限。
+
+### TRUNCATE TABLE
+
+需要对所操作的表拥有 `DROP` 权限。
+
+### RENAME TABLE
+
+需要对重命名前的表拥有 `ALTER` 和 `DROP` 权限，对重命名后的表拥有 `CREATE` 和 `INSERT` 权限。
+
+### ANALYZE TABLE
+
+需要对所操作的表拥有 `INSERT` 和 `SELECT` 权限。
+
+### SHOW
+
+`SHOW CREATE TABLE` 需要任意一种权限。
+
+`SHOW CREATE VIEW` 需要 `SHOW VIEW` 权限。
+
+### CREATE ROLE/USER
+
+`CREATE ROLE` 需要 `CREATE ROLE` 权限。
+
+`CREATE USER` 需要 `CREATE USER` 权限
+
+### DROP ROLE/USER
+
+`DROP ROLE` 需要 `DROPROLE` 权限。
+
+`DROP USER` 需要 `CREATEUSER` 权限
+
+### ALTER USER
+
+`ALTER USER` 需要 `CREATEUSER` 权限。
+
+### GRANT
+
+`GRANT` 需要 `GRANT` 权限并且拥有 `GRANT` 所赋予的权限。
+
+### REVOKE
+
+`REVOKE` 需要 `SUPER` 权限。
+
+## 权限系统的实现
 
 ### 授权表
 
-在原有的四张[系统权限表](/v3.0/reference/security/privilege-system.md#授权表)的基础上，角色访问控制引入了两张新的系统表：
+以下几张系统表是非常特殊的表，权限相关的数据全部存储在这几张表内。
 
-- `mysql.role_edges`：记录角色与用户的授权关系
-- `mysql.default_roles`：记录每个用户默认启用的角色
+- `mysql.user`：用户账户，全局权限
+- `mysql.db`：数据库级别的权限
+- `mysql.tables_priv`：表级别的权限
+- `mysql.columns_priv`：列级别的权限，当前暂不支持
 
-以下是 `mysql.role_edges` 所包含的数据。
+这几张表包含了数据的生效范围和权限信息。例如，`mysql.user` 表的部分数据：
 
 {{< copyable "sql" >}}
 
 ```sql
-select * from mysql.role_edges;
+SELECT User,Host,Select_priv,Insert_priv FROM mysql.user LIMIT 1;
 ```
 
 ```
-+-----------+-----------+---------+---------+-------------------+
-| FROM_HOST | FROM_USER | TO_HOST | TO_USER | WITH_ADMIN_OPTION |
-+-----------+-----------+---------+---------+-------------------+
-| %         | r_1       | %       | u_1     | N                 |
-+-----------+-----------+---------+---------+-------------------+
++------|------|-------------|-------------+
+| User | Host | Select_priv | Insert_priv |
++------|------|-------------|-------------+
+| root | %    | Y           | Y           |
++------|------|-------------|-------------+
 1 row in set (0.00 sec)
 ```
 
-其中 `FROM_HOST` 和 `FROM_USER` 分别表示角色的主机名和用户名，`TO_HOST` 和 `TO_USER` 分别表示被授予角色的用户的主机名和用户名。
+这条记录中，`Host` 和 `User` 决定了 root 用户从任意主机 (%) 发送过来的连接请求可以被接受，而 `Select_priv` 和 `Insert_priv` 表示用户拥有全局的 `Select` 和 `Insert` 权限。`mysql.user` 这张表里面的生效范围是全局的。
 
-`mysql.default_roles` 中包含了每个用户默认启用了哪些角色。
+`mysql.db` 表里面包含的 `Host` 和 `User` 决定了用户可以访问哪些数据库，权限列的生效范围是数据库。
+
+理论上，所有权限管理相关的操作，都可以通过直接对授权表的 CRUD 操作完成。
+
+实现层面其实也只是包装了一层语法糖。例如删除用户会执行：
 
 {{< copyable "sql" >}}
 
 ```sql
-select * from mysql.default_roles;
+DELETE FROM mysql.user WHERE user='test';
 ```
 
-```
-+------+------+-------------------+-------------------+
-| HOST | USER | DEFAULT_ROLE_HOST | DEFAULT_ROLE_USER |
-+------+------+-------------------+-------------------+
-| %    | u_1  | %                 | r_1               |
-| %    | u_1  | %                 | r_2               |
-+------+------+-------------------+-------------------+
-2 rows in set (0.00 sec)
+但是，不推荐手动修改授权表，建议使用 `DROP USER` 语句：
+
+{{< copyable "sql" >}}
+
+```sql
+DROP USER 'test';
 ```
 
-`HOST` 和 `USER` 分别表示用户的主机名和用户名，`DEFAULT_ROLE_HOST` 和 `DEFAULT_ROLE_USER` 分别表示默认启用的角色的主机名和用户名。
+### 连接验证
 
-### 其他
+当客户端发送连接请求时，TiDB 服务器会对登录操作进行验证。验证过程先检查 `mysql.user` 表，当某条记录的 `User` 和 `Host` 和连接请求匹配上了，再去验证 Password。用户身份基于两部分信息，发起连接的客户端的 `Host`，以及用户名 `User`。如果 `User` 不为空，则用户名必须精确匹配。
 
-由于基于角色的访问控制模块和用户管理以及权限管理结合十分紧密，因此需要参考一些操作的细节：
+User+Host 可能会匹配 `user` 表里面多行，为了处理这种情况，`user` 表的行是排序过的，客户端连接时会依次去匹配，并使用首次匹配到的那一行做权限验证。排序是按 `Host` 在前，`User` 在后。
 
-- [TiDB 权限管理](/v3.0/reference/security/privilege-system.md)
-- [TiDB 用户账户管理](/v3.0/reference/security/user-account-management.md)
+### 请求验证
+
+连接成功之后，请求验证会检测执行操作是否拥有足够的权限。
+
+对于数据库相关请求 (`INSERT`，`UPDATE`)，先检查 `mysql.user` 表里面的用户全局权限，如果权限够，则直接可以访问。如果全局权限不足，则再检查 `mysql.db` 表。
+
+`user` 表的权限是全局的，并且不管默认数据库是哪一个。比如 `user` 里面有 `DELETE` 权限，任何一行，任何的表，任何的数据库。
+
+`db`表里面，User 为空是匹配匿名用户，User 里面不能有通配符。Host 和 Db 列里面可以有 `%` 和 `_`，可以模式匹配。
+
+`user` 和 `db` 读到内存也是排序的。
+
+`tables_priv` 和 `columns_priv` 中使用 `%` 是类似的，但是在`Db`, `Table_name`, `Column_name` 这些列不能包含 `%`。加载进来时排序也是类似的。
+
+### 生效时机
+
+TiDB 启动时，将一些权限检查的表加载到内存，之后使用缓存的数据来验证权限。系统会周期性的将授权表从数据库同步到缓存，生效则是由同步的周期决定，目前这个值设定的是 5 分钟。
+
+修改了授权表，如果需要立即生效，可以手动调用：
+
+{{< copyable "sql" >}}
+
+```sql
+FLUSH PRIVILEGES;
+```
+
+### 限制和约束
+
+一些使用频率偏低的权限当前版本的实现中还未做检查，比如 `FILE`/`USAGE`/`SHUTDOWN`/`EXECUTE`/`PROCESS`/`INDEX` 等等，未来会陆续完善。
+
+现阶段对权限的支持还没有做到 column 级别。
