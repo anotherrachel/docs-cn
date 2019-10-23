@@ -1,94 +1,25 @@
 ---
-title: crwdns205912:0crwdne205912:0
-summary: crwdns205914:0crwdne205914:0
-category: crwdns205916:0crwdne205916:0
+title: crwdns205882:0crwdne205882:0
+summary: crwdns205884:0crwdne205884:0
+category: crwdns205886:0crwdne205886:0
 ---
 
-# crwdns205918:0crwdne205918:0
+# crwdns205888:0crwdne205888:0
 
-crwdns205920:0crwdne205920:0
+crwdns205890:0crwdne205890:0
 
-* crwdns205922:0crwdne205922:0
-* crwdns205924:0crwdne205924:0
+## crwdns205892:0crwdne205892:0
 
-## crwdns205926:0crwdne205926:0
-
-**crwdns205928:0crwdne205928:0**
-
-![crwdns205932:0crwdne205932:0](crwdns205930:0crwdne205930:0)
-
-**crwdns205934:0crwdne205934:0**
-
-![crwdns205938:0crwdne205938:0](crwdns205936:0crwdne205936:0)
-
-**crwdns205940:0crwdne205940:0**
-
-![crwdns205944:0crwdne205944:0](crwdns205942:0crwdne205942:0)
-
-## crwdns205946:0crwdne205946:0
-
-crwdns205948:0crwdne205948:0
+crwdns205894:0crwdne205894:0
 
 ```sql
-crwdns205950:0crwdne205950:0
+crwdns205896:0{DATABASE | SCHEMA}crwdnd205896:0[db_name]crwdne205896:0
+crwdns205898:0[DEFAULT]crwdnd205898:0[DEFAULT]crwdne205898:0
 ```
 
-```
-crwdns205952:0crwdne205952:0
-```
+crwdns205900:0crwdne205900:0
 
-crwdns205954:0crwdne205954:0
+## crwdns205902:0crwdne205902:0
 
-```sql
-crwdns205956:0crwdne205956:0
-```
-
-```
-crwdns205958:0crwdne205958:0
-```
-
-crwdns205960:0crwdne205960:0
-
-```sql
-crwdns205962:0crwdne205962:0
-```
-
-```
-crwdns205964:0crwdne205964:0
-```
-
-crwdns205966:0crwdne205966:0
-
-```sql
-crwdns205968:0crwdne205968:0
-```
-
-```
-crwdns205970:0crwdne205970:0
-```
-
-crwdns205972:0crwdne205972:0
-
-```sql
-crwdns205974:0crwdne205974:0
-```
-
-```
-crwdns205976:0crwdne205976:0
-```
-
-## crwdns205978:0crwdne205978:0
-
-* crwdns205980:0crwdne205980:0
-* crwdns205982:0crwdne205982:0
-
-## crwdns205984:0crwdne205984:0
-
-* [crwdns205988:0crwdne205988:0](crwdns205986:0crwdne205986:0)
-* [crwdns205992:0crwdne205992:0](crwdns205990:0crwdne205990:0)
-* [crwdns205996:0crwdne205996:0](crwdns205994:0crwdne205994:0)
-* [crwdns206000:0crwdne206000:0](crwdns205998:0crwdne205998:0)
-* [crwdns206004:0crwdne206004:0](crwdns206002:0crwdne206002:0)
-* [crwdns206008:0crwdne206008:0](crwdns206006:0crwdne206006:0)
-* [crwdns206012:0crwdne206012:0](crwdns206010:0crwdne206010:0)
-* [crwdns206016:0crwdne206016:0](crwdns206014:0crwdne206014:0)
+* [crwdns205906:0crwdne205906:0](crwdns205904:0crwdne205904:0)
+* [crwdns205910:0crwdne205910:0](crwdns205908:0crwdne205908:0)
