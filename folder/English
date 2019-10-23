@@ -1,72 +1,77 @@
 ---
-title: TiDB 悲观事务模式
+title: 事务模型
 category: reference
 ---
 
-# TiDB 悲观事务模式
+# 事务模型
 
-TiDB 默认使用乐观事务模式，存在事务提交时因为冲突而失败的问题。为了保证事务的成功率，需要修改应用程序，加上重试的逻辑。 悲观事务模式可以避免这个问题，应用程序无需添加重试逻辑，就可以正常执行。
+TiDB 使用乐观事务模型，在执行 `UPDATE`、`INSERT`、`DELETE` 等语句时，只有在提交过程中才会检查写写冲突，而不是像 MySQL 一样使用行锁来避免写写冲突。类似的，诸如 `GET_LOCK()` 和 `RELEASE_LOCK()` 等函数以及 `SELECT .. FOR UPDATE` 之类的语句在 TiDB 和 MySQL 中的执行方式并不相同。所以业务端在执行 SQL 语句后，需要注意检查 `COMMIT` 的返回值，即使执行时没有出错，`COMMIT` 的时候也可能会出错。
 
-## 悲观事务模式的行为
+## 与 MySQL 行为及性能对比
 
-悲观事务的行为和 MySQL 基本一致（不一致的地方详见[已知的局限](#已知的局限)）：
+### 事务重试
 
-- `SELECT FOR UPDATE` 会读取已提交的最新数据，并对读取到的数据加悲观锁。
+执行失败的事务默认**不会**自动重试，因为这会导致更新丢失。可通过配置 `tidb_disable_txn_auto_retry = off` 开启该项功能。
 
-- `UPDATE`/`DELETE`/`INSERT` 语句都会读取已提交的最新的数据来执行，并对修改的数据加悲观锁。
+## 大事务
 
-- 当一行数据被加了悲观锁以后，其他尝试修改这一行的写事务会被阻塞，等待悲观锁的释放。
+由于 TiDB 分布式两阶段提交的要求，修改数据的大事务可能会出现一些问题。因此，TiDB 特意对事务大小设置了一些限制以减少这种影响：
 
-- 当一行数据被加了悲观锁以后，其他尝试读取这一行的事务不会被阻塞，可以读到已提交的数据。
+* 单个事务包含的 SQL 语句不超过 5000 条（默认）
+* 每个键值对不超过 6MB
+* 键值对的总数不超过 300,000
+* 键值对的总大小不超过 100MB
 
-- 事务提交或回滚的时候，会释放所有的锁。
+## 小事务
 
-- 如果并发事务出现死锁，会被死锁检测器检测到，并返回和 MySQL 相同的 DEADLOCK 错误。
+由于 TiDB 中的每个事务都需要跟 PD leader 进行两次 round trip，TiDB 中的小事务相比于 MySQL 中的小事务延迟更高。以如下的 query 为例，用显式事务代替 `auto_commit`，可优化该 query 的性能。
 
-- 乐观事务和悲观事务可以共存，事务可以任意指定使用乐观模式或悲观模式来执行。
+使用 auto_commit 的原始版本：
 
-## 悲观事务的使用方法
+{{< copyable "sql" >}}
 
-进入悲观事务模式有以下三种方式:
+```sql
+UPDATE my_table SET a='new_value' WHERE id = 1;
+UPDATE my_table SET a='newer_value' WHERE id = 2;
+UPDATE my_table SET a='newest_value' WHERE id = 3;
+```
 
-- 执行 `BEGIN PESSIMISTIC;` 语句开启的事务，会进入悲观事务模式。 可以通过写成注释的形式 `BEGIN /*!90000 PESSIMISTIC */;` 来兼容 MySQL 语法。
+优化后的版本：
 
-- 执行 `set @@tidb_txn_mode = 'pessimistic';`，使这个 session 执行的所有显式事务（即非 autocommit 的事务）都会进入悲观事务模式。
+{{< copyable "sql" >}}
 
-- 执行 `set @@global.tidb_txn_mode = 'pessimistic';`，使之后整个集群所有新创建的 session 都会进入悲观事务模式执行显式事务。
+```sql
+START TRANSACTION;
+UPDATE my_table SET a='new_value' WHERE id = 1;
+UPDATE my_table SET a='newer_value' WHERE id = 2;
+UPDATE my_table SET a='newest_value' WHERE id = 3;
+COMMIT;
+```
 
-在配置了 `global.tidb_txn_mode` 为 `pessimistic` 之后，默认进入悲观事务模式，但是可以用以下两种方式使事务进入乐观事务模式：
+### 单线程或时延敏感型 workload
 
-- 执行 `BEGIN OPTIMISTIC;` 语句开启的事务，会进入乐观事务模式。 可以通过写成注释的形式 `BEGIN /*!90000 OPTIMISTIC */;` 来兼容 MySQL 语法。
+由于 TiDB 中的 workload 是分布式的，TiDB 中单线程或时延敏感型 workload 的性能相比于单实例部署的 MySQL 较低。这与 TiDB 中的小事务延迟较高的情況类似。
 
-- 执行 `set @@tidb_txn_mode = 'optimistic';`，使当前的 session 执行的事务进入乐观事务模式。
+### Load data
 
-`BEGIN PESSIMISTIC;` 和 `BEGIN OPTIMISTIC;` 语句的优先级高于 `tidb_txn_mode` 系统变量。使用这两个语句开启的事务，会忽略系统变量。
+* 语法：
 
-如果想要禁用悲观事务特性，可以修改配置文件，在 `[pessimistic-txn]` 类别下添加 `enable = false`.
+    {{< copyable "sql" >}}
 
-## 相关配置参数
-
-相关配置都在 `[pessimistic-txn]` 类别下，除了前面介绍过的 `enable`，还可配置以下参数：
-
-- `ttl`
-
+    ```sql
+    LOAD DATA LOCAL INFILE 'file_name' INTO TABLE table_name
+        {FIELDS | COLUMNS} TERMINATED BY 'string' ENCLOSED BY 'char' ESCAPED BY 'char'
+        LINES STARTING BY 'string' TERMINATED BY 'string'
+        IGNORE n LINES
+        (col_name ...);
     ```
-    ttl = "40s"
-    ```
 
-    `ttl` 是悲观事务的锁超时时间，默认值 40 秒，可以在 15 秒到 120 秒之间配置，超出这个范围会报错。如果事务的执行时间超过了 `ttl`，事务会失败。设置过大，会存在 `tidb-server` 宕机时，残留的悲观锁长时间阻塞写的问题，设置的过小，会存在事务来不及执行完，就被其他事务 rollback 的问题。
+    其中 ESCAPED BY 目前只支持 '/\/\'。
 
-- `max-retry-count`
+* 事务的处理：
 
-    ```
-    max-retry-count = 256
-    ```
+    TiDB 在执行 `LOAD DATA` 操作时，默认将每 2 万行记录作为一个事务进行持久化存储。如果一次 `LOAD DATA` 操作插入的数据超过 2 万行，那么会分为多个事务进行提交。如果某个事务出错，这个事务会提交失败，但它前面的事务仍然会提交成功，在这种情况下，一次 `LOAD DATA` 操作会有部分数据插入成功，部分数据插入失败。而 MySQL 中会将一次 `LOAD DATA` 操作视为一个事务，如果其中发生失败情况，将会导致整个 `LOAD DATA` 操作失败。
 
-    悲观事务会在事务内自动重试单个语句，这个配置指定单个语句最大重试次数，设置这个参数是为了避免极端情况下，出现无限重试，无法停止。 正常情况下不需要修改这个配置。
-
-## 已知的局限
-
-- 不支持 GAP Lock 和 Next Key Lock 在悲观事务内通过范围条件来更新多行数据的时候，其他的事务可以在这个范围内插入数据而不会被阻塞。
-
-- 不支持 SELECT LOCK IN SHARE MODE。
+    > **注意：**
+    > 
+    > `LOAD DATA` 在 TiDB 中默认会拆分事务后分批提交，这种拆分事务提交的方式是以打破事务的原子性和隔离性为代价的，使用该特性时，使用者需要保证没有其他对正在处理的表的**任何**操作，并且在出现报错时，需要及时**人工介入，检查数据的一致性和完整性**。不建议在生产环境中使用。
