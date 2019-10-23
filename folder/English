@@ -1,87 +1,70 @@
 ---
-title: Overview 重要监控指标详解
-category: monitoring
+title: 跨数据中心部署方案
+category: deployment
 ---
 
-# Overview 重要监控指标详解
+# 跨数据中心部署方案
 
-使用 Ansible 部署 TiDB 集群时，一键部署监控系统 (Prometheus/Grafana)，监控架构请看 [TiDB 监控框架概述](../op-guide/monitor-overview.md)。
+作为 NewSQL 数据库，TiDB 兼顾了传统关系型数据库的优秀特性以及 NoSQL 数据库可扩展性，以及跨数据中心（下文简称“中心”）场景下的高可用。本文档旨在介绍跨数据中心部署的不同解决方案。
 
-目前 Grafana Dashboard 整体分为 PD、TiDB、TiKV、Node\_exporter、Overview 等。
+## 三中心部署方案
 
-对于日常运维，我们单独挑选出重要的 Metrics 放在 Overview 页面，方便日常运维人员观察集群组件 (PD, TiDB, TiKV) 使用状态以及集群使用状态。
+TiDB, TiKV, PD 分别分布在 3 个不同的中心，这是最常规，可用性最高的方案。
 
-以下为 Overview Dashboard 监控说明：
+![三中心部署](../media/deploy-3dc.png)
 
-## Services Port Status
+### 优点
 
-- Services Online：各服务在线节点数量
-- Services Offline：各服务 Down 掉节点数量
+所有数据的副本分布在三个数据中心，任何一个数据中心失效后，另外两个数据中心会自动发起 leader election，并在合理长的时间内（通常情况 20s 以内）恢复服务，并且不会产生数据丢失。
 
-## PD
+![三中心部署容灾](../media/deploy-3dc-dr.png)
 
-- Storage Capacity：TiDB 集群总可用数据库空间大小
-- Current Storage Size：TiDB 集群目前已用数据库空间大小
-- Number of Regions：当前集群的 Region 总量
-- Leader Balance Ratio：Leader 数量最多和最少节点相差的百分比，一般小于 5%，节点重启时会有比较大的波动
-- Region Balance Ratio：Region 数量最多和最少节点相差的百分比，一般小于 5%，新增/下线节点时相差比较大
-- Store Status：集群 TiKV 节点的状态
-    - Up Stores：正常运行的 TiKV 节点数量
-    - Disconnect Stores：短时间内通信异常的 TiKV 节点数量
-    - LowSpace Stores：剩余可用空间小于 20% 的 TiKV 节点数量
-    - Down Stores：停止工作的 TiKV 节点数量，如果大于 0，说明有节点不正常
-    - Offline Stores：正在下线的 TiKV 节点数量（正在下线的 TiKV 节点还在提供服务）
-    - Tombstone Stores：下线成功的 TiKV 节点数量
-- 99% completed\_cmds\_duration\_seconds：单位时间内，99% 的 pd-server 请求执行时间小于监控曲线的值，一般 <= 5ms
-- handle\_requests\_duration\_seconds：PD 发送请求的网络耗时
+### 缺点
 
-## TiDB
+性能受网络延迟影响。
 
-- Statement OPS：SQL 执行数量统计（包含 select、insert、update 等）
-- Duration：SQL 执行的时间
-- QPS By Instance：每个 TiDB 上的 QPS
-- Failed Query OPM：失败 SQL 的统计，例如语法错误、主键冲突等
-- Connection count：每个 TiDB 的连接数
-- Heap Memory Usage：每个 TiDB 使用的堆内存大小
-- Transaction OPS：事务执行数量统计
-- Transaction Duration：事务执行的时间
-- KV Cmd OPS：KV 命令执行数量统计
-- KV Cmd Duration 99：KV 命令执行的时间
-- PD TSO OPS：TiDB 从 PD 获取 TSO 的数量
-- PD TSO Wait Duration：TiDB 从 PD 获取 TS 的时间
-- TiClient Region Error OPS：TiKV 返回 Region 相关错误信息的数量
-- Lock Resolve OPS：事务冲突相关的数量
-- Load Schema Duration：TiDB 从 TiKV 获取 Schema 的时间
-- KV Backoff OPS：TiKV 返回错误信息的数量（事务冲突等）
+- 对于写入的场景，所有写入的数据需要同步复制到至少 2 个数据中心，由于 TiDB 写入过程使用两阶段提交，故写入延迟至少需要 2 倍数据中心间的延迟。
+- 对于读请求来说，如果数据 leader 与发起读取的 TiDB 节点不在同一个数据中心，也会受网络延迟影响。
+- TiDB 中的每个事务都需要向 PD leader 获取 TSO，当 TiDB 与 PD leader 不在同一个数据中心时，它上面运行的事务也会因此受网络延迟影响，每个有写入的事务会获取两次 TSO。
 
-## TiKV
+### 读性能优化
 
-- leader：各个 TiKV 节点上 Leader 的数量分布
-- region：各个 TiKV 节点上 Region 的数量分布
-- CPU：各个 TiKV 节点的 CPU 使用率
-- Memory：各个 TiKV 节点的内存使用量
-- store size：各个 TiKV 节点存储的数据量
-- cf size：集群不同 CF 存储的数据量
-- channel full：正常情况显示 No data，如果有了监控值，说明对应 TiKV 节点的消息处理不过来了
-- server report failures：正常情况显示 No data，如果出现了 Unreachable，说明 TiKV 之间通信有问题
-- scheduler pending commands：写入堆积的数量，偶尔出现峰值属于正常现象
-- coprocessor pending requests：正常情况监控为 0 或者数量很少
-- coprocessor executor count：不同类型的查询操作数量
-- coprocessor request duration：TiKV 中查询消耗的时间
-- raft store CPU：raftstore 线程的 CPU 使用率，目前为单线程，超过 80% 说明使用率很高
-- Coprocessor CPU：TiKV 查询线程的 CPU 使用率，和业务相关，复杂查询会使用大量的 CPU 资源
+如果不需要每个数据中心同时对外提供服务，可以将业务流量全部派发到一个数据中心，并通过调度策略把 Region leader 和 PD leader 都迁移到同一个数据中心（我们在上文所述的测试中也做了这个优化）。这样一来，不管是从 PD 获取 TSO 还是读取 Region 都不受数据中心间网络的影响。当该数据中心失效后，PD leader 和 Region leader 会自动在其它数据中心选出，只需要把业务流量转移至其他存活的数据中心即可。
 
-## System Info
+![三中心部署读性能优化](../media/deploy-3dc-optimize.png)
 
-- Vcores：CPU 核心数量
-- Memory：内存总大小
-- CPU Usage：CPU 使用率，最大为 100%
-- Load [1m]：1 分钟的负载情况
-- Memory Available：剩余内存大小
-- Network Traffic：网卡流量统计
-- TCP Retrans：网络监控，TCP 相关信息统计
-- IO Util：磁盘使用率，最高为 100%，一般到 80% - 90% 就需要考虑加节点
+## 两地三中心部署方案
 
-## 图例
+两地三中心的方案与三数据中心类似，算是三机房方案根据业务特点进行的优化，区别是其中有两个数据中心距离很近（通常在同一个城市），网络延迟相对很小。这种场景下，我们可以把业务流量同时派发到同城的两个数据中心，同时控制 Region leader 和 PD leader 也分布在同城的两个数据中心。
 
-![overview](../media/overview.png)
+![两地三中心部署方案](../media/deploy-2city3dc.png)
+
+与三数据中心方案相比，两地三中心有以下优势：
+
+- 写入速度更优
+- 两中心同时提供服务资源利用率更高
+- 依然能保证任何一个数据中心失效后保持可用并且不发生数据丢失
+
+但是，缺陷是如果同城的两个数据中心同时失效（理论上讲要高于异地三数据中心损失 2 个的概率），将会导致不可用以及部分数据丢失。
+
+## 两数据中心 + binlog 同步方案
+
+两数据中心 + binlog 同步类似于传统的 MySQL 中 master/slave 方案。两个数据中心分别部署一套完整的 TiDB 集群，我们称之为主集群和从集群。正常情况下所有的请求都在主集群，写入的数据通过 binlog 异步同步至从集群并写入。
+
+![binlog 同步部署方案](../media/deploy-binlog.png)
+
+当主集群整个数据中心失效后，业务可以切换至从集群，与 MySQL 类似，这种情况下会有一些数据缺失。对比 MySQL，这个方案的优势是数据中心内的 HA -- 少部分节点故障时，通过重新选举 leader 自动恢复服务，不需要人工干预。
+
+![两中心 binlog 相互备份方案](../media/deploy-backup.png)
+
+另外部分用户采用这种方式做双数据中心多活，两个数据中心各有一个集群，将业务分为两个库，每个库服务一部分数据，每个数据中心的业务只会访问一个库，两个集群之间通过 binlog 将本数据中心业务所涉及的库中的数据变更同步到对端机房，形成环状备份。
+
+> **注意：**
+> 
+> 在两数据中心 + binlog 同步部署方案中，数据中心之间只有 binlog 异步复制。在数据中心间的延迟较高的情况下，从集群落后主集群的数据量会增大。当主集群故障后（DR），会造成数据丢失，丢失的数据量受网络延迟等因素影响。
+
+## 高可用和容灾分析
+
+对于三数据中心方案和两地三中心方案，我们能得到的保障是任意一个数据中心故障时，集群能自动恢复服务，不需要人工介入，并能保证数据一致性。注意各种调度策略都是用于帮助性能优化的，当发生故障时调度机制总是第一优先考虑可用性而不是性能。
+
+对于两数据中心 + binlog 同步的方案，主集群内少量节点故障时也能自动恢复服务，不需要人工介入，并能保证数据一致性。当整个主集群故障时，需要人工切换至从集群，并可能发生一些数据丢失，数据丢失的数量取决于同步延迟，和网络条件有关。
