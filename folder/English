@@ -1,10 +1,12 @@
 ---
-title: 字符集配置
+title: 函数和操作符概述
 category: user guide
 ---
 
-# 字符集配置
+# 函数和操作符概述
 
-目前，TiDB 只支持 `utf8` 字符集，相当于 MySQL 中的 `utf8mb4`。MySQL 5.7 的默认字符集为 `latin1`。关于 TiDB 与 MySQL 字符集的区别，在[默认设置的区别](/v2.1-legacy/reference/mysql-compatibility.md#默认设置的区别)中有相关说明。
+TiDB 中函数和操作符使用方法与 MySQL 基本一致，详情参见: [Functions and Operators](https://dev.mysql.com/doc/refman/5.7/en/functions.html)。
 
-更多[细节](https://dev.mysql.com/doc/refman/5.7/en/charset-configuration.html)。
+在 SQL 语句中，表达式可用于诸如 `SELECT` 语句的 `ORDER BY` 或 `HAVING` 子句，`SELECT`/`DELETE`/`UPDATE` 语句的 `WHERE` 子句，或 `SET` 语句之类的地方。
+
+可使用字面值，列名，NULL，内置函数，操作符等来书写表达式。
