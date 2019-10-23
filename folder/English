@@ -1,137 +1,122 @@
 ---
-title: 数据迁移概述
-category: advanced
+title: TiDB 2.1 升级操作指南
+category: deployment
 ---
 
-# 数据迁移概述
+# TiDB 2.1 升级操作指南
 
-## 概述
+本文档适用于从 TiDB 2.0 版本（v2.0.1 及之后版本）或 TiDB 2.1 RC 版本升级到 TiDB 2.1 GA 版本。TiDB 2.1 版本不兼容 Kafka 版本的 TiDB-Binlog，如果当前集群已经使用 [Kafka 版本的 TiDB-Binlog](../tools/tidb-binlog-kafka.md)，须参考 [Binlog 升级方法](../tools/tidb-binlog-cluster.md#版本升级方法)升级到 Cluster 版本。
 
-该文档详细介绍了如何将 MySQL 的数据迁移到 TiDB。
+## 升级兼容性说明
 
-这里我们假定 MySQL 以及 TiDB 服务信息如下：
+- 新版本存储引擎更新，不支持在升级后回退至 2.0.x 或更旧版本
+- 从 2.0.6 之前的版本升级到 2.1 之前，需要确认集群中是否存在正在运行中的 DDL 操作，特别是耗时的 `Add Index` 操作，等 DDL 操作完成后再执行升级操作
+- 2.1 版本启用了并行 DDL，早于 2.0.1 版本的集群，无法滚动升级到 2.1，可以选择下面两种方案：
+    - 停机升级，直接从早于 2.0.1 的 TiDB 版本升级到 2.1
+    - 先滚动升级到 2.0.1 或者之后的 2.0.x 版本，再滚动升级到 2.1 版本
 
-| Name  | Address   | Port | User | Password |
-| ----- | --------- | ---- | ---- | -------- |
-| MySQL | 127.0.0.1 | 3306 | root | *        |
-| TiDB  | 127.0.0.1 | 4000 | root | *        |
+## 注意事项
 
-在这个数据迁移过程中，我们会用到下面四个工具:
+在升级的过程中不要执行 DDL 请求，否则可能会出现行为未定义的问题。
 
-- checker 检查 schema 能否被 TiDB 兼容
-- mydumper 从 MySQL 导出数据
-- loader 导入数据到 TiDB
-- syncer 增量同步 MySQL 数据到 TiDB
+## 在中控机器上安装 Ansible 及其依赖
 
-## 两种迁移场景
+TiDB-Ansible release-2.1 版本依赖 2.4.2 及以上但不高于 2.7.0 的 Ansible 版本（`ansible>=2.4.2,<2.7.0`），另依赖 Python 模块：`jinja2>=2.9.6` 和 `jmespath>=0.9.0`。为方便管理依赖，新版本使用 `pip` 安装 Ansible 及其依赖，可参照[在中控机器上安装 Ansible 及其依赖](../op-guide/ansible-deployment.md#在中控机器上安装-ansible-及其依赖) 进行安装。离线环境参照[在中控机器上离线安装 Ansible 及其依赖](../op-guide/offline-ansible-deployment.md#在中控机器上离线安装-ansible-及其依赖)。
 
-- 第一种场景：只全量导入历史数据 （需要 checker + mydumper + loader）；
-- 第二种场景：全量导入历史数据后，通过增量的方式同步新的数据 （需要 checker + mydumper + loader + syncer）。该场景需要提前开启 binlog 且格式必须为 ROW。
+安装完成后，可通过以下命令查看版本：
 
-## MySQL 开启 binlog
+```
+$ ansible --version
+ansible 2.6.8
+$ pip show jinja2
+Name: Jinja2
+Version: 2.10
+$ pip show jmespath
+Name: jmespath
+Version: 0.9.3
+```
 
 > **注意：**
 > 
-> 只有上文提到的第二种场景才需要在 dump 数据之前先开启 binlog**
+> 请务必按以上文档安装 Ansible 及其依赖。确认 Jinja2 版本是否正确，否则启动 Grafana 时会报错。确认 jmespath 版本是否正确，否则滚动升级 TiKV 时会报错。
 
-+   MySQL 开启 binlog 功能，参考 [Setting the Replication Master Configuration](http://dev.mysql.com/doc/refman/5.7/en/replication-howto-masterbaseconfig.html)
-+   Binlog 格式必须使用 `ROW` format，这也是 MySQL 5.7 之后推荐的 binlog 格式，可以使用如下语句打开:
+## 在中控机器上下载 TiDB-Ansible
 
-    ```sql
-    SET GLOBAL binlog_format = ROW;
-    ```
+以 `tidb` 用户登录中控机并进入 `/home/tidb` 目录，备份 TiDB 2.0 版本或 TiDB 2.1 rc 版本的 tidb-ansible 文件夹：
 
-## 使用 checker 进行 Schema 检查
-
-在迁移之前，我们可以使用 TiDB 的 checker 工具，来预先检查 TiDB 是否能支持需要迁移的 table schema。如果 check 某个 table schema 失败，表明 TiDB 当前并不支持，我们不能对该 table 里面的数据进行迁移。checker 包含在 TiDB 工具集里面，我们可以直接下载。
-
-### 下载 TiDB 工具集 (Linux)
-
-```bash
-# 下载 tool 压缩包
-wget http://download.pingcap.org/tidb-enterprise-tools-latest-linux-amd64.tar.gz
-wget http://download.pingcap.org/tidb-enterprise-tools-latest-linux-amd64.sha256
-
-# 检查文件完整性，返回 ok 则正确
-sha256sum -c tidb-enterprise-tools-latest-linux-amd64.sha256
-# 解开压缩包
-tar -xzf tidb-enterprise-tools-latest-linux-amd64.tar.gz
-cd tidb-enterprise-tools-latest-linux-amd64
+```
+$ mv tidb-ansible tidb-ansible-bak
 ```
 
-### 使用 checker 检查的一个示范
+下载最新 tidb-ansible release-2.1 分支，默认的文件夹名称为 `tidb-ansible`。
 
-+   在 MySQL 的 test database 里面创建几张表，并插入数据:
-
-    ```sql
-    USE test;
-    CREATE TABLE t1 (id INT, age INT, PRIMARY KEY(id)) ENGINE=InnoDB;
-    CREATE TABLE t2 (id INT, name VARCHAR(256), PRIMARY KEY(id)) ENGINE=InnoDB;
-
-    INSERT INTO t1 VALUES (1, 1), (2, 2), (3, 3);
-    INSERT INTO t2 VALUES (1, "a"), (2, "b"), (3, "c");
-    ```
-
-+   使用 checker 检查 test database 里面所有的 table
-
-    ```bash
-    ./bin/checker -host 127.0.0.1 -port 3306 -user root test
-    2016/10/27 13:11:49 checker.go:48: [info] Checking database test
-    2016/10/27 13:11:49 main.go:37: [info] Database DSN: root:@tcp(127.0.0.1:3306)/test?charset=utf8
-    2016/10/27 13:11:49 checker.go:63: [info] Checking table t1
-    2016/10/27 13:11:49 checker.go:69: [info] Check table t1 succ
-    2016/10/27 13:11:49 checker.go:63: [info] Checking table t2
-    2016/10/27 13:11:49 checker.go:69: [info] Check table t2 succ
-    ```
-
-+   使用 checker 检查 test database 里面某一个 table
-
-    这里，假设我们只需要迁移 table `t1`。
-
-    ```bash
-    ./bin/checker -host 127.0.0.1 -port 3306 -user root test t1
-    2016/10/27 13:13:56 checker.go:48: [info] Checking database test
-    2016/10/27 13:13:56 main.go:37: [info] Database DSN: root:@tcp(127.0.0.1:3306)/test?charset=utf8
-    2016/10/27 13:13:56 checker.go:63: [info] Checking table t1
-    2016/10/27 13:13:56 checker.go:69: [info] Check table t1 succ
-    Check database succ!
-    ```
-
-### 一个无法迁移的 table 例子
-
-我们在 MySQL 里面创建如下表：
-
-```sql
-CREATE TABLE t_error ( a INT NOT NULL, PRIMARY KEY (a))
-ENGINE=InnoDB TABLESPACE ts1
-PARTITION BY RANGE (a) PARTITIONS 3 (
-PARTITION P1 VALUES LESS THAN (2),
-PARTITION P2 VALUES LESS THAN (4) TABLESPACE ts2,
-PARTITION P3 VALUES LESS THAN (6) TABLESPACE ts3);
+```
+$ git clone -b release-2.1 https://github.com/pingcap/tidb-ansible.git
 ```
 
-使用 `checker` 进行检查，会报错，表明我们没法迁移 `t_error` 这张表。
+## 编辑 inventory.ini 文件和配置文件
 
-```bash
-./bin/checker -host 127.0.0.1 -port 3306 -user root test t_error
-2017/08/04 11:14:35 checker.go:48: [info] Checking database test
-2017/08/04 11:14:35 main.go:39: [info] Database DSN: root:@tcp(127.0.0.1:3306)/test?charset=utf8
-2017/08/04 11:14:35 checker.go:63: [info] Checking table t1
-2017/08/04 11:14:35 checker.go:67: [error] Check table t1 failed with err: line 3 column 29 near " ENGINE=InnoDB DEFAULT CHARSET=latin1
-/*!50100 PARTITION BY RANGE (a)
-(PARTITION P1 VALUES LESS THAN (2) ENGINE = InnoDB,
- PARTITION P2 VALUES LESS THAN (4) TABLESPACE = ts2 ENGINE = InnoDB,
- PARTITION P3 VALUES LESS THAN (6) TABLESPACE = ts3 ENGINE = InnoDB) */" (total length 354)
-github.com/pingcap/tidb/parser/yy_parser.go:96:
-github.com/pingcap/tidb/parser/yy_parser.go:109:
-/home/jenkins/workspace/build_tidb_tools_master/go/src/github.com/pingcap/tidb-tools/checker/checker.go:122:  parse CREATE TABLE `t1` (
-  `a` int(11) NOT NULL,
-  PRIMARY KEY (`a`)
-) /*!50100 TABLESPACE ts1 */ ENGINE=InnoDB DEFAULT CHARSET=latin1
-/*!50100 PARTITION BY RANGE (a)
-(PARTITION P1 VALUES LESS THAN (2) ENGINE = InnoDB,
- PARTITION P2 VALUES LESS THAN (4) TABLESPACE = ts2 ENGINE = InnoDB,
- PARTITION P3 VALUES LESS THAN (6) TABLESPACE = ts3 ENGINE = InnoDB) */ error
-/home/jenkins/workspace/build_tidb_tools_master/go/src/github.com/pingcap/tidb-tools/checker/checker.go:114:
-2017/08/04 11:14:35 main.go:83: [error] Check database test with 1 errors and 0 warnings.
+以 `tidb` 用户登录中控机并进入 `/home/tidb/tidb-ansible` 目录。
+
+### 编辑 `inventory.ini` 文件
+
+编辑 `inventory.ini` 文件，IP 信息参照备份文件 `/home/tidb/tidb-ansible-bak/inventory.ini`。
+
+以下变量配置，需要重点确认，变量含义可参考 [inventory.ini 变量调整](../op-guide/ansible-deployment.md#其他变量调整)。
+
+1. 请确认 `ansible_user` 配置的是普通用户。为统一权限管理，不再支持使用 root 用户远程安装。默认配置中使用 `tidb` 用户作为 SSH 远程用户及程序运行用户。
+
+    ```
+    ## Connection
+    # ssh via normal user
+    ansible_user = tidb
+    ```
+
+    可参考[如何配置 ssh 互信及 sudo 规则](../op-guide/ansible-deployment.md#在中控机上配置部署机器-ssh-互信及-sudo-规则) 自动配置主机间互信。
+
+2. `process_supervision` 变量请与之前版本保持一致，默认推荐使用 `systemd`。
+
+    ```
+    # process supervision, [systemd, supervise]
+    process_supervision = systemd
+    ```
+
+    如需变更，可参考 [如何调整进程监管方式从 supervise 到 systemd](../op-guide/ansible-deployment.md#如何调整进程监管方式从-supervise-到-systemd)，先使用备份 `/home/tidb/tidb-ansible-bak/` 分支变更进程监管方式再升级。
+
+### 编辑 TiDB 集群组件配置文件
+
+如之前自定义过 TiDB 集群组件配置文件，请参照备份文件修改 `/home/tidb/tidb-ansible/conf` 下对应配置文件。
+
+TiKV 配置中 `end-point-concurrency` 变更为 `high-concurrency`、`normal-concurrency` 和 `low-concurrency` 三个参数：
+
+```
+readpool:
+  coprocessor:
+    # Notice: if CPU_NUM > 8, default thread pool size for coprocessors
+    # will be set to CPU_NUM * 0.8.
+    # high-concurrency: 8
+    # normal-concurrency: 8
+    # low-concurrency: 8
+```
+
+单机多 TiKV 实例情况下，需要修改这三个参数，推荐设置：`实例数 * 参数值 = CPU 核数 * 0.8`。
+
+## 下载 TiDB 2.1 binary 到中控机
+
+确认 `tidb-ansible/inventory.ini` 文件中 `tidb_version = v2.1.0`，然后执行以下命令下载 TiDB 2.1 binary 到中控机。
+
+```
+$ ansible-playbook local_prepare.yml
+```
+
+## 滚动升级 TiDB 集群组件
+
+```
+$ ansible-playbook rolling_update.yml
+```
+
+## 滚动升级 TiDB 监控组件
+
+```
+$ ansible-playbook rolling_update_monitor.yml
 ```
