@@ -1,53 +1,110 @@
 ---
-title: KILL [TIDB]
-summary: TiDB 数据库中 KILL [TIDB] 的使用概况。
+title: SET PASSWORD
+summary: TiDB 数据库中 SET PASSWORD 的使用概况。
 category: reference
 ---
 
-# KILL [TIDB]
+# SET PASSWORD
 
-`KILL TIDB` 语句用于终止 TiDB 中的连接。
-
-按照设计，`KILL TIDB` 语句默认与 MySQL 不兼容。负载均衡器后面通常放有多个 TiDB 服务器，这种默认不兼容有助于防止在错误的 TiDB 服务器上终止连接。
+`SET PASSWORD` 语句用于更改 TiDB 系统数据库中的用户密码。
 
 ## 语法图
 
-**KillStmt:**
+**SetStmt:**
 
-![KillStmt](/media/sqlgram/KillStmt.png)
+![SetStmt](/media/sqlgram/SetStmt.png)
 
 ## 示例
 
 {{< copyable "sql" >}}
 
 ```sql
-SHOW PROCESSLIST;
+SET PASSWORD='test';
 ```
 
 ```
-+------+------+-----------+------+---------+------+-------+------------------+
-| Id   | User | Host      | db   | Command | Time | State | Info             |
-+------+------+-----------+------+---------+------+-------+------------------+
-|    1 | root | 127.0.0.1 | test | Query   |    0 | 2     | SHOW PROCESSLIST |
-|    2 | root | 127.0.0.1 |      | Sleep   |    4 | 2     |                  |
-+------+------+-----------+------+---------+------+-------+------------------+
-2 rows in set (0.00 sec)
+Query OK, 0 rows affected (0.01 sec)
 ```
 
 {{< copyable "sql" >}}
 
 ```sql
-KILL TIDB 2;
+CREATE USER 'newuser' IDENTIFIED BY 'test';
 ```
+
+```
+Query OK, 1 row affected (0.00 sec)
+```
+
+{{< copyable "sql" >}}
+
+```sql
+SHOW CREATE USER newuser;
+```
+
+```+----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| CREATE USER for newuser@%                                                                                                                                            |
++----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| CREATE USER 'newuser'@'%' IDENTIFIED WITH 'mysql_native_password' AS '*94BDCEBE19083CE2A1F959FD02F964C7AF4CFC29' REQUIRE NONE PASSWORD EXPIRE DEFAULT ACCOUNT UNLOCK |
++----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+1 row in set (0.00 sec)
+```
+
+{{< copyable "sql" >}}
+
+```sql
+SET PASSWORD FOR newuser = 'test';
+```
+
+```
+Query OK, 0 rows affected (0.01 sec)
+```
+
+{{< copyable "sql" >}}
+
+```sql
+SHOW CREATE USER newuser;
+```
+
+```+----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| CREATE USER for newuser@%                                                                                                                                            |
++----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| CREATE USER 'newuser'@'%' IDENTIFIED WITH 'mysql_native_password' AS '*94BDCEBE19083CE2A1F959FD02F964C7AF4CFC29' REQUIRE NONE PASSWORD EXPIRE DEFAULT ACCOUNT UNLOCK |
++----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+1 row in set (0.00 sec)
+```
+
+{{< copyable "sql" >}}
+
+```sql
+SET PASSWORD FOR newuser = PASSWORD('test');
+```
+
+上述语法是早期 MySQL 版本的过时语法。
 
 ```
 Query OK, 0 rows affected (0.00 sec)
 ```
 
+{{< copyable "sql" >}}
+
+```sql
+SHOW CREATE USER newuser;
+```
+
+```+----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| CREATE USER for newuser@%                                                                                                                                            |
++----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+| CREATE USER 'newuser'@'%' IDENTIFIED WITH 'mysql_native_password' AS '*94BDCEBE19083CE2A1F959FD02F964C7AF4CFC29' REQUIRE NONE PASSWORD EXPIRE DEFAULT ACCOUNT UNLOCK |
++----------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+1 row in set (0.00 sec)
+```
+
 ## MySQL 兼容性
 
-* `KILL TIDB` 语句是 TiDB 的扩展语法。如果正尝试终止的会话位于同一个 TiDB 服务器上，可在配置文件里设置 [`compatible-kill-query = true`](/v3.0/reference/configuration/tidb-server/configuration-file.md#compatible-kill-query)。
+`SET PASSWORD` 语句与 MySQL 完全兼容。如有任何兼容性差异，请在 GitHub 上提交 [issue](/v3.0/report-issue.md)。
 
 ## 另请参阅
 
-* [SHOW \[FULL\] PROCESSLIST](/v3.0/reference/sql/statements/show-processlist.md)
+* [CREATE USER](/v3.0/reference/sql/statements/create-user.md)
+* [Privilege Management](/v3.0/reference/security/privilege-system.md)
