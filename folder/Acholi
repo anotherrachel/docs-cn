@@ -1,81 +1,39 @@
----
-title: crwdns93444:0crwdne93444:0
-category: crwdns93446:0crwdne93446:0
----
+crwdns93386:0crwdne93386:0
+crwdns93388:0crwdne93388:0
 
-crwdns93448:0crwdne93448:0
+crwdns93390:0crwdne93390:0
+crwdns93392:0crwdne93392:0
+crwdns93394:0crwdne93394:0
+crwdns93396:0crwdne93396:0
 
-## crwdns93450:0crwdne93450:0
 
-crwdns93452:0crwdne93452:0
+crwdns93398:0crwdne93398:0
+crwdns93400:0crwdne93400:0
+crwdns93402:0crwdne93402:0
 
-## crwdns93454:0crwdne93454:0
+crwdns93404:0crwdne93404:0
 
-crwdns93456:0crwdne93456:0
+crwdns93406:0crwdne93406:0
+    crwdns93408:0{:.2f}crwdne93408:0
 
-### crwdns93458:0crwdne93458:0
+crwdns93410:0crwdne93410:0
+crwdns93412:0crwdne93412:0
+crwdns93414:0crwdne93414:0
+    crwdns93416:0crwdne93416:0
+    crwdns93418:0crwdne93418:0
+    crwdns93420:0crwdne93420:0
 
-```sql
-crwdns93460:0crwdne93460:0
+    crwdns93422:0crwdne93422:0
+    crwdns93424:0crwdne93424:0
 
-crwdns93462:0crwdne93462:0 crwdns93464:0crwdne93464:0 crwdns93466:0crwdne93466:0
-```
+    crwdns93426:0crwdne93426:0
+    crwdns93428:0crwdne93428:0
+    crwdns93430:0crwdne93430:0
+    crwdns93432:0crwdne93432:0
 
-crwdns93468:0crwdne93468:0
+crwdns93434:0__name__crwdnd93434:0__main__crwdne93434:0
+    crwdns93436:0[1]crwdne93436:0
+    crwdns93438:0[2]crwdne93438:0
+    crwdns93440:0crwdne93440:0
 
-### crwdns93470:0crwdne93470:0
-
-```sql
-crwdns93472:0{CHARACTER SET | CHARSET}crwdnd93472:0{'charset_name' | DEFAULT}crwdne93472:0
-```
-
-crwdns93474:0crwdne93474:0
-
-### crwdns93476:0crwdne93476:0
-
-```sql
-crwdns93478:0crwdne93478:0
-```
-
-crwdns93480:0crwdne93480:0
-
-### crwdns93482:0crwdne93482:0
-
-```sql
-crwdns93484:0crwdne93484:0
-```
-
-crwdns93486:0crwdne93486:0
-
-## crwdns93488:0crwdne93488:0
-
-crwdns93490:0crwdne93490:0
-
-```sql
-crwdns93492:0[like_or_where]crwdnd93492:0[like_or_where]crwdnd93492:0[FULL]crwdnd93492:0[like_or_where]crwdnd93492:0{DATABASE|SCHEMA}crwdnd93492:0[like_or_where]crwdnd93492:0[FULL]crwdnd93492:0[like_or_where]crwdnd93492:0[like_or_where]crwdnd93492:0[FULL]crwdnd93492:0[like_or_where]crwdnd93492:0[like_or_where]crwdnd93492:0{STATUS | MUTEX}crwdnd93492:0[STORAGE]crwdnd93492:0[like_or_where]crwdnd93492:0[like_or_where]crwdnd93492:0[like_or_where]crwdnd93492:0[like_or_where]crwdnd93492:0[like_or_where]crwdnd93492:0[like_or_where]crwdne93492:0
-```
-
-crwdns93494:0crwdne93494:0
-
-* crwdns93496:0crwdne93496:0
-* crwdns93498:0crwdne93498:0
-
-## crwdns93500:0crwdne93500:0
-
-crwdns93502:0crwdne93502:0
-
-```sql
-crwdns93504:0crwdne93504:0
-```
-
-* `crwdns93506:0crwdne93506:0`
-
-crwdns93508:0crwdne93508:0
-
-* `crwdns93510:0crwdne93510:0`
-
-crwdns93512:0crwdne93512:0
-
-* `crwdns93514:0crwdne93514:0`
-
-crwdns93516:0crwdne93516:0
+    crwdns93442:0crwdne93442:0
