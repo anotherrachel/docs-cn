@@ -1,145 +1,62 @@
 ---
-title: 关键字和保留字
+title: JSON 函数及语法糖
 category: user guide
 ---
 
-# 关键字和保留字
+# JSON 函数及语法糖
 
-关键字在 SQL 中有特殊的意义， 例如 `SELECT`，`UPDATE`，`DELETE`，在作为表名跟函数名的时候，需要特殊对待，例如作为表名，保留字需要被反引号包住：
+TiDB 支持 MySQL 5.7 GA 版本发布的大多数 JSON 函数。MySQL 5.7 发布后，又增加了更多 JSON 函数，TiDB 并未支持所有这些函数（参见[未支持的函数](#unsupported-functions)）。
 
-```sql
-mysql> CREATE TABLE select (a INT);
-ERROR 1105 (HY000): line 0 column 19 near " (a INT)" (total length 27)
-mysql> CREATE TABLE `select` (a INT);
-Query OK, 0 rows affected (0.09 sec)
-```
+## 创建 JSON 值的函数
 
-`BEGIN` 和 `END` 是关键字， 但不是保留字，所以不需要反引号：
+| 函数及语法糖                                                                                                                             | 功能描述                    |
+| ---------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
+| [JSON_ARRAY([val[, val] ...])](https://dev.mysql.com/doc/refman/5.7/en/json-creation-functions.html#function_json-array)           | 根据一系列元素创建一个 JSON 文档     |
+| [JSON_OBJECT(key, val[, key, val] ...)](https://dev.mysql.com/doc/refman/5.7/en/json-creation-functions.html#function_json-object) | 根据一系列 K/V 对创建一个 JSON 文档 |
 
-```sql
-mysql> CREATE TABLE `select` (BEGIN int, END int);
-Query OK, 0 rows affected (0.09 sec)
-```
+## 搜索 JSON 值的函数
 
-有一种特殊情况， 如果使用了限定符 `.`，那么也不需要用反引号：
+| 函数及语法糖                                                                                                                                                           | 功能描述                                                                            |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| [JSON_CONTAINS(target, candidate[, path])](https://dev.mysql.com/doc/refman/5.7/en/json-search-functions.html#function_json-contains)                            | 通过返回 1 或 0 来表示目标 JSON 文档中是否包含给定的 candidate JSON 文档                              |
+| [JSON_CONTAINS_PATH(json_doc, one_or_all, path[, path] ...)](https://dev.mysql.com/doc/refman/5.7/en/json-search-functions.html#function_json-contains-path) | 通过返回 0 或 1 来表示一个 JSON 文档在给定路径是否包含数据                                             |
+| [JSON_EXTRACT(json_doc, path[, path] ...)](https://dev.mysql.com/doc/refman/5.7/en/json-search-functions.html#function_json-extract)                           | 从 JSON 文档中解出某一路径对应的子文档                                                          |
+| [->](https://dev.mysql.com/doc/refman/5.7/en/json-search-functions.html#operator_json-column-path)                                                               | 返回执行路径后面的 JSON 列的值；`JSON_EXTRACT(doc, path_literal)` 的语法糖                       |
+| [->>](https://dev.mysql.com/doc/refman/5.7/en/json-search-functions.html#operator_json-inline-path)                                                              | 返回执行路径后面的 JSON 列的值和转义后的结果； `JSON_UNQUOTE(JSON_EXTRACT(doc, path_literal))` 的语法糖 |
+| [JSON_KEYS(json_doc[, path])](https://dev.mysql.com/doc/refman/5.7/en/json-search-functions.html#function_json-keys)                                           | 返回从 JSON 对象的顶级值作为 JSON array 的键，如果给定了路径参数，则从选定路径中获取顶级键                          |
 
-```sql
-mysql> CREATE TABLE test.select (BEGIN int, END int);
-Query OK, 0 rows affected (0.08 sec)
-```
+## 修改 JSON 值的函数
 
-下表列出了在 TiDB 中的关键字跟保留字，保留字用 (R) 来标识：
+| 函数及语法糖                                                                                                                                                 | 功能描述                      |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------- |
+| [JSON_INSERT(json_doc, path, val[, path, val] ...)](https://dev.mysql.com/doc/refman/5.7/en/json-modification-functions.html#function_json-insert)   | 在 JSON 文档中在某一路径下插入子文档     |
+| [JSON_MERGE(json_doc, json_doc[, json_doc] ...)](https://dev.mysql.com/doc/refman/5.7/en/json-modification-functions.html#function_json-merge)     | 将多个 JSON 文档合并成一个文档，其类型为数组 |
+| [JSON_REMOVE(json_doc, path[, path] ...)](https://dev.mysql.com/doc/refman/5.7/en/json-modification-functions.html#function_json-remove)             | 移除 JSON 文档中某一路径下的子文档      |
+| [JSON_REPLACE(json_doc, path, val[, path, val] ...)](https://dev.mysql.com/doc/refman/5.7/en/json-modification-functions.html#function_json-replace) | 替换 JSON 文档中的某一路径下的子文档     |
+| [JSON_SET(json_doc, path, val[, path, val] ...)](https://dev.mysql.com/doc/refman/5.7/en/json-modification-functions.html#function_json-set)         | 在 JSON 文档中为某一路径设置子文档      |
+| [JSON_UNQUOTE(json_val)](https://dev.mysql.com/doc/refman/5.7/en/json-modification-functions.html#function_json-unquote)                             | 去掉 JSON 文档外面的引号           |
 
-| ACTION                    | ADD (R)            | ADDDATE                  |
-|:------------------------- |:------------------ |:------------------------ |
-| ADMIN                     | AFTER              | ALL (R)                  |
-| ALTER (R)                 | ALWAYS             | ANALYZE(R)               |
-| AND (R)                   | ANY                | AS (R)                   |
-| ASC (R)                   | ASCII              | AUTO_INCREMENT           |
-| AVG                       | AVG_ROW_LENGTH   | BEGIN                    |
-| BETWEEN (R)               | BIGINT (R)         | BINARY (R)               |
-| BINLOG                    | BIT                | BIT_XOR                  |
-| BLOB (R)                  | BOOL               | BOOLEAN                  |
-| BOTH (R)                  | BTREE              | BY (R)                   |
-| BYTE                      | CASCADE (R)        | CASE (R)                 |
-| CAST                      | CHANGE (R)         | CHAR (R)                 |
-| CHARACTER (R)             | CHARSET            | CHECK (R)                |
-| CHECKSUM                  | COALESCE           | COLLATE (R)              |
-| COLLATION                 | COLUMN (R)         | COLUMNS                  |
-| COMMENT                   | COMMIT             | COMMITTED                |
-| COMPACT                   | COMPRESSED         | COMPRESSION              |
-| CONNECTION                | CONSISTENT         | CONSTRAINT (R)           |
-| CONVERT (R)               | COUNT              | CREATE (R)               |
-| CROSS (R)                 | CURRENT_DATE (R)   | CURRENT_TIME (R)         |
-| CURRENT_TIMESTAMP (R)     | CURRENT_USER (R)   | CURTIME                  |
-| DATA                      | DATABASE (R)       | DATABASES (R)            |
-| DATE                      | DATE_ADD           | DATE_SUB                 |
-| DATETIME                  | DAY                | DAY_HOUR (R)             |
-| DAY_MICROSECOND (R)       | DAY_MINUTE (R)     | DAY_SECOND (R)           |
-| DDL                       | DEALLOCATE         | DEC                      |
-| DECIMAL (R)               | DEFAULT (R)        | DELAY_KEY_WRITE        |
-| DELAYED (R)               | DELETE (R)         | DESC (R)                 |
-| DESCRIBE (R)              | DISABLE            | DISTINCT (R)             |
-| DISTINCTROW (R)           | DIV (R)            | DO                       |
-| DOUBLE (R)                | DROP (R)           | DUAL (R)                 |
-| DUPLICATE                 | DYNAMIC            | ELSE (R)                 |
-| ENABLE                    | ENCLOSED           | END                      |
-| ENGINE                    | ENGINES            | ENUM                     |
-| ESCAPE                    | ESCAPED            | EVENTS                   |
-| EXCLUSIVE                 | EXECUTE            | EXISTS                   |
-| EXPLAIN (R)               | EXTRACT            | FALSE (R)                |
-| FIELDS                    | FIRST              | FIXED                    |
-| FLOAT (R)                 | FLUSH              | FOR (R)                  |
-| FORCE (R)                 | FOREIGN (R)        | FORMAT                   |
-| FROM (R)                  | FULL               | FULLTEXT (R)             |
-| FUNCTION                  | GENERATED (R)      | GET_FORMAT               |
-| GLOBAL                    | GRANT (R)          | GRANTS                   |
-| GROUP (R)                 | GROUP_CONCAT       | HASH                     |
-| HAVING (R)                | HIGH_PRIORITY (R)  | HOUR                     |
-| HOUR_MICROSECOND (R)      | HOUR_MINUTE (R)    | HOUR_SECOND (R)          |
-| IDENTIFIED                | IF (R)             | IGNORE (R)               |
-| IN (R)                    | INDEX (R)          | INDEXES                  |
-| INFILE (R)                | INNER (R)          | INSERT (R)               |
-| INT (R)                   | INTEGER (R)        | INTERVAL (R)             |
-| INTO (R)                  | IS (R)             | ISOLATION                |
-| JOBS                      | JOIN (R)           | JSON                     |
-| KEY (R)                   | KEY_BLOCK_SIZE   | KEYS (R)                 |
-| KILL (R)                  | LEADING (R)        | LEFT (R)                 |
-| LESS                      | LEVEL              | LIKE (R)                 |
-| LIMIT (R)                 | LINES (R)          | LOAD (R)                 |
-| LOCAL                     | LOCALTIME (R)      | LOCALTIMESTAMP (R)       |
-| LOCK (R)                  | LONGBLOB (R)       | LONGTEXT (R)             |
-| LOW_PRIORITY (R)          | MAX                | MAX_ROWS                 |
-| MAXVALUE (R)              | MEDIUMBLOB (R)     | MEDIUMINT (R)            |
-| MEDIUMTEXT (R)            | MICROSECOND        | MIN                      |
-| MIN_ROWS                  | MINUTE             | MINUTE_MICROSECOND (R)   |
-| MINUTE_SECOND (R)         | MIN                | MIN_ROWS                 |
-| MINUTE                    | MINUTE_MICROSECOND | MINUTE_SECOND            |
-| MOD (R)                   | MODE               | MODIRY                   |
-| MONTH                     | NAMES              | NATIONAL                 |
-| NATURAL (R)               | NO                 | NO_WRITE_TO_BINLOG (R) |
-| NONE                      | NOT (R)            | NOW                      |
-| NULL (R)                  | NUMERIC (R)        | NVARCHAR (R)             |
-| OFFSET                    | ON (R)             | ONLY                     |
-| OPTION (R)                | OR (R)             | ORDER (R)                |
-| OUTER (R)                 | PARTITION (R)      | PARTITIONS               |
-| PASSWORD                  | PLUGINS            | POSITION                 |
-| PRECISION (R)             | PREPARE            | PRIMARY (R)              |
-| PRIVILEGES                | PROCEDURE (R)      | PROCESS                  |
-| PROCESSLIST               | QUARTER            | QUERY                    |
-| QUICK                     | RANGE (R)          | READ (R)                 |
-| REAL (R)                  | REDUNDANT          | REFERENCES (R)           |
-| REGEXP (R)                | RENAME (R)         | REPEAT (R)               |
-| REPEATABLE                | REPLACE (R)        | RESTRICT (R)             |
-| REVERSE                   | REVOKE (R)         | RIGHT (R)                |
-| RLIKE (R)                 | ROLLBACK           | ROW                      |
-| ROW_COUNT                 | ROW_FORMAT         | SCHEMA                   |
-| SCHEMAS                   | SECOND             | SECOND_MICROSECOND (R)   |
-| SELECT (R)                | SERIALIZABLE       | SESSION                  |
-| SET (R)                   | SHARE              | SHARED                   |
-| SHOW (R)                  | SIGNED             | SMALLINT (R)             |
-| SNAPSHOT                  | SOME               | SQL_CACHE                |
-| SQL_CALC_FOUND_ROWS (R) | SQL_NO_CACHE     | START                    |
-| STARTING (R)              | STATS              | STATS_BUCKETS            |
-| STATS_HISTOGRAMS          | STATS_META         | STATS_PERSISTENT         |
-| STATUS                    | STORED (R)         | SUBDATE                  |
-| SUBSTR                    | SUBSTRING          | SUM                      |
-| SUPER                     | TABLE (R)          | TABLES                   |
-| TERMINATED (R)            | TEXT               | THAN                     |
-| THEN (R)                  | TIDB               | TIDB_INLJ                |
-| TIDB_SMJ                  | TIME               | TIMESTAMP                |
-| TIMESTAMPADD              | TIMESTAMPDIFF      | TINYBLOB (R)             |
-| TINYINT (R)               | TINYTEXT (R)       | TO (R)                   |
-| TRAILING (R)              | TRANSACTION        | TRIGGER (R)              |
-| TRIGGERS                  | TRIM               | TRUE (R)                 |
-| TRUNCATE                  | UNCOMMITTED        | UNION (R)                |
-| UNIQUE (R)                | UNKNOWN            | UNLOCK (R)               |
-| UNSIGNED (R)              | UPDATE (R)         | USE (R)                  |
-| USER                      | USING (R)          | UTC_DATE (R)             |
-| UTC_TIME (R)              | UTC_TIMESTAMP (R)  | VALUE                    |
-| VALUES (R)                | VARBINARY (R)      | VARCHAR (R)              |
-| VARIABLES                 | VIEW               | VIRTUAL (R)              |
-| WARNINGS                  | WEEK               | WHEN (R)                 |
-| WHERE (R)                 | WITH (R)           | WRITE (R)                |
-| XOR (R)                   | YEAR               | YEAR_MONTH (R) |         |
-| ZEROFILL (R)              |                    |                          |
+## 返回 JSON 值属性的函数
+
+| 函数及语法糖                                                                                                                        | 功能描述                               |
+| ----------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| [JSON_DEPTH(json_doc)](https://dev.mysql.com/doc/refman/5.7/en/json-attribute-functions.html#function_json-depth)           | 返回 JSON 文档的最大深度                    |
+| [JSON_LENGTH(json_doc[, path])](https://dev.mysql.com/doc/refman/5.7/en/json-attribute-functions.html#function_json-length) | 返回 JSON 文档的长度；如果路径参数已定，则返回该路径下值的长度 |
+| [JSON_TYPE(json_val)](https://dev.mysql.com/doc/refman/5.7/en/json-attribute-functions.html#function_json-type)             | 检查某 JSON 文档内部内容的类型                 |
+
+## 未支持的函数
+
+TiDB 暂未支持以下 JSON 函数。相关进展参见 [TiDB #7546](https://github.com/pingcap/tidb/issues/7546):
+
+* `JSON_APPEND` 及其别名 `JSON_ARRAY_APPEND`
+* `JSON_ARRAY_INSERT`
+* `JSON_DEPTH`
+* `JSON_MERGE_PATCH`
+* `JSON_MERGE_PRESERVE`，使用别名 `JSON_MERGE` 替代
+* `JSON_PRETTY`
+* `JSON_QUOTE`
+* `JSON_SEARCH`
+* `JSON_STORAGE_SIZE`
+* `JSON_VALID`
+* `JSON_ARRAYAGG`
+* `JSON_OBJECTAGG`
