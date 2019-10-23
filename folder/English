@@ -1,62 +1,161 @@
 ---
-title: LOAD DATA
-summary: TiDB 数据库中 LOAD DATA 的使用概况。
+title: INSERT
+summary: TiDB 数据库中 INSERT 的使用概况。
 category: reference
 ---
 
-# LOAD DATA
+# INSERT
 
-`LOAD DATA` 语句用于将数据批量加载到 TiDB 表中。
+使用 `INSERT` 语句在表中插入新行。
 
 ## 语法图
 
-**LoadDataStmt:**
+**InsertIntoStmt:**
 
-![LoadDataStmt](/media/sqlgram/LoadDataStmt.png)
+![InsertIntoStmt](/media/sqlgram/InsertIntoStmt.png)
+
+**PriorityOpt:**
+
+![PriorityOpt](/media/sqlgram/PriorityOpt.png)
+
+**IgnoreOptional:**
+
+![IgnoreOptional](/media/sqlgram/IgnoreOptional.png)
+
+**IntoOpt:**
+
+![IntoOpt](/media/sqlgram/IntoOpt.png)
+
+**TableName:**
+
+![TableName](/media/sqlgram/TableName.png)
+
+**InsertValues:**
+
+![InsertValues](/media/sqlgram/InsertValues.png)
 
 ## 示例
 
 {{< copyable "sql" >}}
 
 ```sql
-CREATE TABLE trips (
-    ->  trip_id bigint NOT NULL PRIMARY KEY auto_increment,
-    ->  duration integer not null,
-    ->  start_date datetime,
-    ->  end_date datetime,
-    ->  start_station_number integer,
-    ->  start_station varchar(255),
-    ->  end_station_number integer,
-    ->  end_station varchar(255),
-    ->  bike_number varchar(255),
-    ->  member_type varchar(255)
-    -> );
+CREATE TABLE t1 (a int);
 ```
 
 ```
-Query OK, 0 rows affected (0.14 sec)
+Query OK, 0 rows affected (0.11 sec)
 ```
 
 {{< copyable "sql" >}}
 
 ```sql
-LOAD DATA LOCAL INFILE '/mnt/evo970/data-sets/bikeshare-data/2017Q4-capitalbikeshare-tripdata.csv' INTO TABLE trips FIELDS TERMINATED BY ',' ENCLOSED BY '\"' LINES TERMINATED BY '\r\n' IGNORE 1 LINES (duration, start_date, end_date, start_station_number, start_station, end_station_number, end_station, bike_number, member_type);
+CREATE TABLE t2 LIKE t1;
 ```
 
 ```
-Query OK, 815264 rows affected (39.63 sec)
-Records: 815264  Deleted: 0  Skipped: 0  Warnings: 0
+Query OK, 0 rows affected (0.11 sec)
+```
+
+{{< copyable "sql" >}}
+
+```sql
+INSERT INTO t1 VALUES (1);
+```
+
+```
+Query OK, 1 row affected (0.02 sec)
+```
+
+{{< copyable "sql" >}}
+
+```sql
+INSERT INTO t1 (a) VALUES (1);
+```
+
+```
+Query OK, 1 row affected (0.01 sec)
+```
+
+{{< copyable "sql" >}}
+
+```sql
+INSERT INTO t2 SELECT * FROM t1;
+```
+
+```
+Query OK, 2 rows affected (0.01 sec)
+Records: 2  Duplicates: 0  Warnings: 0
+```
+
+{{< copyable "sql" >}}
+
+```sql
+SELECT * FROM t1;
+```
+
+```
++------+
+| a    |
++------+
+|    1 |
+|    1 |
++------+
+2 rows in set (0.00 sec)
+```
+
+{{< copyable "sql" >}}
+
+```sql
+SELECT * FROM t2;
+```
+
+```
++------+
+| a    |
++------+
+|    1 |
+|    1 |
++------+
+2 rows in set (0.00 sec)
+```
+
+{{< copyable "sql" >}}
+
+```sql
+INSERT INTO t2 VALUES (2),(3),(4);
+```
+
+```
+Query OK, 3 rows affected (0.02 sec)
+Records: 3  Duplicates: 0  Warnings: 0
+```
+
+{{< copyable "sql" >}}
+
+```sql
+SELECT * FROM t2;
+```
+
+```
++------+
+| a    |
++------+
+|    1 |
+|    1 |
+|    2 |
+|    3 |
+|    4 |
++------+
+5 rows in set (0.00 sec)
 ```
 
 ## MySQL 兼容性
 
-* 默认情况下，TiDB 每 20,000 行会进行一次提交。这类似于 MySQL NDB Cluster，但并非 InnoDB 存储引擎的默认配置。
-
-> **注意：**
-> 
-> 这种拆分事务提交的方式是以打破事务的原子性和隔离性为代价的，使用该特性时，使用者需要保证没有其他对正在处理的表的**任何**操作，并且在出现报错时，需要及时**人工介入，检查数据的一致性和完整性**。因此，不建议在生产环境中使用。
+`INSERT` 语句与 MySQL 完全兼容。如有任何兼容性差异，请在 GitHub 上提交 [issue](/v3.0/report-issue.md)。
 
 ## 另请参阅
 
-* [INSERT](/v3.0/reference/sql/statements/insert.md)
-* [Transaction Model](/v3.0/reference/transactions/transaction-model.md)
+* [DELETE](/v3.0/reference/sql/statements/delete.md)
+* [SELECT](/v3.0/reference/sql/statements/select.md)
+* [UPDATE](/v3.0/reference/sql/statements/update.md)
+* [REPLACE](/v3.0/reference/sql/statements/replace.md)
