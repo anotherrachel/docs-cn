@@ -1,111 +1,91 @@
 ---
-title: 时区支持
+title: 集群拓扑信息配置
 category: how-to
 ---
 
-# 时区支持
+# 集群拓扑信息配置
 
-TiDB 使用的时区由 `time_zone` 全局变量和 session 变量决定。`time_zone` 的默认值是 `System`，`System` 对应的实际时区在 `TiDB` 集群 bootstrap 初始化时设置。具体逻辑如下:
+## 概述
 
-* 优先使用 `TZ` 环境变量
-* 如果失败，则从 `/etc/localtime` 的实际软链地址提取。
-* 如果上面两种都失败则使用 `UTC` 作为系统时区。
+PD 能够根据 TiKV 集群的拓扑结构进行调度，使得 TiKV 的容灾能力最大化。
 
-在运行过程中可以修改全局时区：
+阅读本章前，请先确保阅读 [Ansible 部署方案](/dev/how-to/deploy/orchestrated/ansible.md) 和 [Docker 部署方案](/dev/how-to/deploy/orchestrated/docker.md)。
 
-{{< copyable "sql" >}}
+## TiKV 上报拓扑信息
 
-```sql
-SET GLOBAL time_zone = timezone;
+可以通过 TiKV 的启动参数或者配置文件来让 TiKV 上报拓扑信息给 PD。
+
+假设拓扑结构分为三级：zone > rack > host，可以通过 labels 来指定这些信息。
+
+启动参数：
+
+```
+tikv-server --labels zone=<zone>,rack=<rack>,host=<host>
 ```
 
-TiDB 还可以通过设置 session 变量 `time_zone` 为每个连接维护各自的时区。默认条件下，这个值取的是全局变量 `time_zone` 的值。修改 session 使用的时区：
+配置文件：
 
-{{< copyable "sql" >}}
+{{< copyable "" >}}
 
-```sql
-SET time_zone = timezone;
+```toml
+[server]
+labels = "zone=<zone>,rack=<rack>,host=<host>"
 ```
 
-查看当前使用的时区的值：
+## PD 理解 TiKV 拓扑结构
 
-{{< copyable "sql" >}}
+可以通过 PD 的配置文件让 PD 理解 TiKV 集群的拓扑结构。
 
-```sql
-SELECT @@global.time_zone, @@session.time_zone;
+{{< copyable "" >}}
+
+```toml
+[replication]
+max-replicas = 3
+location-labels = ["zone", "rack", "host"]
 ```
 
-设置 `time_zone` 的值的格式：
-
-* 'SYSTEM' 表明使用系统时间
-* 相对于 UTC 时间的偏移，比如 '+10:00' 或者 '-6:00'
-* 某个时区的名字，比如 'Europe/Helsinki'， 'US/Eastern' 或 'MET'
-
-`NOW()` 和 `CURTIME()` 的返回值都受到时区设置的影响。
+其中 `location-labels` 需要与 TiKV 的 `labels` 名字对应，这样 PD 才能知道这些 `labels` 代表了 TiKV 的拓扑结构。
 
 > **注意：**
 > 
-> 只有 Timestamp 数据类型的值是受时区影响的。可以理解为，Timestamp 数据类型的实际表示使用的是 (字面值 + 时区信息)。其它时间和日期类型，比如 Datetime/Date/Time 是不包含时区信息的，所以也不受到时区变化的影响。
+> 必须同时配置 PD 的 `location-labels` 和 TiKV 的 `labels` 参数，否则 `labels` 不会生效。
 
-{{< copyable "sql" >}}
+## PD 基于 TiKV 拓扑结构进行调度
 
-{{< copyable "sql" >}}
+PD 能够根据我们提供的拓扑信息作出最优的调度，我们只需要关心什么样的拓扑结构能够达到我们想要的效果。
 
-```sql
-create table t (ts timestamp, dt datetime);
-```
+假设我们使用三副本，并且希望一个数据中心挂掉的情况下，还能继续保持 TiDB 集群的高可用状态，我们至少需要四个数据中心。
 
-```
-Query OK, 0 rows affected (0.02 sec)
-```
-
-{{< copyable "sql" >}}
-
-```sql
-set @@time_zone = 'UTC';
-```
+假设我们有四个数据中心 (zone)，每个数据中心有两个机架 (rack)，每个机架上有两个主机 (host)。 每个主机上面启动一个 TiKV 实例：
 
 ```
-Query OK, 0 rows affected (0.00 sec)
+# zone=z1
+tikv-server --labels zone=z1,rack=r1,host=h1
+tikv-server --labels zone=z1,rack=r1,host=h2
+tikv-server --labels zone=z1,rack=r2,host=h1
+tikv-server --labels zone=z1,rack=r2,host=h2
+
+# zone=z2
+tikv-server --labels zone=z2,rack=r1,host=h1
+tikv-server --labels zone=z2,rack=r1,host=h2
+tikv-server --labels zone=z2,rack=r2,host=h1
+tikv-server --labels zone=z2,rack=r2,host=h2
+
+# zone=z3
+tikv-server --labels zone=z3,rack=r1,host=h1
+tikv-server --labels zone=z3,rack=r1,host=h2
+tikv-server --labels zone=z3,rack=r2,host=h1
+tikv-server --labels zone=z3,rack=r2,host=h2
+
+# zone=z4
+tikv-server --labels zone=z4,rack=r1,host=h1
+tikv-server --labels zone=z4,rack=r1,host=h2
+tikv-server --labels zone=z4,rack=r2,host=h1
+tikv-server --labels zone=z4,rack=r2,host=h2
 ```
 
-{{< copyable "sql" >}}
+也就是说，我们有 16 个 TiKV 实例，分布在 4 个不同的数据中心，8 个不同的机架，16 个不同的机器。
 
-```sql
-insert into t values ('2017-09-30 11:11:11', '2017-09-30 11:11:11');
-```
+在这种拓扑结构下，PD 会优先把每一份数据的不同副本调度到不同的数据中心。 这时候如果其中一个数据中心挂了，不会影响 TiDB 集群的高可用状态。 如果这个数据中心一段时间内恢复不了，PD 会把这个数据中心的副本迁移出去。
 
-```
-Query OK, 1 row affected (0.00 sec)
-```
-
-{{< copyable "sql" >}}
-
-```sql
-set @@time_zone = '+8:00';
-```
-
-```
-Query OK, 0 rows affected (0.00 sec)
-```
-
-{{< copyable "sql" >}}
-
-```sql
-select * from t;
-```
-
-```
-+---------------------|---------------------+
-| ts                  | dt                  |
-+---------------------|---------------------+
-| 2017-09-30 19:11:11 | 2017-09-30 11:11:11 |
-+---------------------|---------------------+
-1 row in set (0.00 sec)
-```
-
-上面的例子中，无论怎么调整时区的值，Datetime 类型字段的值是不受影响的，而 Timestamp 则随着时区改变，显示的值会发生变化。其实 Timestamp 持久化到存储的值始终没有变化过，只是根据时区的不同显示值不同。
-
-Timestamp 类型和 Datetime 等类型的值，两者相互转换的过程中，会涉及到时区。这种情况一律基于 session 的当前 `time_zone` 时区处理。
-
-另外，用户在导数据的过程中，也要需注意主库和从库之间的时区设定是否一致。
+总的来说，PD 能够根据当前的拓扑结构使得集群容灾能力最大化，所以如果我们希望达到某个级别的容灾能力， 就需要根据拓扑机构在不同的地理位置提供多于备份数 (`max-replicas`) 的机器。
