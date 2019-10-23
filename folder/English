@@ -1,199 +1,165 @@
 ---
-title: TiDB 中的基本 SQL 操作
+title: 使用 Docker Compose 快速构建 TiDB 集群
 category: how-to
+aliases:
+  - '/docs-cn/v2.1/how-to/get-started/local-cluster/install-from-docker-compose/'
 ---
 
-# TiDB 中的基本 SQL 操作
+# 使用 Docker Compose 快速构建 TiDB 集群
 
-成功部署 TiDB 集群之后，便可以在 TiDB 中执行 SQL 语句了。因为 TiDB 兼容 MySQL，你可以使用 MySQL 客户端连接 TiDB，并且[大多数情况下](/v2.1/reference/mysql-compatibility.md)可以直接执行 MySQL 语句。
+本文档介绍如何在单机上通过 Docker Compose 快速一键部署一套 TiDB 测试集群。[Docker Compose](https://docs.docker.com/compose/overview) 可以通过一个 YAML 文件定义多个容器的应用服务，然后一键启动或停止。
 
-本文介绍 CRUD 操作等基本的 SQL 语句。完整的 SQL 语句列表，参见 [TiDB SQL 语法详解](https://pingcap.github.io/sqlgram/)。
+> **注意：**
+> 
+> 对于生产环境，不要使用 Docker Compose 进行部署，而应[使用 Ansible 部署 TiDB 集群](/v2.1/how-to/deploy/orchestrated/ansible.md)。
 
-## 创建、查看和删除数据库
+## 准备环境
 
-使用 `CREATE DATABASE` 语句创建数据库。语法如下：
+确保你的机器上已安装：
 
-```sql
-CREATE DATABASE db_name [options];
+- Docker（17.06.0 及以上版本）
+- Docker Compose
+- Git
+
+## 快速部署
+
+1. 下载 `tidb-docker-compose`
+
+    ```bash
+    git clone https://github.com/pingcap/tidb-docker-compose.git
+    ```
+
+2. 创建并启动集群
+
+    ```bash
+    cd tidb-docker-compose && docker-compose pull # Get the latest Docker images
+    docker-compose up -d
+    ```
+
+3. 访问集群
+
+    ```bash
+    mysql -h 127.0.0.1 -P 4000 -u root
+    ```
+
+    访问集群 Grafana 监控页面：<http://localhost:3000> 默认用户名和密码均为 admin。
+
+    [集群数据可视化](https://github.com/pingcap/tidb-vision)：<http://localhost:8010>
+
+## 自定义集群
+
+在完成快速部署后，以下组件已默认部署：3 个 PD，3 个 TiKV，1 个 TiDB 和监控组件 Prometheus，Pushgateway，Grafana 以及 tidb-vision。
+
+如果想自定义集群，可以直接修改 `docker-compose.yml`，但是手动修改比较繁琐而且容易出错，强烈建议使用 [Helm](https://helm.sh) 模板引擎生成 `docker-compose.yml` 文件。
+
+1. 安装 Helm
+
+    [Helm](https://helm.sh) 可以用作模板渲染引擎，只需要下载其 binary 文件即可以使用。
+
+    ```bash
+    curl https://raw.githubusercontent.com/kubernetes/helm/master/scripts/get | bash
+    ```
+
+    如果是 Mac 系统，也可以通过 Homebrew 安装：
+
+    ```
+    brew install kubernetes-helm
+    ```
+
+2. 下载 `tidb-docker-compose`
+
+    ```bash
+    git clone https://github.com/pingcap/tidb-docker-compose.git
+    ```
+
+3. 自定义集群
+
+    ```bash
+    cd tidb-docker-compose
+    cp compose/values.yaml values.yaml
+    vim values.yaml
+    ```
+
+    修改 `values.yaml` 里面的配置，例如集群规模，TiDB 镜像版本等。
+
+    [tidb-vision](https://github.com/pingcap/tidb-vision) 是 TiDB 集群可视化页面，可以可视化地显示 PD 对 TiKV 数据的调度。如果不想部署该组件，可以将 `tidbVision` 项留空。
+
+    PD，TiKV，TiDB 和 tidb-vision 支持从 GitHub 源码或本地文件构建 Docker 镜像，供开发测试使用。
+
+    - 如果希望从本地已编译好的 binary 文件构建 PD，TiKV 或 TiDB 镜像，需要将其 `image` 字段留空，并将已编译好的 binary 拷贝到对应的 `pd/bin/pd-server`，`tikv/bin/tikv-server`，`tidb/bin/tidb-server`。
+
+    - 如果希望从本地构建 tidb-vision 镜像，需要将其 `image` 字段留空，并将 tidb-vision 项目拷贝到 `tidb-vision/tidb-vision`。
+
+4. 生成 `docker-compose.yml` 文件
+
+    ```bash
+    helm template -f values.yaml compose > generated-docker-compose.yml
+    ```
+
+5. 使用生成的 `docker-compose.yml` 创建并启动集群
+
+    ```bash
+    docker-compose -f generated-docker-compose.yml pull # Get the latest Docker images
+    docker-compose -f generated-docker-compose.yml up -d
+    ```
+
+6. 访问集群
+
+    ```bash
+    mysql -h 127.0.0.1 -P 4000 -u root
+    ```
+
+    访问集群 Grafana 监控页面：<http://localhost:3000> 默认用户名和密码均为 admin。
+
+    如果启用了 tidb-vision，可以通过 <http://localhost:8010> 查看。
+
+## 访问 Spark shell 并加载 TiSpark
+
+向 TiDB 集群中插入一些样本数据：
+
+```bash
+$ docker-compose exec tispark-master bash
+$ cd /opt/spark/data/tispark-sample-data
+$ mysql -h tidb -P 4000 -u root < dss.ddl
 ```
 
-例如，要创建一个名为 `samp_db` 的数据库，可使用以下语句：
+当样本数据加载到 TiDB 集群之后，可以使用 `docker-compose exec tispark-master /opt/spark/bin/spark-shell` 来访问 Spark shell。
 
-```sql
-CREATE DATABASE IF NOT EXISTS samp_db;
+```bash
+$ docker-compose exec tispark-master /opt/spark/bin/spark-shell
+...
+Spark context available as 'sc' (master = local[*], app id = local-1527045927617).
+Spark session available as 'spark'.
+Welcome to
+      ____              __
+     / __/__  ___ _____/ /__
+    _\ \/ _ \/ _ `/ __/  '_/
+   /___/ .__/\_,_/_/ /_/\_\   version 2.1.1
+      /_/
+
+Using Scala version 2.11.8 (Java HotSpot(TM) 64-Bit Server VM, Java 1.8.0_172)
+Type in expressions to have them evaluated.
+Type :help for more information.
+
+scala> import org.apache.spark.sql.TiContext
+...
+scala> val ti = new TiContext(spark)
+...
+scala> ti.tidbMapDatabase("TPCH_001")
+...
+scala> spark.sql("select count(*) from lineitem").show
++--------+
+|count(1)|
++--------+
+|   60175|
++--------+
 ```
 
-使用 `SHOW DATABASES` 语句查看数据库：
+你也可以通过 Python 或 R 来访问 Spark：
 
-```sql
-SHOW DATABASES;
+```bash
+docker-compose exec tispark-master /opt/spark/bin/pyspark
+docker-compose exec tispark-master /opt/spark/bin/sparkR
 ```
 
-使用 `DROP DATABASE` 语句删除数据库，例如：
-
-```sql
-DROP DATABASE samp_db;
-```
-
-## 创建、查看和删除表
-
-使用 `CREATE TABLE` 语句创建表。语法如下：
-
-```sql
-CREATE TABLE table_name column_name data_type constraint;
-```
-
-例如：
-
-```sql
-CREATE TABLE person (
-    number INT(11),
-    name VARCHAR(255),
-    birthday DATE
-    );
-```
-
-如果表已存在，添加 `IF NOT EXISTS` 可防止发生错误：
-
-```sql
-CREATE TABLE IF NOT EXISTS person (
-      number INT(11),
-      name VARCHAR(255),
-      birthday DATE
-);
-```
-
-使用 `SHOW CREATE` 语句查看建表语句。例如：
-
-```sql
-SHOW CREATE table person;
-```
-
-使用 `SHOW FULL COLUMNS` 语句查看表的列。 例如：
-
-```sql
-SHOW FULL COLUMNS FROM person;
-```
-
-使用 `DROP TABLE` 语句删除表。例如：
-
-```sql
-DROP TABLE person;
-```
-
-或者
-
-```sql
-DROP TABLE IF EXISTS person;
-```
-
-使用 `SHOW TABLES` 语句查看数据库中的所有表。例如：
-
-```sql
-SHOW TABLES FROM samp_db;
-```
-
-## 创建、查看和删除索引
-
-对于值不唯一的列，可使用 `CREATE INDEX` 或 `ALTER TABLE` 语句。例如：
-
-```sql
-CREATE INDEX person_num ON person (number);
-```
-
-或者
-
-```sql
-ALTER TABLE person ADD INDEX person_num (number);
-```
-
-对于值唯一的列，可以创建唯一索引。例如：
-
-```sql
-CREATE UNIQUE INDEX person_num ON person (number);
-```
-
-或者
-
-```sql
-ALTER TABLE person ADD UNIQUE person_num (number);
-```
-
-使用 `SHOW INDEX` 语句查看表内所有索引：
-
-```sql
-SHOW INDEX from person;
-```
-
-使用 `ALTER TABLE` 或 `DROP INDEX` 语句来删除索引。与 `CREATE INDEX` 语句类似，`DROP INDEX` 也可以嵌入 `ALTER TABLE` 语句。例如：
-
-```sql
-DROP INDEX person_num ON person;
-ALTER TABLE person DROP INDEX person_num;
-```
-
-## 增删改查数据
-
-使用 `INSERT` 语句向表内插入数据。例如：
-
-```sql
-INSERT INTO person VALUES("1","tom","20170912");
-```
-
-使用 `SELECT` 语句检索表内数据。例如：
-
-```sql
-SELECT * FROM person;
-+--------+------+------------+
-| number | name | birthday   |
-+--------+------+------------+
-|      1 | tom  | 2017-09-12 |
-+--------+------+------------+
-```
-
-使用 `UPDATE` 语句修改表内数据。例如：
-
-```sql
-UPDATE person SET birthday='20171010' WHERE name='tom';
-
-SELECT * FROM person;
-+--------+------+------------+
-| number | name | birthday   |
-+--------+------+------------+
-|      1 | tom  | 2017-10-10 |
-+--------+------+------------+
-```
-
-使用 `DELETE` 语句删除表内数据：
-
-```sql
-DELETE FROM person WHERE number=1;
-SELECT * FROM person;
-Empty set (0.00 sec)
-```
-
-## 创建、授权和删除用户
-
-使用 `CREATE USER` 语句创建一个用户 `tiuser`，密码为 `123456`：
-
-```sql
-CREATE USER 'tiuser'@'localhost' IDENTIFIED BY '123456';
-```
-
-授权用户 `tiuser` 可检索数据库 `samp_db` 内的表：
-
-```sql
-GRANT SELECT ON samp_db.* TO 'tiuser'@'localhost';
-```
-
-查询用户 `tiuser` 的权限：
-
-```sql
-SHOW GRANTS for tiuser@localhost;
-```
-
-删除用户 `tiuser`：
-
-```sql
-DROP USER 'tiuser'@'localhost';
-```
+更多关于 TiSpark 的信息，参见 [TiSpark 的详细文档](/v2.1/how-to/get-started/tispark.md)。
