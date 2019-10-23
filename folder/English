@@ -1,38 +1,207 @@
 ---
-title: TiDB Lightning 简介
+title: TiDB Lightning 监控告警
 category: reference
 ---
 
-# TiDB Lightning 简介
+# TiDB Lightning 监控告警
 
-TiDB Lightning 是一个将全量数据高速导入到 TiDB 集群的工具，有以下两个主要的使用场景：一是大量新数据的快速导入；二是全量数据的备份恢复。目前，支持 Mydumper 或 CSV 输出格式的数据源。您可以在以下两种场景下使用 Lightning：
+`tidb-lightning` 和 `tikv-importer` 都支持使用 [Prometheus](https://prometheus.io/) 采集监控指标 (metrics)。本文主要介绍 TiDB Lightning 的监控配置与监控指标。
 
-- **迅速**导入**大量新**数据。
-- 备份恢复所有数据。
+## 监控配置
 
-## TiDB Lightning 整体架构
+- 如果是使用 TiDB Ansible 部署 Lightning，只要将服务器地址加到 `inventory.ini` 里的 `[monitored_servers]` 部分即可。
+- 如果是手动部署 Lightning，则参照以下步骤进行配置。
 
-TiDB Lightning 主要包含两个部分:
+### `tikv-importer`
 
-- **`tidb-lightning`**（“前端”）：主要完成适配工作，通过读取数据源，在下游 TiDB 集群建表、将数据转换成键/值对 (KV 对) 发送到 `tikv-importer`、检查数据完整性等。
-- **`tikv-importer`**（“后端”）：主要完成将数据导入 TiKV 集群的工作，把 `tidb-lightning` 写入的 KV 对缓存、排序、切分并导入到 TiKV 集群。
+`tikv-importer` v2.1 使用 [Pushgateway](https://github.com/prometheus/pushgateway) 来推送监控指标。需要配置 `tikv-importer.toml` 来连接 Pushgateway：
 
-![TiDB Lightning 其整体架构](/media/tidb-lightning-architecture.png)
+```toml
+[metric]
 
-TiDB Lightning 整体工作原理如下：
+# 给 Prometheus 客户端的推送任务名称。
+job = "tikv-importer"
 
-1. 在导数据之前，`tidb-lightning` 会自动将 TiKV 集群切换为“导入模式” (import mode)，优化写入效率并停止自动压缩 (compaction)。
+# 给 Prometheus 客户端的推送间隔。
+interval = "15s"
 
-2. `tidb-lightning` 会在目标数据库建立架构和表，并获取其元数据。
+# Prometheus Pushgateway 地址。
+address = ""
+```
 
-3. 每张表都会被分割为多个连续的**区块**，这样来自大表 (200 GB+) 的数据就可以用增量方式导入。
+### `tidb-lightning`
 
-4. `tidb-lightning` 会通过 gRPC 让 `tikv-importer` 为每一个区块准备一个“引擎文件 (engine file)”来处理 KV 对。`tidb-lightning` 会并发读取 SQL dump，将数据源转换成与 TiDB 相同编码的 KV 对，然后发送到 `tikv-importer` 里对应的引擎文件。
+只要 Prometheus 能发现 `tidb-lightning` 的监控地址，就能收集监控指标。
 
-5. 当一个引擎文件数据写入完毕时，`tikv-importer` 便开始对目标 TiKV 集群数据进行分裂和调度，然后导入数据到 TiKV 集群。
+监控的端口可在 `tidb-lightning.toml` 中配置：
 
-   引擎文件包含两种：**数据引擎**与**索引引擎**，各自又对应两种 KV 对：行数据和次级索引。通常行数据在数据源里是完全有序的，而次级索引是无序的。因此，数据引擎文件在对应区块写入完成后会被立即上传，而所有的索引引擎文件只有在整张表所有区块编码完成后才会执行导入。
+```toml
+[lightning]
+# 用于调试和 Prometheus 监控的 HTTP 端口。输入 0 关闭。
+pprof-port = 8289
 
-6. 整张表相关联的所有引擎文件完成导入后，`tidb-lightning` 会对比本地数据源及下游集群的校验和 (checksum)，确保导入的数据无损，以及让 TiDB 分析 (`ANALYZE`) 这些新增的数据，以优化日后的操作。
+...
+```
 
-7. 在所有步骤完毕后，`tidb-lightning` 自动将 TiKV 切换回“普通模式” (normal mode)，此后 TiDB 集群可以正常对外提供服务。
+要让 Prometheus 发现 Lightning，可以将地址直接写入其配置文件，例如：
+
+{{< copyable "" >}}
+
+```yaml
+...
+scrape_configs:
+  - job_name: 'tidb-lightning'
+    static_configs:
+      - targets: ['192.168.20.10:8289']
+```
+
+## 监控指标
+
+本节将详细描述 `tikv-importer` 和 `tidb-lightning` 的监控指标。
+
+### `tikv-importer`
+
+`tikv-importer` 的监控指标皆以 `tikv_import_*` 为前缀。
+
+- **`tikv_import_rpc_duration`**（直方图）
+
+    完成一次 RPC 操作所需时的直方图。标签：
+
+    - **request**：`switch_mode` / `open_engine` / `write_engine` / `close_engine` / `import_engine` / `cleanup_engine` / `compact_cluster` / `upload` / `ingest` / `compact`
+    - **result**：`ok` / `error`
+
+- **`tikv_import_write_chunk_bytes`**（直方图）
+
+    从 Lightning 接收的 KV 对区块大小（未压缩）的直方图。
+
+- **`tikv_import_write_chunk_duration`**（直方图）
+
+    从 `tidb-lightning` 接收每个 KV 对区块需时直方图。
+
+- **`tikv_import_upload_chunk_bytes`**（直方图）
+
+     上传到 TiKV 的每个 SST 文件区块大小（压缩）的直方图。
+
+- **`tikv_import_range_delivery_duration`** (直方图)
+
+    将一个 range 的 KV 对发送至 `dispatch-job` 任务需时的直方图。
+
+- **`tikv_import_split_sst_duration`** (直方图)
+
+    将 range 从引擎文件中分离到单个 SST 文件中需时的直方图。
+
+- **`tikv_import_sst_delivery_duration`** (直方图)
+
+    将 SST 文件从 `dispatch-job` 任务发送到 `ImportSSTJob`任务需时的直方图
+
+- **`tikv_import_sst_recv_duration`** (直方图)
+
+    `ImportSSTJob`任务接收从 `dispatch-job` 任务发送过来的 SST 文件需时的直方图。
+
+- **`tikv_import_sst_upload_duration`** (直方图)
+
+    从 `ImportSSTJob` 任务上传 SST 文件到 TiKV 节点需时的直方图。
+
+- **`tikv_import_sst_chunk_bytes`** (直方图)
+
+    上传到 TiKV 节点的 SST 文件（压缩）大小的直方图。
+
+- **`tikv_import_sst_ingest_duration`** (直方图)
+
+    将 SST 文件传入至 TiKV 需时的直方图。
+
+- **`tikv_import_each_phase`** (测量仪)
+
+    表示运行阶段。值为 1 时表示在阶段内运行，值为 0 时表示在阶段内运行。标签：
+
+    - **phase**: `prepare` / `import`
+
+- **`tikv_import_wait_store_available_count`** (计数器)
+
+    计算出现 TiKV 节点没有充足空间上传 SST 文件现象的次数。标签：
+
+    - **store_id**: TiKV 存储 ID。
+
+- **`tikv_import_upload_chunk_duration`**（直方图）
+
+    上传到 TiKV 的每个区块需时的直方图。
+
+### `tidb-lightning`
+
+`tidb-lightning` 的监控指标皆以 `lightning_*` 为前缀。
+
+- **`lightning_importer_engine`**（计数器）
+
+    计算已开启及关闭的引擎文件数量。标签：
+
+    - **type**：`open` / `closed`
+
+- **`lightning_idle_workers`**（计量表盘）
+
+    计算闲置的 worker。数值应低于设置中的 `*-concurrency` 的值，且经常为 0。标签：
+
+    - **name**: `table` / `index` / `region` / `io` / `closed-engine`
+
+- **`lightning_kv_encoder`**（计数器）
+
+    计算已开启及关闭的 KV 编码器。KV 编码器是运行于内存的 TiDB 实例，用于将 SQL 的 `INSERT` 语句转换成 KV 对。此度量的净值（开启减掉关闭）在正常情况下不应持续增长。标签：
+
+    - **type**：`open` / `closed`
+
+- **`lightning_tables`**（计数器）
+
+    计算处理过的表及其状态。标签：
+
+    - **state**：`pending` / `written` / `closed` / `imported` / `altered_auto_inc` / `checksum` / `analyzed` / `completed`
+    - **result**：`success` / `failure`
+
+- **`lightning_engines`** (计数器)
+
+    计算处理后引擎文件的数量以及其状态。标签：
+
+    - **state**: `pending` / `written` / `closed` / `imported` / `completed`
+    - **result**: `success` / `failure`
+
+- **`lightning_chunks`**（计数器）
+
+    计算处理过的 Chunks 及其状态。标签：
+
+    - **state**：`estimated` / `pending` / `running` / `finished` / `failed`
+
+- **`lightning_import_seconds`**（直方图）
+
+    导入每个表需时的直方图。
+
+- **`lightning_row_read_bytes`**（直方图）
+
+    单行 SQL 数据大小的直方图。
+
+- **`lightning_row_encode_seconds`**（直方图）
+
+    解码单行 SQL 数据到 KV 对需时的直方图。
+
+- **`lightning_row_kv_deliver_seconds`**（直方图）
+
+    发送一组与单行 SQL 数据对应的 KV 对需时的直方图。
+
+- **`lightning_block_deliver_seconds`**（直方图）
+
+    每个 KV 对中的区块传送到 `tikv-importer` 需时的直方图。
+
+- **`lightning_block_deliver_bytes`**（直方图）
+
+    发送到 Importer 的 KV 对中区块（未压缩）的大小的直方图。
+
+- **`lightning_chunk_parser_read_block_seconds`**（直方图）
+
+    数据文件解析每个 SQL 区块需时的直方图。
+
+- **`lightning_checksum_seconds`**（直方图）
+
+    计算表中 Checksum 需时的直方图。
+
+- **`lightning_apply_worker_seconds`**（直方图）
+
+    获取闲置 worker 等待时间的直方图。标签：
+
+    - **name**: `table` / `index` / `region` / `io` / `closed-engine`
