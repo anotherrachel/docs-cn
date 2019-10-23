@@ -1,52 +1,38 @@
 ---
-title: TiDB 2.1.15 Release Notes
+title: TiDB 2.1.13 Release Notes
 category: Releases
 ---
 
-# TiDB 2.1.15 Release Notes
+# TiDB 2.1.13 Release Notes
 
-发版日期：2019 年 7 月 18 日
+发版日期：2019 年 6 月 21 日
 
-TiDB 版本：2.1.15
+TiDB 版本：2.1.13
 
-TiDB Ansible 版本：2.1.15
+TiDB Ansible 版本：2.1.13
 
 ## TiDB
 
-+ 修复 `DATE_ADD` 函数处理微秒时由于没有对齐导致结果不正确的问题 [#11289](https://github.com/pingcap/tidb/pull/11289)
-+ 修复 `DELETE` 语句中，字符串列中的空值与 FLOAT/INT 做比较时会报错的问题 [#11279](https://github.com/pingcap/tidb/pull/11279)
-+ 修复 `INSERT` 函数参数有 `NULL` 值时，未正确返回 `NULL` 值的问题 [#11249](https://github.com/pingcap/tidb/pull/11249)
-+ 修复在非字符串类型且长度为 0 的列建立索引时出错的问题 [#11215](https://github.com/pingcap/tidb/pull/11215)
-+ 新增 `SHOW TABLE REGIONS` 的语句，支持通过 SQL 查询表的 Region 分布情况 [#11238](https://github.com/pingcap/tidb/pull/11238)
-+ 修复 `UPDATE … SELECT` 语句因 `SELECT` 子查询中使用投影消除来优化规则所导致的报错 [#11254](https://github.com/pingcap/tidb/pull/11254)
-+ 新增 `ADMIN PLUGINS ENABLE/DISABLE` SQL 语句，支持通过 SQL 动态开启/关闭 Plugin [#11189](https://github.com/pingcap/tidb/pull/11189)
-+ Audit Plugin 新增审记连接功能 [#11189](https://github.com/pingcap/tidb/pull/11189)
-+ 修复点查时，某列被查询多次而且结果为 NULL 时会 Panic 的问题 [#11227](https://github.com/pingcap/tidb/pull/11227)
-+ 新增 `tidb_scatter_region` 配置项，控制创建表时是否开启自己打散 Record Region [#11213](https://github.com/pingcap/tidb/pull/11213)
-+ 修复 `RAND` 函数由于非线程安全的 `rand.Rand` 导致的 Data Race 问题 [#11170](https://github.com/pingcap/tidb/pull/11170)
-+ 修复某些情况下整数和非整数比较结果不正确的问题 [#11191](https://github.com/pingcap/tidb/pull/11191)
-+ 支持修改 Database/Table 的 Collate，条件限制为 Database/Table 字符集必须是 UTF8/UTF8MB4 [#11085](https://github.com/pingcap/tidb/pull/11085)
-+ 修复 `CURRENT_TIMESTAMP` 作为列的默认值且指定浮点精度时，`SHOW CREATE TABLE` 等语句显示精度不完整的问题 [#11087](https://github.com/pingcap/tidb/pull/11087)
+- 新增列属性包含 `AUTO_INCREMENT` 时利用 `SHARD_ROW_ID_BITS` 打散行 ID 功能，缓解热点问题 [#10788](https://github.com/pingcap/tidb/pull/10788)
+- 优化无效 DDL 元信息存活时间，缩短集群升级后恢复 DDL 操作正常执行所需的时间 [#10789](https://github.com/pingcap/tidb/pull/10789)
+- 修复因持有 `execdetails.ExecDetails` 指针时 Coprocessor 的资源无法快速释放导致的在大并发场景下 OOM 的问题 [#10833](https://github.com/pingcap/tidb/pull/10833)
+- 新增 `update-stats`配置项，控制是否更新统计信息 [#10772](https://github.com/pingcap/tidb/pull/10772)
+- 新增 3 个 TiDB 特有语法，支持预先切分 Region，解决热点问题：
+    - 新增 Table Option `PRE_SPLIT_REGIONS` 选项 [#10863](https://github.com/pingcap/tidb/pull/10863)
+    - 新增 `SPLIT TABLE table_name INDEX index_name` 语法 [#10865](https://github.com/pingcap/tidb/pull/10865)
+    - 新增 `SPLIT TABLE [table_name] BETWEEN (min_value...) AND (max_value...) REGIONS [region_num]` 语法 [#10882](https://github.com/pingcap/tidb/pull/10882)
+- 修复某些情况下 `KILL` 语句导致的 panic 问题 [#10879](https://github.com/pingcap/tidb/pull/10879)
+- 增强 `ADD_DATE` 在某些情况下跟 MySQL 的兼容性 [#10718](https://github.com/pingcap/tidb/pull/10718)
+- 修复 index join 中内表过滤条件在某些情况下的选择率估计错误的问题 [#10856](https://github.com/pingcap/tidb/pull/10856)
 
 ## TiKV
 
-+ 统一日志格式 [#5083](https://github.com/tikv/tikv/pull/5083)
-+ 提高 region approximate size/key 在极端情况下的准确性，提升调度准确度 [#5085](https://github.com/tikv/tikv/pull/5085)
-
-## PD
-
-+ 统一日志格式 [#1625](https://github.com/pingcap/pd/pull/1625)
+- 修复因迭代器未检查状态导致系统生成残缺 snapshot 的问题 [#4940](https://github.com/tikv/tikv/pull/4940)
+- 新增检查 `block-size` 配置的有效性功能 [#4930](https://github.com/tikv/tikv/pull/4930)
 
 ## Tools
 
 TiDB Binlog
 
-+ 优化 Pump GC 策略，去掉了未被在线 drainer 消费到的 binlog 保证不清理的限制 [#663](https://github.com/pingcap/tidb-binlog/pull/663)
-
-TiDB Lightning
-
-+ 修复 SQL dump 指明的列名不是小写时导入错误的问题 [#210](https://github.com/pingcap/tidb-lightning/pull/210)
-
-## TiDB Ansible
-
-+ TiDB Dashboard 新增 `parse duration` 和 `compile duration` 监控项，用于监测 SQL 语句解析耗时和执行计划编译耗时 [#815](https://github.com/pingcap/tidb-ansible/pull/815)
+- 修复 Pump 因写入失败时未检查返回值导致偏移量错误问题 [#640](https://github.com/pingcap/tidb-binlog/pull/640)
+- Drainer 新增 `advertise-addr` 配置，支持容器环境中使用桥接模式 [#634](https://github.com/pingcap/tidb-binlog/pull/634)
