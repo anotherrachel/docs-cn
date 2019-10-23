@@ -1,24 +1,14 @@
----
-name: "crwdns104:0crwdne104:0"
-about: crwdns106:0crwdne106:0
----
+<!--Thanks for your contribution to TiDB documentation. See [CONTRIBUTING](https://github.com/pingcap/community/blob/master/CONTRIBUTING.md) before filing this PR.-->
 
-## crwdns108:0crwdne108:0
+### crwdns130:0crwdne130:0 <!--Required-->
 
-crwdns110:0crwdne110:0 crwdns112:0crwdne112:0
-<!-- 本仓库仅用于解决与中文文档相关的问题，
-其他方面问题（如 TiDB、TiKV 等），请移步其他[相关仓库](https://github.com/pingcap/)。 -->
+<!--Tell us what you did and why.-->
 
-crwdns114:0crwdne114:0
-<!-- 在提出一个问题之前，请确定你已经进行了下面的操作: -->
-- crwdns116:0crwdne116:0
-<!-- - 已在 Stack Overflow 等平台搜索了相关问题。 -->
-- crwdns118:0crwdne118:0
-<!-- - 通过谷歌等搜索引擎查询了问题。  -->
-- crwdns120:0%Ecrwdnd120:0%9Ccrwdnd120:0%93crwdnd120:0%3crwdne120:0
-<!-- - 查阅了相关的 issues。 -->
-- crwdns122:0crwdne122:0
-    - [crwdns126:0crwdne126:0](crwdns124:0crwdne124:0)
-    - crwdns128:0crwdne128:0
-<!-- - 阅读了相关文档。 -->
+### crwdns132:0crwdne132:0 <!--Write "N/A" or remove this item if it is not applicable-->
+
+<!--Provide a reference link that is related to your change. For example, a link in the pingcap/docs repository. -->
+
+### crwdns134:0crwdne134:0 <!--Required; write "N/A" if it is not applicable-->
+
+<!--Specify the version or versions that your change affect by adding a label at the right-hand side of this page. "dev" indicates the latest development version. "v3.0"/"v2.1" indicates the documentation of TiDB 3.0/2.1. If your change affects multiple versions, please update the documents for ALL the necessary versions.-->
 
