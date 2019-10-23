@@ -1,446 +1,323 @@
 ---
-title: TiDB in Kubernetes Sysbench 性能测试
-category: benchmark
+title: 升级后常见问题
+category: FAQ
+aliases:
+  - '/docs-cn/op-guide/upgrade-faq/'
+  - '/docs-cn/faq/upgrade/'
 ---
 
-# TiDB in Kubernetes Sysbench 性能测试
+# 升级后常见问题
 
-随着 [TiDB Operator GA 发布](https://pingcap.com/blog-cn/tidb-operator-1.0-ga/)，越来越多用户开始使用 TiDB Operator 在 Kubernetes 中部署管理 TiDB 集群。在本次测试中，我们选择 GKE 平台做了一次深入、全方位的测试，方便大家了解 TiDB 在 Kubernetes 中性能影响因素。
+本文列出了一些升级后可能会遇到的问题与解决办法。
 
-## 目的
+## 执行 DDL 操作时遇到的字符集 (charset) 问题
 
-- 测试典型公有云平台上 TiDB 性能数据
-- 测试公有云平台磁盘、网络、CPU 以及不同 Pod 网络下对 TiDB 性能的影响
+TiDB 在 v2.1.0 以及之前版本（包括 v2.0 所有版本）中，默认字符集是 UTF8。从 v2.1.1 开始，默认字符集变更为 UTF8MB4。如果在 v2.1.0 及之前版本中，建表时显式指定了 table 的 charset 为 UTF8，那么升级到 v2.1.1 之后，执行 DDL 操作可能会失败。
 
-## 环境
+要避免该问题，需注意以下两个要点：
 
-### 版本与配置
+1. 在 v2.1.3 之前，TiDB 不支持修改 column 的 charset。所以，执行 DDL 操作时，新 column 的 charset 需要和旧 column 的 charset 保持一致。
 
-本次测试统一使用 TiDB v3.0.1 版本进行测试。
+2. 在 v2.1.3 之前，即使 column 的 charset 和 table 的 charset 不一样，`show create table` 也不会显示 column 的 charset，但可以通过 HTTP API 获取 table 的元信息来查看 column 的 charset，下文提供了示例。
 
-TiDB Operator 使用 v1.0.0 版本。
+### 问题 1：`unsupported modify column charset utf8mb4 not match origin utf8`
 
-PD、TiDB 和 TiKV 实例数均为 3 个。各组件分别作了如下配置，未配置部分使用默认值。
+- 升级前：v2.1.0 及之前版本
 
-PD:
+    {{< copyable "sql" >}}
 
-```toml
-[log]
-level = "info"
-[replication]
-location-labels = ["region", "zone", "rack", "host"]
+    ```sql
+    create table t(a varchar(10)) charset=utf8;
+    ```
+
+    ```
+    Query OK, 0 rows affected
+    Time: 0.106s
+    ```
+
+
+    {{< copyable "sql" >}}
+
+    ```sql
+    show create table t
+    ```
+
+    ```
+    +-------+-------------------------------------------------------+
+    | Table | Create Table                                          |
+    +-------+-------------------------------------------------------+
+    | t     | CREATE TABLE `t` (                                    |
+    |       |   `a` varchar(10) DEFAULT NULL                        |
+    |       | ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_bin |
+    +-------+-------------------------------------------------------+
+    1 row in set
+    Time: 0.006s
+    ```
+
+- 升级后：v2.1.1、v2.1.2 会出现下面的问题，v2.1.3 以及之后版本不会出现下面的问题。
+
+    {{< copyable "sql" >}}
+
+    ```sql
+    alter table t change column a a varchar(20);
+    ```
+
+    ```
+    ERROR 1105 (HY000): unsupported modify column charset utf8mb4 not match origin utf8
+    ```
+
+解决方案：显式指定 column charset，保持和原来的 charset 一致即可。
+
+{{< copyable "sql" >}}
+
+```sql
+alter table t change column a a varchar(22) character set utf8;
 ```
 
-TiDB:
+- 根据要点 1，此处如果不指定 column 的 charset，会用默认的 UTF8MB4，所以需要指定 column charset 保持和原来一致。
+
+- 根据要点 2，用 HTTP API 获取 table 元信息，然后根据 column 名字和 Charset 关键字搜索即可找到 column 的 charset。
+
+    {{< copyable "shell-regular" >}}
+
+    ```sh
+    curl "http://$IP:10080/schema/test/t" | python -m json.tool
+    ```
+
+    这里用了 python 的格式化 json的工具，也可以不加，此处只是为了方便注释。
+
+    ```json
+    {
+        "ShardRowIDBits": 0,
+        "auto_inc_id": 0,
+        "charset": "utf8",   # table 的 charset
+        "collate": "",
+        "cols": [            # 从这里开始列举 column 的相关信息
+            {
+                ...
+                "id": 1,
+                "name": {
+                    "L": "a",
+                    "O": "a"   # column 的名字
+                },
+                "offset": 0,
+                "origin_default": null,
+                "state": 5,
+                "type": {
+                    "Charset": "utf8",   # column a 的 charset
+                    "Collate": "utf8_bin",
+                    "Decimal": 0,
+                    "Elems": null,
+                    "Flag": 0,
+                    "Flen": 10,
+                    "Tp": 15
+                }
+            }
+        ],
+        ...
+    }
+    ```
 
-```toml
-[log]
-level = "error"
-[prepared-plan-cache]
-enabled = true
-[tikv-client]
-max-batch-wait-time = 2000000
-```
+### 问题 2：`unsupported modify charset from utf8mb4 to utf8`
 
-TiKV:
+- 升级前：v2.1.1，v2.1.2
 
-```toml
-log-level = "error"
-[server]
-status-addr = "0.0.0.0:20180"
-grpc-concurrency = 6
-[readpool.storage]
-normal-concurrency = 10
-[rocksdb.defaultcf]
-block-cache-size = "14GB"
-[rocksdb.writecf]
-block-cache-size = "8GB"
-[rocksdb.lockcf]
-block-cache-size = "1GB"
-[raftstore]
-apply-pool-size = 3
-store-pool-size = 3
-```
-
-### TiDB 数据库参数配置
-
-```
-set global tidb_hashagg_final_concurrency=1;
-set global tidb_hashagg_partial_concurrency=1;
-set global tidb_disable_txn_auto_retry=0;
-```
-
-### 硬件配置
-
-#### 机器型号
-
-在单可用区测试中，我们选择了如下型号机器：
-
-| 组件       | 实例类型           | 数量 |
-|:-------- |:-------------- |:-- |
-| PD       | n1-standard-4  | 3  |
-| TiKV     | c2-standard-16 | 3  |
-| TiDB     | c2-standard-16 | 3  |
-| Sysbench | c2-standard-30 | 1  |
-
-分别在多可用区和单可用区中对 TiDB 进行性能测试，并将结果相对比。在测试时 (2019.08)，一个 GCP 区域 (Region) 下不存在三个能同时提供 c2 机器的可用区，所以我们选择了如下机器型号进行测试：
-
-| 组件       | 实例类型           | 数量 |
-|:-------- |:-------------- |:-- |
-| PD       | n1-standard-4  | 3  |
-| TiKV     | n1-standard-16 | 3  |
-| TiDB     | n1-standard-16 | 3  |
-| Sysbench | n1-standard-16 | 3  |
-
-在高并发读测试中，压测端 sysbench 对 CPU 需求较高，需选择多核较高配置型号，避免压测端成为瓶颈。
-
-> **注意：**
-> 
-> GCP 不同的区域可用机型不同。同时测试中发现磁盘性能表现也存在差异，我们统一在 us-central1 中申请机器测试。
-
-#### 磁盘
-
-GKE 当前的 NVMe 磁盘还在 Alpha 阶段，使用需特殊申请，不具备普遍意义。测试中，本地 SSD 盘统一使用 iSCSI 接口类型。挂载参数参考[官方建议](https://cloud.google.com/compute/docs/disks/performance#optimize_local_ssd)增加了 `discard,nobarrier` 选项。完整挂载例子如下：
-
-```
-sudo mount -o defaults,nodelalloc,noatime,discard,nobarrier /dev/[LOCAL_SSD_ID] /mnt/disks/[MNT_DIR]
-```
-
-#### 网络
-
-GKE 网络模式使用具备更好扩展性以及功能强大的 [VPC-Native](https://cloud.google.com/kubernetes-engine/docs/how-to/alias-ips) 模式。在性能对比中，我们分别对 TiDB 使用 Kubernetes Pod 和 Host 网络分别做了测试。
-
-#### CPU
-
-在单可用集群测试中，我们为 TiDB/TiKV 选择 c2-standard-16 机型测试。在单可用与多可用集群的对比测试中，因为 GCP 区域 (Region) 下不存在三个能同时申请 c2-standard-16 机型的可用区，所以我们选择了 n1-standard-16 机型测试。
-
-### 操作系统及参数
-
-GKE 支持两种操作系统：COS (Container Optimized OS) 和 Ubuntu 。Point Select 测试在两种操作系统中进行，并将结果进行了对比。其余测试中，统一使用 Ubuntu 系统进行测试。
-
-内核统一做了如下配置:
-
-```shell
-sysctl net.core.somaxconn=32768
-sysctl vm.swappiness=0
-sysctl net.ipv4.tcp_syncookies=0
-```
-
-同时对最大文件数配置为 1000000。
-
-### Sysbench 版本与运行参数
-
-本次测试中 sysbench 版本为 1.0.17。并在测试前统一使用 `oltp_common` 的 `prewarm` 命令进行数据预热。
-
-#### 初始化
-
-```shell
-sysbench \
-  --mysql-host=<tidb-host> \
-  --mysql-port=4000 \
-  --mysql-user=root \
-  --mysql-db=sbtest \
-  --time=600 \
-  --threads=16 \
-  --report-interval=10 \
-  --db-driver=mysql \
-  --rand-type=uniform \
-  --rand-seed=$RANDOM \
-  --tables=16 \
-  --table-size=10000000 \
-  oltp_common \
-  prepare
-```
-
-`<tidb-host>` 为 TiDB 的数据库地址，根据不同测试需求选择不同的地址，比如 Pod IP、Service 域名、Host IP 以及 Load Balancer IP（下同）。
-
-#### 预热
-
-```shell
-sysbench \
-  --mysql-host=<tidb-host> \
-  --mysql-port=4000 \
-  --mysql-user=root \
-  --mysql-db=sbtest \
-  --time=600 \
-  --threads=16 \
-  --report-interval=10 \
-  --db-driver=mysql \
-  --rand-type=uniform \
-  --rand-seed=$RANDOM \
-  --tables=16 \
-  --table-size=10000000 \
-  oltp_common \
-  prewarm
-```
-
-#### 压测
-
-```shell
-sysbench \
-  --mysql-host=<tidb-host> \
-  --mysql-port=4000 \
-  --mysql-user=root \
-  --mysql-db=sbtest \
-  --time=600 \
-  --threads=<threads> \
-  --report-interval=10 \
-  --db-driver=mysql \
-  --rand-type=uniform \
-  --rand-seed=$RANDOM \
-  --tables=16 \
-  --table-size=10000000 \
-  <test> \
-  run
-```
-
-`<test>` 为 sysbench 的测试 case。我们选择了 oltp_point_select、oltp_update_index、oltp_update_no_index、oltp_read_write 这几种。
-
-## 测试报告
-
-### 单可用区测试
+    {{< copyable "sql" >}}
 
-#### Pod Network vs Host Network
-
-Kubernetes 允许 Pod 运行在 Host 网络模式下。此部署方式适用于 TiDB 实例独占机器且没有端口冲突的情况。我们分别在两种网络模式下做了 Point Select 测试。
-
-此次测试中，操作系统为 COS。
-
-Pod Network:
-
-| Threads | QPS       | 95% latency(ms) |
-|:------- |:--------- |:--------------- |
-| 150     | 246386.44 | 0.95            |
-| 300     | 346557.39 | 1.55            |
-| 600     | 396715.66 | 2.86            |
-| 900     | 407437.96 | 4.18            |
-| 1200    | 415138.00 | 5.47            |
-| 1500    | 419034.43 | 6.91            |
+    ```sql
+    create table t(a varchar(10)) charset=utf8;
+    ```
 
-Host Network:
+    ```
+    Query OK, 0 rows affected
+    Time: 0.109s
+    ```
 
-| Threads | QPS       | 95% latency(ms) |
-|:------- |:--------- |:--------------- |
-| 150     | 255981.11 | 1.06            |
-| 300     | 366482.22 | 1.50            |
-| 600     | 421279.84 | 2.71            |
-| 900     | 438730.81 | 3.96            |
-| 1200    | 441084.13 | 5.28            |
-| 1500    | 447659.15 | 6.67            |
 
-QPS 对比：
+    {{< copyable "sql" >}}
 
-![Pod vs Host Network](/media/sysbench-in-k8s/pod-vs-host-network-qps.png)
+    ```sql
+    show create table t;
+    ```
 
-Latency 对比：
+    ```
+    +-------+-------------------------------------------------------+
+    | Table | Create Table                                          |
+    +-------+-------------------------------------------------------+
+    | t     | CREATE TABLE `t` (                                    |
+    |       |   `a` varchar(10) DEFAULT NULL                        |
+    |       | ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_bin |
+    +-------+-------------------------------------------------------+
+    ```
 
-![Pod vs Host Network](/media/sysbench-in-k8s/pod-vs-host-network-latency.png)
 
-从图中可以看到 Host 网络下整体表现略好于 Pod 网络。
+    上面 `show create table` 只显示出了 table 的 charset，但其实 column 的 charset 是 UTF8MB4，这可以通过 HTTP API 获取 schema 来确认。这是一个 bug，即此处建表时 column 的 charset 应该要和 table 保持一致为 UTF8，该问题在 v2.1.3 中已经修复。
 
-#### Ubuntu vs COS
+- 升级后：v2.1.3 及之后版本
 
-GKE 平台可以为节点选择 [Ubuntu 和 COS 两种操作系统](https://cloud.google.com/kubernetes-engine/docs/concepts/node-images)。本次测试中，分别在两种操作系统中进行了 Point Select 测试。
+    {{< copyable "sql" >}}
 
-此次测试中 Pod 网络模式为 Host。
+    ```sql
+    show create table t;
+    ```
 
-COS:
+    ```
+    +-------+--------------------------------------------------------------------+
+    | Table | Create Table                                                       |
+    +-------+--------------------------------------------------------------------+
+    | t     | CREATE TABLE `t` (                                                 |
+    |       |   `a` varchar(10) CHARSET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL |
+    |       | ) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_bin              |
+    +-------+--------------------------------------------------------------------+
+    1 row in set
+    Time: 0.007s
+    ```
 
-| Threads | QPS       | 95% latency(ms) |
-|:------- |:--------- |:--------------- |
-| 150     | 255981.11 | 1.06            |
-| 300     | 366482.22 | 1.50            |
-| 600     | 421279.84 | 2.71            |
-| 900     | 438730.81 | 3.96            |
-| 1200    | 441084.13 | 5.28            |
-| 1500    | 447659.15 | 6.67            |
 
-Ubuntu:
+    {{< copyable "sql" >}}
 
-| Threads | QPS       | 95% latency(ms) |
-|:------- |:--------- |:--------------- |
-| 150     | 290690.51 | 0.74            |
-| 300     | 422941.17 | 1.10            |
-| 600     | 476663.44 | 2.14            |
-| 900     | 484405.99 | 3.25            |
-| 1200    | 489220.93 | 4.33            |
-| 1500    | 489988.97 | 5.47            |
+    ```sql
+    alter table t change column a a varchar(20);
+    ```
 
-QPS 对比：
+    ```
+    ERROR 1105 (HY000): unsupported modify charset from utf8mb4 to utf8
+    ```
 
-![COS vs Ubuntu](/media/sysbench-in-k8s/cos-vs-ubuntu-qps.png)
+解决方案：
 
-Latency 对比：
+- 因为在 v2.1.3 之后，TiDB 支持修改 column 和 table 的 charset，所以这里推荐修改 table 的 charset 为 UTF8MB4。
 
-![COS vs Ubuntu](/media/sysbench-in-k8s/cos-vs-ubuntu-latency.png)
+    {{< copyable "sql" >}}
 
-从图中可以看到 Host 模式下，在单纯的 Point Select 测试中，TiDB 在 Ubuntu 系统中的表现比在 COS 系统中的表现要好。
+    ```sql
+    alter table t convert to character set utf8mb4;
+    ```
 
-> **注意：**
-> 
-> 此测试只针对单一测试集进行了测试，表明不同的操作系统、不同的优化与默认设置，都有可能影响性能，所以我们在此不对操作系统做推荐。COS 系统专为容器优化，在安全性、磁盘性能做了优化，在 GKE 是官方推荐系统。
+- 也可以像问题 1 一样指定 column 的 charset，保持和 column 原来的 charset (UTF8MB4) 一致即可。
 
-#### K8S Service vs GCP LoadBalancer
+    {{< copyable "sql" >}}
 
-通过 Kubernetes 部署 TiDB 集群后，有两种访问 TiDB 集群的场景：集群内通过 Service 访问或集群外通过 Load Balancer IP 访问。本次测试中分别对这两种情况进行了对比测试。
+    ```sql
+    alter table t change column a a varchar(20) character set utf8mb4;
+    ```
 
-此次测试中操作系统为 Ubuntu，Pod 为 Host 网络。
+### 问题 3：`ERROR 1366 (HY000): incorrect utf8 value f09f8c80(🌀) for column a`
 
-Service:
+TiDB 在 v2.1.1 及之前版本中，如果 charset 是 UTF8，没有对 4-byte 的插入数据进行 UTF8 Unicode encoding 检查。在v2.1.2 及之后版本中，添加了该检查。
 
-| Threads | QPS       | 95% latency(ms) |
-|:------- |:--------- |:--------------- |
-| 150     | 290690.51 | 0.74            |
-| 300     | 422941.17 | 1.10            |
-| 600     | 476663.44 | 2.14            |
-| 900     | 484405.99 | 3.25            |
-| 1200    | 489220.93 | 4.33            |
-| 1500    | 489988.97 | 5.47            |
+- 升级前：v2.1.1 及之前版本
 
-Load Balancer:
+    {{< copyable "sql" >}}
 
-| Threads | QPS       | 95% latency(ms) |
-|:------- |:--------- |:--------------- |
-| 150     | 255981.11 | 1.06            |
-| 300     | 366482.22 | 1.50            |
-| 600     | 421279.84 | 2.71            |
-| 900     | 438730.81 | 3.96            |
-| 1200    | 441084.13 | 5.28            |
-| 1500    | 447659.15 | 6.67            |
+    ```sql
+    create table t(a varchar(100) charset utf8);
+    ```
 
-QPS 对比：
+    ```
+    Query OK, 0 rows affected
+    ```
 
-![Service vs Load Balancer](/media/sysbench-in-k8s/service-vs-load-balancer-qps.png)
 
-Latency 对比：
+    {{< copyable "sql" >}}
 
-![Service vs Load Balancer](/media/sysbench-in-k8s/service-vs-load-balancer-latency.png)
+    ```sql
+    insert t values (unhex('f09f8c80'));
+    ```
 
-从图中可以看到在单纯的 Point Select 测试中，使用 Kubernetes Service 访问 TiDB 时的表现比使用 GCP Load Balancer 访问时要好。
+    ```
+    Query OK, 1 row affected
+    ```
 
-#### n1-standard-16 vs c2-standard-16
+- 升级后：v2.1.2 及之后版本
 
-在 Point Select 读测试中，TiDB 的 CPU 占用首先达到 1400% (16 cores) 以上，此时 TiKV CPU 占用约 1000% (16 cores) 。我们对比了普通型和计算优化型机器下 TiDB 的不同表现。其中 n1-stadnard-16 主频约 2.3G，c2-standard-16 主频约 3.1G。
+    {{< copyable "sql" >}}
 
-此次测试中操作系统为 Ubuntu，Pod 为 Host 网络，使用 Service 访问 TiDB。
+    ```sql
+    insert t values (unhex('f09f8c80'));
+    ```
 
-n1-standard-16:
+    ```
+    ERROR 1366 (HY000): incorrect utf8 value f09f8c80(🌀) for column a
+    ```
 
-| Threads | QPS       | 95% latency(ms) |
-|:------- |:--------- |:--------------- |
-| 150     | 203879.49 | 1.37            |
-| 300     | 272175.71 | 2.3             |
-| 600     | 287805.13 | 4.1             |
-| 900     | 295871.31 | 6.21            |
-| 1200    | 294765.83 | 8.43            |
-| 1500    | 298619.31 | 10.27           |
+解决方案：
 
-c2-standard-16:
+- v2.1.2 版本：该版本不支持修改 column charset，所以只能跳过 UTF8 的检查。
 
-| Threads | QPS       | 95% latency(ms) |
-|:------- |:--------- |:--------------- |
-| 150     | 290690.51 | 0.74            |
-| 300     | 422941.17 | 1.10            |
-| 600     | 476663.44 | 2.14            |
-| 900     | 484405.99 | 3.25            |
-| 1200    | 489220.93 | 4.33            |
-| 1500    | 489988.97 | 5.47            |
+    {{< copyable "sql" >}}
 
-QPS 对比：
+    ```sql
+    set @@session.tidb_skip_utf8_check=1;
+    ```
 
-![n1-standard-16 vs c2-standard-16](/media/sysbench-in-k8s/n1-standard-16-vs-c2-standard-16-qps.png)
+    ```
+    Query OK, 0 rows affected
+    ```
 
-Latency 对比：
 
-![n1-standard-16 vs c2-standard-16](/media/sysbench-in-k8s/n1-standard-16-vs-c2-standard-16-latency.png)
+    {{< copyable "sql" >}}
 
-### OLTP 其他测试
+    ```sql
+    insert t values (unhex('f09f8c80'));
+    ```
 
-使用 Point Select 测试针对不同操作系统、不同网络情况做了对比测试后，也进行了 OLTP 测试集中的其他测试。这些测试统一使用 Ubuntu 系统、Host 模式并在集群使用 Service 访问 TiDB 集群。
+    ```
+    Query OK, 1 row affected
+    ```
 
-#### OLTP Update Index
+- v2.1.3 及之后版本：建议修改 column 的 charset 为 UTF8MB4。或者也可以设置 `tidb_skip_utf8_check` 变量跳过 UTF8 的检查。如果跳过 UTF8 的检查，在需要将数据从 TiDB 同步回 MySQL 的时候，可能会失败，因为 MySQL 会执行该检查。
 
-| Threads | QPS      | 95% latency(ms) |
-|:------- |:-------- |:--------------- |
-| 150     | 6726.59  | 30.26           |
-| 300     | 11067.55 | 36.24           |
-| 600     | 17358.46 | 48.34           |
-| 900     | 21025.23 | 64.47           |
-| 1200    | 22121.87 | 90.78           |
-| 1500    | 22650.13 | 118.92          |
+    {{< copyable "sql" >}}
 
-![OLTP Update Index](/media/sysbench-in-k8s/oltp-update-index-qps.png) ![OLTP Update Index](/media/sysbench-in-k8s/oltp-update-index-latency.png)
+    ```sql
+    alter table t change column a a varchar(100) character set utf8mb4;
+    ```
 
-#### OLTP Update Non Index
+    ```
+    Query OK, 0 rows affected
+    ```
 
-| Threads | QPS      | 95% latency(ms) |
-|:------- |:-------- |:--------------- |
-| 150     | 9230.60  | 23.95           |
-| 300     | 16543.63 | 54.83           |
-| 600     | 23551.01 | 61.08           |
-| 900     | 31100.10 | 65.65           |
-| 1200    | 33942.60 | 54.83           |
-| 1500    | 42603.13 | 125.52          |
 
-![OLTP Update No Index](/media/sysbench-in-k8s/oltp-update-no-index-qps.png) ![OLTP Update No Index](/media/sysbench-in-k8s/oltp-update-no-index-latency.png)
+    {{< copyable "sql" >}}
 
-#### OLTP Read Write
+    ```sql
+    insert t values (unhex('f09f8c80'));
+    ```
 
-| Threads | QPS       | 95% latency(ms) |
-|:------- |:--------- |:--------------- |
-| 150     | 60732.84  | 69.29           |
-| 300     | 91005.98  | 90.78           |
-| 600     | 110517.67 | 167.44          |
-| 900     | 119866.38 | 235.74          |
-| 1200    | 125615.89 | 282.25          |
-| 1500    | 128501.34 | 344.082         |
+    ```
+    Query OK, 1 row affected
+    ```
 
-![OLTP Read Write](/media/sysbench-in-k8s/oltp-read-write-qps.png) ![OLTP Read Write](/media/sysbench-in-k8s/oltp-read-write-latency.png)
 
-### 单可用区与多可用区对比
+    关于 `tidb_skip_utf8_check` 变量，具体来说是指跳过 UTF8 和 UTF8MB4 类型对数据的合法性检查。如果跳过这个检查，在需要将数据从 TiDB 同步回 MySQL 的时候，可能会失败，因为 MySQL 执行该检查。如果只想跳过 UTF8 类型的检查，可以设置 `tidb_check_mb4_value_in_utf8` 变量。
+    
+    `tidb_check_mb4_value_in_utf8` 在 v2.1.3 版本加入 `config.toml` 文件，可以修改配置文件里面的 `check-mb4-value-in-utf8` 后重启集群生效。
+    
+    `tidb_check_mb4_value_in_utf8` 在 v2.1.5 版本开始可以用 HTTP API 来设置，也可以用 session 变量来设置。
 
-GCP 多可用区涉及跨 Zone 通信，网络延迟相比同 Zone 会少许增加。我们使用同样机器配置，对两种部署方案进行同一标准下的性能测试，了解多可用区延迟增加带来的影响。
+    * HTTP API（HTTP API 只在单台服务器上生效）
 
-单可用区：
+        ```sh
+        # Enabled.
+        curl -X POST -d "check_mb4_value_in_utf8=1" http://{TiDBIP}:10080/settings
 
-| Threads | QPS       | 95% latency(ms) |
-|:------- |:--------- |:--------------- |
-| 150     | 203879.49 | 1.37            |
-| 300     | 272175.71 | 2.30            |
-| 600     | 287805.13 | 4.10            |
-| 900     | 295871.31 | 6.21            |
-| 1200    | 294765.83 | 8.43            |
-| 1500    | 298619.31 | 10.27           |
+        # Disabled.
+        curl -X POST -d "check_mb4_value_in_utf8=0" http://{TiDBIP}:10080/settings
+        ```
 
-多可用区：
+    * Session 变量
 
-| Threads | QPS       | 95% latency(ms) |
-|:------- |:--------- |:--------------- |
-| 150     | 141027.10 | 1.93            |
-| 300     | 220205.85 | 2.91            |
-| 600     | 250464.34 | 5.47            |
-| 900     | 257717.41 | 7.70            |
-| 1200    | 258835.24 | 10.09           |
-| 1500    | 280114.00 | 12.75           |
+        ```sql
+        # Enabled.
+        set @@session.tidb_check_mb4_value_in_utf8 = 1;
 
-QPS 对比：
+        # Disabled.
+        set @@session.tidb_check_mb4_value_in_utf8 = 0;
+        ```
 
-![Single Zonal vs Regional](/media/sysbench-in-k8s/single-zonal-vs-regional-qps.png)
+- v2.1.7 及之后版本，如果对表和 column 的字符集没有严格要求为 UTF8，也不想修改客户端代码去跳过 UTF8 检查或者手动修改 column 的 charset，可以在配置文件中把 `treat-old-version-utf8-as-utf8mb4` 打开。该配置的作用是自动把 v2.1.7 版本之前创建的旧版本的表和 column 的 UTF8 字符集转成 UTF8MB4。这个转换是在 TiDB load schema 时在内存中将 UTF8 转成 UTF8MB4，不会对实际存储的数据做任何修改。在配置文件中关闭 `treat-old-version-utf8-as-utf8mb4` 并重启 TiDB 后，以前字符集为 UTF8 的表和 column 的字符集仍然还是 UTF8。
 
-Latency 对比：
-
-![Single Zonal vs Regional](/media/sysbench-in-k8s/single-zonal-vs-regional-latency.png)
-
-从图中可以看到并发压力增大后，网络额外延迟产生的影响越来越小，额外的网络延迟将不再是主要的性能瓶颈。
-
-## 结语
-
-此次测试主要将典型公有云部署 Kubernetes 运行 TiDB 集群的几种场景使用 sysbench 做了测试，了解不同因素可能带来的影响。从整体看，主要有以下几点：
-
-- VPC-Native 模式下 Host 网络性能略好于 Pod 网络（~7%，以 QPS 差异估算，下同）
-- GCP 的 Ubuntu 系统 Host 网络下单纯的读测试中性能略好于 COS (~9%)
-- 使用 Load Balancer 在集群外访问，会略损失性能 (~5%)
-- 多可用区下节点之间延迟增加，会对 TiDB 性能产生一定的影响（30% ~ 6%，随并发数增加而下降）
-- Point Select 读测试主要消耗 CPU ，计算型机型相对普通型机器带来了很大 QPS 提升 (50% ~ 60%)
-
-但要注意的是，这些因素可能随着时间变化，不同公有云下的表现可能会略有不同。在未来，我们将带来更多维度的测试。同时，sysbench 测试用例并不能完全代表实际业务场景，在做选择前建议模拟实际业务测试，并综合不同选择成本进行选择（机器成本、操作系统差异、Host 网络的限制等）。
+    > **注意：**
+    > 
+    > `treat-old-version-utf8-as-utf8mb4` 参数默认打开，如果客户端强制需要用 UTF8 而不用 UTF8MB4，需要在配置文件中关闭。
