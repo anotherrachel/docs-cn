@@ -1,113 +1,158 @@
 ---
-title: TiDB 集群扩容缩容方案
-category: deployment
+title: TiDB 历史数据回溯
+category: advanced
 ---
 
-# TiDB 集群扩容缩容方案
+# TiDB 历史数据回溯
 
-## 概述
+本文档用于描述 TiDB 如何读取历史版本数据，包括具体的操作流程以及历史数据的保存策略。
 
-TiDB 集群可以在不影响线上服务的情况下动态进行扩容和缩容。
+## 功能说明
 
-下面分别介绍如果增加或者删除 PD，TiKV 以及 TiDB 的节点。
+TiDB 实现了通过标准 SQL 接口读取历史数据功能，无需特殊的 client 或者 driver。当数据被更新、删除后，依然可以通过 SQL 接口将更新/删除前的数据读取出来。
 
-下面用到的 pd-ctl 文档可以参考 [pd-control](../tools/pd-control.md)。
+另外即使在更新数据之后，表结构发生了变化，TiDB 依旧能用旧的表结构将数据读取出来。
 
-## PD
+## 操作流程
 
-假设现在我们有三个 PD 服务，详细信息如下：
+为支持读取历史版本数据， 引入了一个新的 system variable: tidb_snapshot ，这个变量是 Session 范围有效，可以通过标准的 Set 语句修改其值。其值为文本，记录了时间，格式为： “2016-10-08 16:45:26.999”，一般来说可以只写到秒，比如”2016-10-08 16:45:26”。 当这个变量被设置时，TiDB 会用这个时间戳建立 Snapshot（没有开销，只是创建数据结构），随后所有的 Select 操作都会在这个 Snapshot 上读取数据。
 
-| Name | ClientUrls        | PeerUrls          |
-| ---- | ----------------- | ----------------- |
-| pd1  | http://host1:2379 | http://host1:2380 |
-| pd2  | http://host2:2379 | http://host2:2380 |
-| pd3  | http://host3:2379 | http://host3:2380 |
+> 注意 TiDB 的事务是通过 PD 进行全局授时，所以存储的数据版本也是以 PD 所授时间戳作为版本号。在生成 Snapshot ·时，是以 tidb_snapshot 变量的值作为版本号，如果 TiDB Server 所在机器和 PD Server 所在机器的本地时间相差较大，需要以 PD 的时间为准。
 
-我们可以通过 pd-ctl 来查看当前所有 PD 节点的信息：
+当读取历史版本操作结束后，可以结束当前 Session 或者是通过 Set 语句将 tidb_snapshot 变量的值设为 ”“，即可读取最新版本的数据。
 
-```bash
-./pd-ctl -u http://host1:2379
->> member
+## 历史数据保留策略
+
+TiDB 使用 MVCC 管理版本，当更新/删除数据时，不会做真正的数据删除，只会添加一个新版本数据，所以可以保留历史数据。历史数据不会全部保留，超过一定时间的历史数据会被彻底删除，以减小空间占用以及避免历史版本过多引入的性能开销。
+
+我们使用周期性运行的 GC （Garbage Collection， 垃圾回收）来进行清理，GC 的触发方式为：每个 TiDB 启动后会在后台运行一个 gc_worker，每个集群中有一个 gc_worker 会被自动选为 leader，leader 负责维护 GC 的状态并向所有的 TiKV region leader 发送 GC 命令。
+
+GC 的运行状态记录记录在 mysql.tidb 系统表中，可通过 SQL 语句进行监测与配置。
+
+```sql
+mysql> select variable_name, variable_value from mysql.tidb;
++-----------------------+----------------------------+
+| variable_name         | variable_value             |
++-----------------------+----------------------------+
+| bootstrapped          | True                       |
+| tikv_gc_leader_uuid   | 55daa0dfc9c0006            |
+| tikv_gc_leader_desc   | host:pingcap-pc5 pid:10549 |
+| tikv_gc_leader_lease  | 20160927-13:18:28 +0800 CST|
+| tikv_gc_run_interval  | 10m0s                      |
+| tikv_gc_life_time     | 10m0s                      |
+| tikv_gc_last_run_time | 20160927-13:13:28 +0800 CST|
+| tikv_gc_safe_point    | 20160927-13:03:28 +0800 CST|
++-----------------------+----------------------------+
+7 rows in set (0.00 sec)
 ```
 
-### 动态添加节点
+其中需要重点关注的是 `tikv_gc_life_time` 和 `tikv_gc_safe_point` 这两行。
 
-我们可以使用 `join` 参数，将一个新的 PD 服务加入到现有的 PD 集群里面。 如果我们需要添加 `pd4`，只需要在 `--join` 参数里面填入当前 PD 集群任意一个 PD 服务的 client url，比如：
+`tikv_gc_life_time` 用于配置历史版本保留时间（默认值为 10m），用户可以使用 SQL 进行配置。比如我们需要一天内的所有历史版本都可读，那么可以使用 SQL `update mysql.tidb set variable_value='24h' where variable_name='tikv_gc_life_time'` 将此行设置为 24 小时。时长字符串的形式是数字后接时间单位的序列，如 `24h`、`2h30m`、`2.5h`。可以使用的时间单位包括 "h"、"m"、"s"。
 
-```bash
-./bin/pd-server --name=pd4 \
-                --client-urls="http://host4:2379" \
-                --peer-urls="http://host4:2380" \
-                --join="http://host1:2379"
+`tikv_gc_safe_point` 记录了当前的 safePoint，用户可以安全地使用大于 safePoint 的时间戳创建 snapshot 读取历史版本。safePoint 在每次 GC 开始运行时自动更新。
+
+需要注意的是，在数据更新频繁的场景下如果将 `tikv_gc_life_time` 设置得比较大（如数天甚至数月），可能会有一些潜在的问题：
+
+1. 随着版本的不断增多，数据占用的磁盘空间会随之增加。
+2. 大量的历史版本会在一定程度上导致查询变慢，主要影响范围查询（`select count(*) from t`）。
+3. 如果在运行中突然将 `tikv_gc_life_time` 配置调小，可能会导致大量历史数据被删除，造成 I/O 负担。
+
+## 示例
+
+初始化阶段，创建一个表，并插入几行数据：
+
+```sql
+mysql> create table t (c int);
+Query OK, 0 rows affected (0.01 sec)
+
+mysql> insert into t values (1), (2), (3);
+Query OK, 3 rows affected (0.00 sec)
 ```
 
-### 动态删除节点
+查看表中的数据：
 
-如果我们需要删除 `pd4`，可以通过 pd-ctl 来完成：
-
-```bash
-./pd-ctl -u http://host1:2379
->> member delete pd4
+```
+mysql> select * from t;
++------+
+| c    |
++------+
+|    1 |
+|    2 |
+|    3 |
++------+
+3 rows in set (0.00 sec)
 ```
 
-### 动态迁移节点
+查看当前时间：
 
-如果想把现有的 PD 节点迁移到新的机器上，我们可以先在新的机器上添加节点，然后把旧的机器上的节点删除掉。 迁移过程中应该一个节点一个节点逐个迁移，每完成一个步骤可以先查看一下当前的所有节点信息来进行确认。
-
-## TiKV
-
-我们可以通过 pd-ctl 来查看当前所有 TiKV 节点的信息：
-
-```bash
-./pd-ctl -u http://host1:2379
->> store
+```sql
+mysql> select now();
++---------------------+
+| now()               |
++---------------------+
+| 2016-10-08 16:45:26 |
++---------------------+
+1 row in set (0.00 sec)
 ```
 
-### 动态添加节点
+更新某一行数据：
 
-动态添加一个新的 TiKV 服务非常容易，只需要在新的机器上启动一个 TiKV 服务，不需要其他特殊操作。 新启动的 TiKV 服务会自动注册到现有集群的 PD 中，PD 会自动做负载均衡，逐步地把一部分数据迁移到新的TiKV 服务中，从而降低现有 TiKV 服务的压力。
-
-### 动态删除节点
-
-安全地删除（下线）一个 TiKV 服务需要先告诉 PD，这样 PD 可以先把这个 TiKV 服务上面的数据迁移到其他 TiKV 服务上，保证数据有足够的副本数。
-
-假设我们需要删除 store id 为 1 的 TiKV 服务，可以通过 pd-ctl 来完成：
-
-```bash
-./pd-ctl -u http://host1:2379
->> store delete 1
+```sql
+mysql> update t set c=22 where c=2;
+Query OK, 1 row affected (0.00 sec)
 ```
 
-然后可以查看这个 TiKV 服务的状态：
+确认数据已经被更新：
 
-```bash
-./pd-ctl -u http://host1:2379
->> store 1
-{
-  "store": {
-    "id": 1,
-    "address": "127.0.0.1:21060",
-    "state": 1,
-    "state_name": "Offline"
-  },
-  "status": {
-    ...
-  }
-}
+```sql
+mysql> select * from t;
++------+
+| c    |
++------+
+|    1 |
+|   22 |
+|    3 |
++------+
+3 rows in set (0.00 sec)
 ```
 
-我们可以通过这个 store 的 state_name 来确定这个 store 的状态：
+设置一个特殊的环境变量，这个是一个 session scope 的变量，其意义为读取这个时间之前的最新的一个版本。注意这里的时间设置的是 update 语句之前的那个时间：
 
-- `state_name=Up`: 这个 store 正常服务
-- `state_name=Disconnected`: 当前没有检测到这个 store 的心跳，可能是故障或网络连接中断
-- `state_name=Down`: 超过一小时（可通过 max-down-time 配置）没有收到 store 心跳，此时 PD 会为这个 store 上的数据添加副本
-- `state_name=Offline`: 这个 store 正在下线，此时 store 仍在服务中
-- `state_name=Tombstone`: 这个 store 已经完成下线，此时 store 上已经没有数据，可以关闭实例
+```sql
+mysql> set @@tidb_snapshot="2016-10-08 16:45:26";
+Query OK, 0 rows affected (0.00 sec)
+```
 
-### 动态迁移节点
+这里读取到的内容即为 update 之前的内容，也就是历史版本：
 
-迁移 TiKV 服务也是通过先在新的机器上添加节点，然后把旧的机器上的节点下线来完成。 迁移过程中可以先把新集群的机器全部添加到已有的集群中，然后再把旧的节点一个一个地下线。 可以通过查看正在下线的节点的状态信息来确定这个节点是否已经完成下线，确认完成以后再下线下一个节点。
+```sql
+mysql> select * from t;
++------+
+| c    |
++------+
+|    1 |
+|    2 |
+|    3 |
++------+
+3 rows in set (0.00 sec)
+```
 
-### TiDB
+清空这个变量后，即可读取最新版本数据：
 
-TiDB 是一个无状态的服务，这也就意味着我们能直接添加和删除 TiDB。 需要注意的是，如果我们在 TiDB 的服务的前面搭建了一个 proxy（譬如 HAProxy），则需要更新 proxy 的配置并重新载入。
+```sql
+mysql> set @@tidb_snapshot="";
+Query OK, 0 rows affected (0.00 sec)
+```
+
+```sql
+mysql> select * from t;
++------+
+| c    |
++------+
+|    1 |
+|   22 |
+|    3 |
++------+
+3 rows in set (0.00 sec)
+```
