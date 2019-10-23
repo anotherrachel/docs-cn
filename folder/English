@@ -1,66 +1,43 @@
 ---
-title: TiDB 2.1.8 Release Notes
+title: TiDB 2.1.7 Release Notes
 category: Releases
 aliases:
-  - '/docs-cn/releases/2.1.8/'
+  - '/docs-cn/releases/2.1.7/'
 ---
 
-# TiDB 2.1.8 Release Notes
+# TiDB 2.1.7 Release Notes
 
-发版日期：2019 年 4 月 12 日
+发版日期：2019 年 3 月 28 日
 
-TiDB 版本：2.1.8
+TiDB 版本：2.1.7
 
-TiDB Ansible 版本：2.1.8
+TiDB Ansible 版本：2.1.7
 
 ## TiDB
 
-- 修复 `GROUP_CONCAT` 函数在参数存在 NULL 值情况下与 MySQL 处理逻辑不兼容的问题 [#9930](https://github.com/pingcap/tidb/pull/9930)
-- 修复在 Distinct 模式下 decimal 类型值之间相等比较的问题 [#9931](https://github.com/pingcap/tidb/pull/9931)
-- 修复 `SHOW FULL COLUMNS` 语句在 date，datetime，timestamp 类型的 Collation 的兼容性问题
-    - [#9938](https://github.com/pingcap/tidb/pull/9938)
-    - [#10114](https://github.com/pingcap/tidb/pull/10114)
-- 修复过滤条件存在关联列的时候统计信息估算行数不准确的问题 [#9937](https://github.com/pingcap/tidb/pull/9937)
-- 修复 `DATE_ADD` 跟 `DATE_SUB` 函数的兼容性问题
-    - [#9963](https://github.com/pingcap/tidb/pull/9963)
-    - [#9966](https://github.com/pingcap/tidb/pull/9966)
-- `STR_TO_DATE` 函数支持格式 `%H`，提升兼容性 [#9964](https://github.com/pingcap/tidb/pull/9964)
-- 修复 `GROUP_CONCAT` 函数在 group by 唯一索引的情况下结果错误的问题 [#9969](https://github.com/pingcap/tidb/pull/9969)
-- 当 Optimizer Hints 存在不匹配的表名的时候返回 warning [#9970](https://github.com/pingcap/tidb/pull/9970)
-- 统一日志格式规范，利于工具收集分析 [日志规范](https://github.com/tikv/rfcs/blob/master/text/2018-12-19-unified-log-format.md)
-- 修复大量 NULL 值导致统计信息估算不准确的问题 [#9979](https://github.com/pingcap/tidb/pull/9979)
-- 修复 TIMESTAMP 类型默认值为边界值的时候报错的问题 [#9987](https://github.com/pingcap/tidb/pull/9987)
-- 检查设置 `time_zone` 值的合法性 [#10000](https://github.com/pingcap/tidb/pull/10000)
-- 支持时间格式 `2019.01.01` [#10001](https://github.com/pingcap/tidb/pull/10001)
-- 修复某些情况下 `EXPLAIN` 结果中行数估计错误显示的问题 [#10044](https://github.com/pingcap/tidb/pull/10044)
-- 修复 `KILL TIDB [session id]` 某些情况下无法快速停止语句执行的问题 [#9976](https://github.com/pingcap/tidb/pull/9976)
-- 修复常量过滤条件在某些情况中谓词下推的问题 [#10049](https://github.com/pingcap/tidb/pull/10049)
-- 修复某些情况下 READ-ONLY 语句没有被当成 READ-ONLY 来处理的问题 [#10048](https://github.com/pingcap/tidb/pull/10048)
+- 修复因 DDL 被取消导致升级程序时启动时间变长问题 [#9768](https://github.com/pingcap/tidb/pull/9768)
+- 修复配置项 `check-mb4-value-in-utf8` 在 `config.example.toml` 中位置错误的问题 [#9852](https://github.com/pingcap/tidb/pull/9852)
+- 提升内置函数 `str_to_date` 跟 MySQL 的兼容性 [#9817](https://github.com/pingcap/tidb/pull/9817)
+- 修复内置函数 `last_day` 的兼容性问题 [#9750](https://github.com/pingcap/tidb/pull/9750)
+- `infoschema.tables` 添加 `tidb_table_id` 列，方便通过 SQL 语句获取 `table_id`，新增 `tidb_indexes` 系统表管理 Table 与 Index 之间的关系 [#9862](https://github.com/pingcap/tidb/pull/9862)
+- 增加 Table Partition 定义为空的检查 [#9663](https://github.com/pingcap/tidb/pull/9663)
+- 将 `Truncate Table` 需要的权限由删除权限变为删表权限，与 MySQL 保持一致 [#9876](https://github.com/pingcap/tidb/pull/9876)
+- 支持在 `DO` 语句中使用子查询 [#9877](https://github.com/pingcap/tidb/pull/9877)
+- 修复变量 `default_week_format` 在 week 函数中不生效的问题 [#9753](https://github.com/pingcap/tidb/pull/9753)
+- 支持插件机制 [#9880](https://github.com/pingcap/tidb/pull/9880)，[#9888](https://github.com/pingcap/tidb/pull/9888)
+- 支持使用系统变量 `log_bin` 查看 binlog 开启状况 [#9634](https://github.com/pingcap/tidb/pull/9634)
+- 支持使用 SQL 语句查看 Pump/Drainer 状态 [#9896](https://github.com/pingcap/tidb/pull/9896)
+- 修复升级时对 utf8 检查 mb4 字符的兼容性 [#9887](https://github.com/pingcap/tidb/pull/9887)
+- 修复某些情况下对 JSON 数据的聚合函数在计算过程中 Panic 的问题 [#9927](https://github.com/pingcap/tidb/pull/9927)
 
 ## PD
 
-- 修复 Scatter Region 产生无效 Operator Step 的问题 [#1482](https://github.com/pingcap/pd/pull/1482)
-- 修复 store 读热点的 key 统计不正确问题 [#1487](https://github.com/pingcap/pd/pull/1487)
-- 修复 Region Merge Operator 超时时间过短的问题 [#1495](https://github.com/pingcap/pd/pull/1495)
-- 添加 PD server 端处理 TSO 请求的耗时 metrics [#1502](https://github.com/pingcap/pd/pull/1502)
-
-## TiKV
-
-- 修复读流量统计错误的问题 [#4441](https://github.com/tikv/tikv/pull/4441)
-- 修复 Region 数过多的情况下 raftstore 的性能问题 [#4484](https://github.com/tikv/tikv/pull/4484)
-- 调整当 level 0 SST 数量超过 `level_zero_slowdown_writes_trigger/2` 时不再继续 ingest file [#4464](https://github.com/tikv/tikv/pull/4464)
+- 修改副本数为 1 时 balance-region 无法迁移 leader 问题 [#1462](https://github.com/pingcap/pd/pull/1462)
 
 ## Tools
 
-- Lightning 优化导入表的顺序，按照表的数据大小顺序进行导入，减少导入过程中大表执行 `Checksum` 和 `Analyze` 对集群的影响，并且提高 `Checksum` 和 `Analyze` 的成功率 [#156](https://github.com/pingcap/tidb-lightning/pull/156)
-- 提升 Lightning encode SQL 性能，性能提升 50%，直接解析数据源文件内容成 TiDB 的 `types.Datum`，省去 KV encoder 的多余解析工作 [#145](https://github.com/pingcap/tidb-lightning/pull/145)
-- TiDB Binlog Pump 新增 `storage.sync-log` 配置项，支持 Pump 本地存储异步刷盘 [#529](https://github.com/pingcap/tidb-binlog/pull/529)
-- TiDB Binlog Pump 和 Drainer 之间通讯支持流量压缩 [#530](https://github.com/pingcap/tidb-binlog/pull/530)
-- TiDB Binlog Drainer 新增 `syncer.sql-mode` 配置项，支持使用不同 `sql-mode` 解析 DDL query [#513](https://github.com/pingcap/tidb-binlog/pull/513)
-- TiDB Binlog Drainer 新增 `syncer.ignore-table` 配置项，支持过滤不需要同步的表 [#526](https://github.com/pingcap/tidb-binlog/pull/526)
+- 支持 binlog 同步 generated column [#491](https://github.com/pingcap/tidb-binlog/pull/491)
 
 ## TiDB Ansible
 
-- 修改操作系统版本限制，仅支持 CentOS 7.0 及以上，Red Hat 7.0 及以上版本的操作系统 [#734](https://github.com/pingcap/tidb-ansible/pull/734)
-- 添加检测系统是否支持 `epollexclusive` [#728](https://github.com/pingcap/tidb-ansible/pull/728)
-- 增加滚动升级版本限制，不允许从 2.0.1 及以下版本滚动升级到 2.1 及以上版本 [#728](https://github.com/pingcap/tidb-ansible/pull/728)
+- Prometheus 监控数据默认保留时间改成 30d
