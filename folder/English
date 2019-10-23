@@ -1,72 +1,84 @@
 ---
-title: Kubernetes 上的 TiDB 集群扩缩容
+title: Kubernetes 上的集群初始化配置
 category: how-to
 ---
 
-# Kubernetes 上的 TiDB 集群扩缩容
+# Kubernetes 上的集群初始化配置
 
-本文介绍 TiDB 在 Kubernetes 中如何进行水平扩缩容和垂直扩缩容。
-
-## 水平扩缩容
-
-TiDB 水平扩缩容操作指的是通过增加或减少节点的数量，来达到集群扩缩容的目的。扩缩容 TiDB 集群时，会按照填入的 replicas 值，对 PD、TiKV、TiDB 进行顺序扩缩容操作。扩容操作按照节点编号由小到大增加节点，缩容操作按照节点编号由大到小删除节点。
-
-### 水平扩缩容操作
-
-1. 修改集群的 `value.yaml` 文件中的 `pd.replicas`、`tidb.replicas`、`tikv.replicas` 至期望值。
-
-2. 执行 `helm upgrade` 命令进行扩缩容：
-
-    {{< copyable "shell-regular" >}}
-
-    ```shell
-    helm upgrade <release-name> pingcap/tidb-cluster -f values.yaml --version=<chart-version>
-    ```
-
-3. 查看集群水平扩缩容状态：
-
-    {{< copyable "shell-regular" >}}
-
-    ```shell
-    watch kubectl -n <namespace> get pod -o wide
-    ```
-
-    当所有组件的 Pod 数量都达到了预设值，并且都进入  `Running` 状态后，水平扩缩容完成。
+本文介绍如何对 Kubernetes 上的集群进行初始化配置完成初始化账号和密码设置，以及批量自动执行 SQL 语句对数据库进行初始化。
 
 > **注意：**
 > 
-> - PD、TiKV 组件在滚动升级的过程中不会触发扩缩容操作。
-> - TiKV 组件在缩容过程中会调用 PD 接口将对应 TiKV 标记为下线，然后将其上数据迁移到其它 TiKV 节点，在数据迁移期间 TiKV Pod 依然是 `Running` 状态，数据迁移完成后对应 Pod 才会被删除，缩容时间与待缩容的 TiKV 上的数据量有关，可以通过 `kubectl get tidbcluster -n <namespace> <release-name> -o json | jq '.status.tikv.stores'` 查看 TiKV 是否处于下线 `Offline` 状态。
-> - PD、TiKV 组件在缩容过程中被删除的节点的 PVC 会保留，并且由于 PV 的 `Reclaim Policy` 设置为 `Retain`，即使 PVC 被删除，数据依然可以找回。
-> - TiKV 组件不支持在缩容过程中进行扩容操作，强制执行此操作可能导致集群状态异常。假如异常已经发生，可以参考 [TiKV Store 异常进入 Tombstone 状态](/dev/tidb-in-kubernetes/troubleshoot.md#tikv-store-异常进入-tombstone-状态) 进行解决。
+> 以下功能只在第一次创建集群时有作用，集群创建之后再设置或修改不会生效。
 
-## 垂直扩缩容
+## 设置初始化账号和密码
 
-垂直扩缩容操作指的是通过增加或减少节点的资源限制，来达到集群扩缩容的目的。垂直扩缩容本质上是节点滚动升级的过程。
+集群创建时默认会创建 `root` 账号，但是密码为空，这会带来一些安全性问题。可以通过如下步骤为 `root` 账号设置初始密码：
 
-### 垂直扩缩容操作
+1. 创建 `Namespace`
 
-1. 修改 `values.yaml` 文件中的 `tidb.resources`、`tikv.resources`、`pd.resources` 至期望值。
-
-2. 执行 `helm upgrade` 命令进行升级：
+    在部署集群前通过下面命令创建 [Namespace](https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/)：
 
     {{< copyable "shell-regular" >}}
 
     ```shell
-    helm upgrade <release-name> pingcap/tidb-cluster -f values.yaml --version=<chart-version>
+    kubectl create namespace <namespace>
     ```
 
-3. 查看升级进度：
+2. 创建 `Secret`
+
+    在部署集群前通过下面命令创建 [Secret](https://kubernetes.io/docs/concepts/configuration/secret/) 指定 root 账号密码：
 
     {{< copyable "shell-regular" >}}
 
     ```shell
-    watch kubectl -n <namespace> get pod -o wide
+    kubectl create secret generic tidb-secret --from-literal=root=<root-password> --namespace=<namespace>
     ```
 
-    当所有 Pod 都重建完毕进入 `Running` 状态后，垂直扩缩容完成。
+    如果希望能自动创建其它用户，可以在上面命令里面再加上其他用户的 username 和 password，例如：
+
+    {{< copyable "shell-regular" >}}
+
+    ```shell
+    kubectl create secret generic tidb-secret --from-literal=root=<root-password> --from-literal=developer=<developer-passowrd> --namespace=<namespace>
+    ```
+
+    该命令会创建 `root` 和 `developer` 两个用户的密码，存到 `tidb-secret` 的 Secret 里面。
+
+3. 部署集群
+
+    创建 Secret 之后，通过下面命令部署集群：
+
+    {{< copyable "shell-regular" >}}
+
+    ```shell
+    helm install pingcap/tidb-cluster --name=<release-name> --namespace=<namespace> --version=<chart-version> --set tidb.passwordSecretName=tidb-secret
+    ```
+
+    以上命令指定 `tidb.passwordSecretName` 之后，创建的集群会自动创建一个初始化的 Job，该 Job 在集群创建过程中会尝试利用提供的 secret 给 root 账号创建初始密码，并且创建其它账号和密码，如果指定了的话。注意由于 Job 创建时 TiDB 集群的 Pod 还没完全创建，所以可能会失败几次，初始化完成后 Pod 状态会变成 Completed。之后通过 MySQL 客户端登录时需要指定这里设置的密码。
+
+## 批量执行初始化 SQL 语句
+
+集群在初始化过程还可以自动执行 `tidb.initSql` 中的 SQL 语句用于初始化，该功能可以用于默认给集群创建一些 database 或者 table，并且执行一些用户权限管理类的操作。例如如下设置会在集群创建完成后自动创建名为 `app` 的 database，并且赋予 `developer` 账号对 `app` 的所有管理权限：
+
+{{< copyable "yaml" >}}
+
+```yaml
+tidb:
+  passwordSecretName: tidb-secret
+  initSql: |-
+    CREATE DATABASE app;
+    GRANT ALL PRIVILEGES ON app.* TO 'developer'@'%';
+```
+
+将上述内容保存到 `values.yaml` 文件，然后执行下面命令部署集群：
+
+{{< copyable "shell-regular" >}}
+
+```bash
+helm install pingcap/tidb-cluster -f values.yaml --name=<release-name> --namespace=<namespace> --version=<chart-version>
+```
 
 > **注意：**
 > 
-> - 如果在垂直扩容时修改了资源的 `requests` 字段，由于 PD、TiKV 使用了 `Local PV`，升级后还需要调度回原节点，如果原节点资源不够，则会导致 Pod 一直处于 `Pending` 状态而影响服务。
-> - TiDB 作为一个可水平扩展的数据库，推荐通过增加节点个数发挥 TiDB 集群可水平扩展的优势，而不是类似传统数据库升级节点硬件配置来实现垂直扩容。
+> 目前没有对 initSql 做校验，尽管也可以在 initSql 里面创建账户和设置密码，但这种方式会将密码以明文形式存到 initializer Job 对象上，不建议这么做。
