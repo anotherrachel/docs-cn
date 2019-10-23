@@ -1,161 +1,85 @@
 ---
-title: Kubernetes 上的 TiDB 集群备份恢复
+title: Kubernetes 上的 TiDB 集群故障自动转移
 category: how-to
 ---
 
-# Kubernetes 上的 TiDB 集群备份与恢复
+# Kubernetes 上的 TiDB 集群故障自动转移
 
-这篇文档详细描述了如何对 Kubernetes 上的 TiDB 集群进行数据备份和数据恢复。
+故障自动转移是指在 TiDB 集群的某些节点出现故障时，TiDB Operator 会自动添加一个节点，保证 TiDB 集群的高可用，类似于 K8s 的 `Deployment` 行为。
 
-Kubernetes 上的 TiDB 集群支持两种备份策略：
+由于 TiDB Operator 基于 `StatefulSet` 来管理 Pod，但 `StatefulSet` 在某些 Pod 发生故障时不会自动创建新节点来替换旧节点，所以，TiDB Operator 扩展了 `StatefulSet` 的这种行为，添加了 Auto Failover 功能。
 
-* [全量备份](#全量备份)（定时执行或 Ad-hoc）：使用 [`mydumper`](/dev/reference/tools/mydumper.md) 获取集群的逻辑备份；
-* [增量备份](#增量备份)：使用 [`TiDB Binlog`](/dev/reference/tools/tidb-binlog/overview.md) 将 TiDB 集群的数据实时复制到其它数据库中或实时获得增量数据备份；
+Auto Failover 功能在 TiDB Operator 中默认关闭。部署 TiDB Operator 时，可通过设置 `charts/tidb-operator/values.yaml` 文件的 `controllerManager.autoFailover` 为 `true` 开启该功能：
 
-目前，Kubernetes 上的 TiDB 集群只对 `mydumper` 获取的全量备份数据提供自动化的数据恢复操作。恢复 `TiDB-Binlog` 获取的增量数据需要手动进行。
+```yaml
+controllerManager:
+ serviceAccount: tidb-controller-manager
+ logLevel: 2
+ replicas: 1
+ resources:
+   limits:
+     cpu: 250m
+     memory: 150Mi
+   requests:
+     cpu: 80m
+     memory: 50Mi
+ # autoFailover is whether tidb-operator should auto failover when failure occurs
+ autoFailover: true
+ # pd failover period default(5m)
+ pdFailoverPeriod: 5m
+ # tikv failover period default(5m)
+ tikvFailoverPeriod: 5m
+ # tidb failover period default(5m)
+ tidbFailoverPeriod: 5m
+```
 
-## 全量备份
+`pdFailoverPeriod`、`tikvFailoverPeriod` 和 `tidbFailoverPeriod` 默认均为 5 分钟，它们的含义是在确认实例故障后的等待超时时间，超过这个时间后，TiDB Operator 就开始做自动的故障转移。
 
-全量备份使用 `mydumper` 来获取 TiDB 集群的逻辑备份数据。全量备份任务会创建一个 PVC ([PersistentVolumeClaim](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#persistentvolumeclaims)) 来存储数据。
+## 实现原理
 
-默认配置下，备份任务使用 PV ([Persistent Volume](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#persistent-volumes)) 来存储备份数据。你也可以通过修改配置将备份数据存储到 [Google Cloud Storage](https://cloud.google.com/storage/)，[Ceph Object Storage](https://ceph.com/ceph-storage/object-storage/) 或 [Amazon S3](https://aws.amazon.com/s3/) 中，在这种情况下，数据在上传到对象存储前，会临时存储在 PV 中。参考 [Kubernetes 上的 TiDB 集群备份配置](/dev/tidb-in-kubernetes/reference/configuration/backup.md) 了解所有的配置选项。
+TiDB 集群有 PD、TiKV 和 TiDB 三个组件，它们的故障转移策略有所不同，本节将详细介绍这三种策略。
 
-你可以配置一个定时执行的全量备份任务，也可以临时执行一个全量备份任务。
+### PD 故障转移策略
 
-### 定时全量备份
+假设 PD 集群有 3 个节点，如果一个 PD 节点挂掉超过 5 分钟（`pdFailoverPeriod` 可配置），TiDB Operator 首先会将这个 PD 节点下线，然后再添加一个新的 PD 节点。此时会有 4 个 Pod 同时存在，待挂掉的 PD 节点恢复后，TiDB Operator 会将新启动的节点删除掉，恢复成原来的 3 个节点。
 
-定时全量备份是一个与 TiDB 集群一同创建的定时任务，它会像 `crontab` 任务那样周期性地运行。
+### TiKV 故障转移策略
 
-你可以修改 TiDB 集群的 `values.yaml` 文件来配置定时全量备份：
-
-1. 将 `scheduledBackup.create` 设置为 `true`；
-2. 将 `scheduledBackup.storageClassName` 设置为用于存储数据的 PV 的 `storageClass`；
-
-    > **注意：**
-    > 
-    > 你必须将定时全量备份使用的 PV 的 [reclaim policy](https://kubernetes.io/docs/tasks/administer-cluster/change-pv-reclaim-policy) 设置为 `Retain` 来确保你的数据安全。
-
-3. 按照 [Cron](https://en.wikipedia.org/wiki/Cron) 格式设置 `scheduledBackup.schedule` 来定义任务的执行周期与时间；
-4. 创建一个包含数据库用户名和密码的 Kubernetes [Secret](https://kubernetes.io/docs/concepts/configuration/secret/) 该用户必须拥有数据备份所需的数据库相关权限，同时，将 `scheduledBackup.secretName` 设置为该 `Secret` 的名字（默认为 `backup-secret`）：
-
-    {{< copyable "shell-regular" >}}
-
-    ```shell
-    kubectl create secret generic backup-secret -n <namespace> --from-literal=user=<user> --from-literal=password=<password>
-    ```
-
-5. 通过 `helm install` 创建一个配置了定时全量备份的 TiDB 集群，针对现有集群，则使用 `helm upgrade` 为集群打开定时全量备份：
-
-    {{< copyable "shell-regular" >}}
-
-    ```shell
-    helm upgrade <release_name> pingcap/tidb-cluster -f values.yaml --version=<tidb-operator-version>
-    ```
-
-### Ad-hoc 全量备份
-
-Ad-hoc 全量备份封装在 `pingcap/tidb-backup` 这个 Helm chart 中。根据 `values.yaml` 文件中的 `mode` 配置，该 chart 可以执行全量备份或数据恢复。我们会在[数据恢复](#数据恢复)一节中描述如何执行数据恢复。
-
-你可以通过下面的步骤执行一次 Ad-hoc 全量备份：
-
-1. 修改 `values.yaml`：
-    * 将 `clusterName` 设置为目标 TiDB 集群名字；
-    * 将 `mode` 设置为 `backup`；
-    * 将 `storage.className` 设置为用于存储数据的 PV 的 `storageClass`；
-    * 根据数据量调整 `storage.size`；
-
-    > **注意：**
-    > 
-    > 你必须将 Ad-hoc 全量备份使用的 PV 的 [reclaim policy](https://kubernetes.io/docs/tasks/administer-cluster/change-pv-reclaim-policy) 设置为 `Retain` 来确保你的数据安全。
-
-2. 创建一个包含数据库用户名和密码的 Kubernetes [Secret](https://kubernetes.io/docs/concepts/configuration/secret/)，该用户必须拥有数据备份所需的数据库相关权限，同时，将 `values.yaml` 中的 `secretName` 设置为该 `Secret` 的名字（默认为 `backup-secret`）：
-
-    {{< copyable "shell-regular" >}}
-
-    ```shell
-    kubectl create secret generic backup-secret -n <namespace> --from-literal=user=<user> --from-literal=password=<password>
-    ```
-
-3. 使用下面的命令执行一次 Ad-hoc 全量备份：
-
-    {{< copyable "shell-regular" >}}
-
-    ```shell
-    helm install pingcap/tidb-backup --name=<backup-name> --namespace=<namespace> -f values.yaml --version=<tidb-operator-version>
-    ```
-
-### 查看备份
-
-对于存储在 PV 中的备份，你可以使用下面的命令进行查看：
+当一个 TiKV 节点无法正常工作后，该节点的状态会变为 `Disconnected`，30 分钟（可在部署集群时通过修改 `pd.maxStoreDownTime` 来配置）后会变成 `Down` 状态，TiDB Operator 会在此基础上再等待 5 分钟（`tikvFailoverPeriod` 可配置），如果该 TiKV 节点仍不能恢复，就会新起一个 TiKV 节点。待挂掉的 TiKV 节点恢复后，TiDB Operator 不会自动删除新起的节点，用户需要手动减少 TiKV 节点，恢复成原来的节点数。操作方法是将该 TiKV 节点从 `TidbCluster` 对象的 `status.tikv.failureStores` 字段中删除：
 
 {{< copyable "shell-regular" >}}
 
 ```shell
-kubectl get pvc -n <namespace> -l app.kubernetes.io/component=backup,pingcap.com/backup-cluster-name=<cluster-name>
+kubectl edit tc -n <namespace> <clusterName>
 ```
 
-假如你将数据存储在 [Google Cloud Storage](https://cloud.google.com/storage/)，[Ceph Object Storage](https://ceph.com/ceph-storage/object-storage/) 或 [Amazon S3](https://aws.amazon.com/s3/) 中，你可以用这些存储系统自带的图形界面或命令行工具查看全量备份。
+```
+...
+status
+  tikv:
+    failureStores:
+      "1":
+        podName: cluster1-tikv-0
+        storeID: "1"
+      "2":
+        podName: cluster1-tikv-1
+        storeID: "2"
+...
+```
 
-## 数据恢复
+`cluster1-tikv-0` 节点恢复后，将其删除后变为：
 
- 使用 `pingcap/tidb-backup` 这个 Helm chart 进行数据恢复，步骤如下：
+```
+...
+status
+  tikv:
+    failureStores:
+      "2":
+        podName: cluster1-tikv-1
+        storeID: "2"
+...
+```
 
-1. 修改 `values.yaml`：
-    * 将 `clusterName` 设置为目标 TiDB 集群名；
-    * 将 `mode` 设置为 `restore`；
-    * 将 `name`  设置为用于恢复的备份名字（你可以参考[查看备份](#查看备份)来寻找可用的备份数据）。假如备份数据存储在 [Google Cloud Storage](https://cloud.google.com/storage/)，[Ceph Object Storage](https://ceph.com/ceph-storage/object-storage/) 或 [Amazon S3](https://aws.amazon.com/s3/) 中，你必须保证这些存储的相关配置与执行[全量备份](#全量备份)时一致。
-2. 创建一个包含数据库用户名和密码的 Kubernetes [Secret](https://kubernetes.io/docs/concepts/configuration/secret/)，该用户必须拥有数据备份所需的数据库相关权限，同时，将 `values.yaml` 中的 `secretName` 设置为该 `Secret` 的名字（默认为 `backup-secret`，假如你在[全量备份](#全量备份)时已经创建了该 Secret，则可以跳过这步）：
+### TiDB 故障转移策略
 
-    {{< copyable "shell-regular" >}}
-
-    ```shell
-    kubectl create secret generic backup-secret -n <namespace> --from-literal=user=<user> --from-literal=password=<password>
-    ```
-
-3. 恢复数据：
-
-    {{< copyable "shell-regular" >}}
-
-    ```shell
-    helm install pingcap/tidb-backup --namespace=<namespace> --name=<restore-name> -f values.yaml --version=<tidb-operator-version>
-    ```
-
-## 增量备份
-
-增量备份使用 [TiDB Binlog](/dev/reference/tools/tidb-binlog/overview.md) 工具从 TiDB 集群收集 Binlog，并提供实时备份和向其它数据库的实时同步能力。
-
-有关 Kubernetes 上运维 TiDB Binlog 的详细指南，可参阅 [TiDB Binlog](/dev/tidb-in-kubernetes/maintain/tidb-binlog.md)。
-
-### Pump 缩容
-
-缩容 Pump 需要挨个先将 Pump 节点从集群中下线之后操作 `helm upgrade` 进行缩容。
-
-1. 下线 Pump 节点：
-
-    假设现在有 3 个 Pump 节点，我们需要下线第 3 个 Pump 节点，将 `<ordinal-id>` 替换成 `2`，操作方式是：
-
-    {{< copyable "shell-regular" >}}
-
-    ```shell
-    kubectl run offline-pump-<ordinal-id> --image=pingcap/tidb-binlog:<version> --namespace=<namespace> --restart=OnFailure -- /binlogctl -pd-urls=http://<release-name>-pd:2379 -cmd offline-pump -node-id <release-name>-pump-<ordinal-id>:8250
-    ```
-
-    `<version>` 为当前 TiDB 的版本。
-
-    然后查看 Pump 的日志输出，确认输出 `pump offline, please delete my pod` 后即可确认该节点已经成功下线。
-
-    {{< copyable "shell-regular" >}}
-
-    ```shell
-    kubectl logs -f -n <namespace> <release-name>-pump-<ordinal-id>
-    ```
-
-2. 缩容 Pump：
-
-    修改 `values.yaml` 文件中 `binlog.pump.replicas` 为 `2`，然后执行缩容操作：
-
-    {{< copyable "shell-regular" >}}
-
-    ```shell
-    helm upgrade <release-name> pingcap/tidb-cluster -f values.yaml --version=<chart-version>
-    ```
+假设 TiDB 集群有 3 个节点，TiDB 的故障转移策略跟 Kubernetes 中的 `Deployment` 的是一致的。如果一个 TiDB 节点挂掉超过 5 分钟（`tidbFailoverPeriod` 可配置），TiDB Operator 会添加一个新的 TiDB 节点。此时会有 4 个 Pod 同时存在，待挂掉的 TiDB 节点恢复后，TiDB Operator 会将新启动的节点删除掉，恢复成原来的 3 个节点。
