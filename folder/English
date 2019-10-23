@@ -1,119 +1,149 @@
 ---
-title: DM 监控指标
-summary: 介绍 DM 的监控指标
+title: Binlog Slave Client 用户文档
 category: reference
+aliases:
+  - '/docs-cn/tools/binlog/binlog-slave-client/'
 ---
 
-# DM 监控指标
+# Binlog Slave Client 用户文档
 
-使用 DM-Ansible 部署 DM 集群的时候，会默认部署一套[监控系统](/v3.0/reference/tools/data-migration/deploy.md#第-7-步监控任务与查看日志)。
+目前 Drainer 提供了多种输出方式，包括 MySQL、TiDB、file 等。但是用户往往有一些自定义的需求，比如输出到 Elasticsearch、Hive 等，这些需求 Drainer 现在还没有实现，因此 Drainer 增加了输出到 Kafka 的功能，将 binlog 数据解析后按一定的格式再输出到 Kafka 中，用户编写代码从 Kafka 中读出数据再进行处理。
+
+## 配置 Kafka Drainer
+
+修改 Drainer 的配置文件，设置输出为 Kafka，相关配置如下：
+
+```
+[syncer]
+db-type = "kafka"
+
+[syncer.to]
+# Kafka 地址
+kafka-addrs = "127.0.0.1:9092"
+# Kafka 版本号
+kafka-version = "0.8.2.0"
+```
+
+## 自定义开发
+
+### 数据格式
+
+首先需要了解 Drainer 写入到 Kafka 中的数据格式：
+
+```
+// Column 保存列的数据，针对数据的类型，保存在对应的变量中
+message Column {
+  // 数据是否为 null
+  optional bool is_null = 1 [ default = false ];
+  // 保存 int 类型的数据
+  optional int64 int64_value = 2;
+  // 保存 uint、enum, set 类型的数据
+  optional uint64 uint64_value = 3;
+  // 保存 float、double 类型的数据
+  optional double double_value = 4;
+  // 保存 bit、blob、binary、json 类型的数据
+  optional bytes bytes_value = 5;
+  // 保存 date、time、decimal、text、char 类型的数据
+  optional string string_value = 6;
+}
+
+// ColumnInfo 保存列的信息，包括列名、类型、是否为主键
+message ColumnInfo {
+  optional string name = 1 [ (gogoproto.nullable) = false ];
+  // MySQL 中小写的列字段类型
+  // https://dev.mysql.com/doc/refman/8.0/en/data-types.html
+  // numeric 类型：int bigint smallint tinyint float double decimal bit
+  // string 类型：text longtext mediumtext char tinytext varchar
+  // blob longblob mediumblob binary tinyblob varbinary
+  // enum set
+  // json 类型：json
+  optional string mysql_type = 2 [ (gogoproto.nullable) = false ];
+  optional bool is_primary_key = 3 [ (gogoproto.nullable) = false ];
+}
+
+// Row 保存一行的具体数据
+message Row { repeated Column columns = 1; }
+
+// MutationType 表示 DML 的类型
+enum MutationType {
+  Insert = 0;
+  Update = 1;
+  Delete = 2;
+}
+
+// Table 包含一个表的数据变更
+message Table {
+  optional string schema_name = 1;
+  optional string table_name = 2;
+  repeated ColumnInfo column_info = 3;
+  repeated TableMutation mutations = 4;
+}
+
+// TableMutation 保存一行数据的变更
+message TableMutation {
+  required MutationType type = 1;
+  // 修改后的数据
+  required Row row = 2;
+  // 修改前的数据，只对 Update MutationType 有效
+  optional Row change_row = 3;
+}
+
+// DMLData 保存一个事务所有的 DML 造成的数据变更
+message DMLData {
+  // `tables` 包含事务中所有表的数据变更
+  repeated Table tables = 1;
+}
+
+// DDLData 保存 DDL 的信息
+message DDLData {
+  // 当前使用的数据库
+  optional string schema_name = 1;
+  // 相关表
+  optional string table_name = 2;
+  // `ddl_query` 是原始的 DDL 语句 query
+  optional bytes ddl_query = 3;
+}
+
+// BinlogType 为 Binlog 的类型，分为 DML 和 DDL
+enum BinlogType {
+  DML = 0; //  Has `dml_data`
+  DDL = 1; //  Has `ddl_query`
+}
+
+// Binlog 保存一个事务所有的变更，Kafka 中保存的数据为该结构数据序列化后的结果
+message Binlog {
+  optional BinlogType type = 1 [ (gogoproto.nullable) = false ];
+  optional int64 commit_ts = 2 [ (gogoproto.nullable) = false ];
+  optional DMLData dml_data = 3;
+  optional DDLData ddl_data = 4;
+}
+```
+
+查看数据格式的具体定义，参见 [binlog.proto](https://github.com/pingcap/tidb-tools/blob/master/tidb-binlog/slave_binlog_proto/proto/binlog.proto)。
+
+### Driver
+
+TiDB-Tools 项目提供了用于读取 Kafka 中 binlog 数据的 Driver，具有如下功能：
+
+* 读取 Kafka 的数据
+* 根据 commit ts 查找 binlog 在 kafka 中的储存位置
+
+使用该 Driver 时，用户需要配置如下信息：
+
+* KafkaAddr：Kafka 集群的地址
+* CommitTS：从哪个 commit ts 开始读取 binlog
+* Offset：从 Kafka 哪个 offset 开始读取，如果设置了 CommitTS 就不用配置该参数
+* ClusterID：TiDB 集群的 cluster ID
+* Topic: Kafka Topic 名称，如果 Topic 名称为空，将会使用 drainer <ClusterID>_obinlog 中的默认名称
+
+用户以包的形式引用 Driver 的代码即可使用，可以参考 Driver 中提供的示例代码来学习如何使用 Driver 以及 binlog 数据的解析，目前提供了两个例子：
+
+* 使用该 Driver 将数据同步到 MySQL，该示例包含将 binlog 转化为 SQL 的具体方法
+* 使用该 Driver 将数据打印出来
+
+Driver 项目地址：[Binlog Slave Driver](https://github.com/pingcap/tidb-tools/tree/master/tidb-binlog/driver)。
 
 > **注意：**
 > 
-> 目前只有 DM-worker 提供了 metrics，DM-master 暂未提供。
-
-## Task
-
-在 Grafana dashboard 中，DM 默认名称为 `DM-task`。
-
-### overview
-
-overview 下包含运行当前选定 task 的所有 DM-worker instance 的部分监控指标。当前默认告警规则只针对于单个 DM-worker instance。
-
-| metric 名称                                 | 说明                                                  | 告警说明 | 告警级别 |
-|:----------------------------------------- |:--------------------------------------------------- |:---- |:---- |
-| task state                                | 同步子任务的状态                                            | N/A  | N/A  |
-| storage capacity                          | relay log 占有的磁盘的总容量                                 | N/A  | N/A  |
-| storage remain                            | relay log 占有的磁盘的剩余可用容量                              | N/A  | N/A  |
-| binlog file gap between master and relay  | relay 与上游 master 相比落后的 binlog file 个数               | N/A  | N/A  |
-| load progress                             | load unit 导入过程的进度百分比，值变化范围为：0% - 100%               | N/A  | N/A  |
-| binlog file gap between master and syncer | 与上游 master 相比 binlog replication 落后的 binlog file 个数 | N/A  | N/A  |
-| shard lock resolving                      | 当前子任务是否正在等待 shard DDL 同步，大于 0 表示正在等待同步              | N/A  | N/A  |
-
-### task 状态
-
-| metric 名称  | 说明       | 告警说明                      | 告警级别     |
-|:---------- |:-------- |:------------------------- |:-------- |
-| task state | 同步子任务的状态 | 当子任务状态处于 paused 超过 10 分钟时 | critical |
-
-### Relay log
-
-| metric 名称                                | 说明                                                 | 告警说明                                      | 告警级别      |
-|:---------------------------------------- |:-------------------------------------------------- |:----------------------------------------- |:--------- |
-| storage capacity                         | relay log 占有的磁盘的总容量                                | N/A                                       | N/A       |
-| storage remain                           | relay log 占有的磁盘的剩余可用容量                             | 小于 10G 的时候需要告警                            | critical  |
-| process exits with error                 | relay log 在 DM-worker 内部遇到错误并且退出了                  | 立即告警                                      | critical  |
-| relay log data corruption                | relay log 文件损坏的个数                                  | 立即告警                                      | emergency |
-| fail to read binlog from master          | relay 从上游的 MySQL 读取 binlog 时遇到的错误数                 | 立即告警                                      | critical  |
-| fail to write relay log                  | relay 写 binlog 到磁盘时遇到的错误数                          | 立即告警                                      | critical  |
-| binlog file index                        | relay log 最大的文件序列号。如 value = 1 表示 relay-log.000001 | N/A                                       | N/A       |
-| binlog file gap between master and relay | relay 与上游 master 相比落后的 binlog file 个数              | 落后 binlog file 个数超过 1 个（不含 1 个）且持续 10 分钟时 | critical  |
-| binlog pos                               | relay log 最新文件的写入 offset                           | N/A                                       | N/A       |
-| read binlog duration                     | relay log 从上游的 MySQL 读取 binlog 的时延，单位：秒            | N/A                                       | N/A       |
-| write relay log duration                 | relay log 每次写 binlog 到磁盘的时延，单位：秒                   | N/A                                       | N/A       |
-| binlog size                              | relay log 写到磁盘的单条 binlog 的大小                       | N/A                                       | N/A       |
-
-### Dump/Load unit
-
-下面 metrics 仅在 `task-mode` 为 `full` 或者 `all` 模式下会有值。
-
-| metric 名称                      | 说明                                               | 告警说明 | 告警级别     |
-|:------------------------------ |:------------------------------------------------ |:---- |:-------- |
-| load progress                  | load unit 导入过程的进度百分比，值变化范围为：0% - 100%            | N/A  | N/A      |
-| data file size                 | load unit 导入的全量数据中数据文件（内含 `INSERT INTO` 语句）的总大小  | N/A  | N/A      |
-| dump process exits with error  | dump unit 在 DM-worker 内部遇到错误并且退出了                | 立即告警 | critical |
-| load process exits with error  | load unit 在 DM-worker 内部遇到错误并且退出了                | 立即告警 | critical |
-| table count                    | load unit 导入的全量数据中 table 的数量总和                   | N/A  | N/A      |
-| data file count                | load unit 导入的全量数据中数据文件（内含 `INSERT INTO` 语句）的数量总和 | N/A  | N/A      |
-| latency of execute transaction | load unit 在执行事务的时延，单位：秒                          | N/A  | N/A      |
-| latency of query               | load unit 执行 query 的耗时，单位：秒                      | N/A  | N/A      |
-
-### Binlog replication
-
-下面 metrics 仅在 `task-mode` 为 `incremental` 或者 `all` 模式下会有值。
-
-| metric 名称                                 | 说明                                         | 告警说明                                      | 告警级别     |
-|:----------------------------------------- |:------------------------------------------ |:----------------------------------------- |:-------- |
-| remaining time to sync                    | 预计 Syncer 还需要多少分钟可以和 master 完全同步，单位：分钟     | N/A                                       | N/A      |
-| replicate lag                             | master 到 Syncer 的 binlog 复制延迟时间，单位：秒       | N/A                                       | N/A      |
-| process exist with error                  | binlog replication 在 DM-worker 内部遇到错误并且退出了 | 立即告警                                      | critical |
-| binlog file gap between master and syncer | 与上游 master 相比落后的 binlog file 个数            | 落后 binlog file 个数超过 1 个（不含 1 个）且持续 10 分钟时 | critical |
-| binlog file gap between relay and syncer  | 与 relay 相比落后的 binlog file 个数               | 落后 binlog file 个数超过 1 个（不含 1 个）且持续 10 分钟时 | critical |
-| binlog event qps                          | 单位时间内接收到的 binlog event 数量 (不包含需要跳过的 event) | N/A                                       | N/A      |
-| skipped binlog event qps                  | 单位时间内接收到的需要跳过的 binlog event 数量             | N/A                                       | N/A      |
-| cost of binlog event transform            | Syncer 解析并且转换 binlog 成 SQLs 的耗时，单位：秒       | N/A                                       | N/A      |
-| total sqls jobs                           | 单位时间内新增的 job 数量                            | N/A                                       | N/A      |
-| finished sqls jobs                        | 单位时间内完成的 job 数量                            | N/A                                       | N/A      |
-| execution latency                         | Syncer 执行 transaction 到下游的耗时，单位：秒          | N/A                                       | N/A      |
-| unsynced tables                           | 当前子任务内还未收到 shard DDL 的分表数量                 | N/A                                       | N/A      |
-| shard lock resolving                      | 当前子任务是否正在等待 shard DDL 同步，大于 0 表示正在等待同步     | N/A                                       | N/A      |
-
-## Instance
-
-在 Grafana dashboard 中，instance 的默认名称为 `DM-instance`。
-
-### Relay log
-
-| metric 名称                                | 说明                                                 | 告警说明                                      | 告警级别      |
-|:---------------------------------------- |:-------------------------------------------------- |:----------------------------------------- |:--------- |
-| storage capacity                         | relay log 占有的磁盘的总容量                                | N/A                                       | N/A       |
-| storage remain                           | relay log 占有的磁盘的剩余可用容量                             | 小于 10G 的时候需要告警                            | critical  |
-| process exits with error                 | relay log 在 DM-worker 内部遇到错误并且退出了                  | 立即告警                                      | critical  |
-| relay log data corruption                | relay log 文件损坏的个数                                  | 立即告警                                      | emergency |
-| fail to read binlog from master          | relay 从上游的 MySQL 读取 binlog 时遇到的错误数                 | 立即告警                                      | critical  |
-| fail to write relay log                  | relay 写 binlog 到磁盘时遇到的错误数                          | 立即告警                                      | critical  |
-| binlog file index                        | relay log 最大的文件序列号。如 value = 1 表示 relay-log.000001 | N/A                                       | N/A       |
-| binlog file gap between master and relay | relay 与上游 master 相比落后的 binlog file 个数              | 落后 binlog file 个数超过 1 个（不含 1 个）且持续 10 分钟时 | critical  |
-| binlog pos                               | relay log 最新文件的写入 offset                           | N/A                                       | N/A       |
-| read binlog duration                     | relay log 从上游的 MySQL 读取 binlog 的时延，单位：秒            | N/A                                       | N/A       |
-| write relay log duration                 | relay log 每次写 binlog 到磁盘的时延，单位：秒                   | N/A                                       | N/A       |
-| binlog size                              | relay log 写到磁盘的单条 binlog 的大小                       | N/A                                       | N/A       |
-
-### task
-
-| metric 名称                                 | 说明                                                  | 告警说明                      | 告警级别     |
-|:----------------------------------------- |:--------------------------------------------------- |:------------------------- |:-------- |
-| task state                                | 同步子任务的状态                                            | 当子任务状态处于 paused 超过 10 分钟时 | critical |
-| load progress                             | load unit 导入过程的进度百分比，值变化范围为：0% - 100%               | N/A                       | N/A      |
-| binlog file gap between master and syncer | 与上游 master 相比 binlog replication 落后的 binlog file 个数 | N/A                       | N/A      |
-| shard lock resolving                      | 当前子任务是否正在等待 shard DDL 同步，大于 0 表示正在等待同步              | N/A                       | N/A      |
+> - 示例代码仅仅用于示范如何使用 Driver，如果需要用于生产环境需要优化代码。
+> - 目前仅提供了 golang 版本的 Driver 以及示例代码。如果需要使用其他语言，用户需要根据 binlog 的 proto 文件生成相应语言的代码文件，并自行开发程序读取 Kafka 中的 binlog 数据、解析数据、输出到下游。也欢迎用户优化 example 代码，以及提交其他语言的示例代码到 [TiDB-Tools](https://github.com/pingcap/tidb-tools)。
