@@ -1,62 +1,45 @@
 ---
-title: RENAME INDEX
-summary: TiDB 数据库中 RENAME INDEX 的使用概况。
+title: PREPARE
+summary: TiDB 数据库中 PREPARE 的使用概况。
 category: reference
 ---
 
-# RENAME INDEX
+# PREPARE
 
-`ALTER TABLE .. RENAME INDEX` 语句用于对已有索引进行重命名。这在 TiDB 中是即时操作的，仅需更改元数据。
+`PREPARE` 语句为服务器端预处理语句提供 SQL 接口。
 
 ## 语法图
 
-**AlterTableStmt:**
+**PreparedStmt:**
 
-![AlterTableStmt](/media/sqlgram/AlterTableStmt.png)
-
-**KeyOrIndex:**
-
-![KeyOrIndex](/media/sqlgram/KeyOrIndex.png)
+![PreparedStmt](/media/sqlgram/PreparedStmt.png)
 
 ## 示例
 
 ```sql
-mysql> CREATE TABLE t1 (id INT NOT NULL PRIMARY KEY auto_increment, c1 INT NOT NULL, INDEX col1 (c1));
-Query OK, 0 rows affected (0.11 sec)
+mysql> PREPARE mystmt FROM 'SELECT ? as num FROM DUAL';
+Query OK, 0 rows affected (0.00 sec)
 
-mysql> SHOW CREATE TABLE t1\G
-*************************** 1. row ***************************
-       Table: t1
-Create Table: CREATE TABLE `t1` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `c1` int(11) NOT NULL,
-  PRIMARY KEY (`id`),
-  KEY `col1` (`c1`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin
+mysql> SET @number = 5;
+Query OK, 0 rows affected (0.00 sec)
+
+mysql> EXECUTE mystmt USING @number;
++------+
+| num  |
++------+
+| 5    |
++------+
 1 row in set (0.00 sec)
 
-mysql> ALTER TABLE t1 RENAME INDEX col1 TO c1;
-Query OK, 0 rows affected (0.09 sec)
-
-mysql> SHOW CREATE TABLE t1\G
-*************************** 1. row ***************************
-       Table: t1
-Create Table: CREATE TABLE `t1` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `c1` int(11) NOT NULL,
-  PRIMARY KEY (`id`),
-  KEY `c1` (`c1`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin
-1 row in set (0.00 sec)
+mysql> DEALLOCATE PREPARE mystmt;
+Query OK, 0 rows affected (0.00 sec)
 ```
 
 ## MySQL 兼容性
 
-`RENAME INDEX` 语句与 MySQL 完全兼容。如有任何兼容性差异，请在 GitHub 上提交 [issue](/v2.1/report-issue.md)。
+`PREPARE` 语句与 MySQL 完全兼容。如有任何兼容性差异，请在 GitHub 上提交 [issue](/v2.1/report-issue.md)。
 
 ## 另请参阅
 
-* [SHOW CREATE TABLE](/v2.1/reference/sql/statements/show-create-table.md)
-* [CREATE INDEX](/v2.1/reference/sql/statements/create-index.md)
-* [DROP INDEX](/v2.1/reference/sql/statements/drop-index.md)
-* [SHOW INDEX](/v2.1/reference/sql/statements/show-index.md)
+* [EXECUTE](/v2.1/reference/sql/statements/execute.md)
+* [DEALLOCATE](/v2.1/reference/sql/statements/deallocate.md)
