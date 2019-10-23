@@ -1,80 +1,62 @@
 ---
-title: ADD INDEX
-summary: TiDB 数据库中 ADD INDEX 的使用概况。
+title: JSON 函数及语法糖
 category: reference
 ---
 
-# ADD INDEX
+# JSON 函数及语法糖
 
-`ALTER TABLE.. ADD INDEX` 语句用于在已有表中添加一个索引。在 TiDB 中，`ADD INDEX` 为在线操作，不会阻塞表中的数据读写。
+TiDB 支持 MySQL 5.7 GA 版本发布的大多数 JSON 函数。MySQL 5.7 发布后，又增加了更多 JSON 函数，TiDB 并未支持所有这些函数（参见[未支持的函数](#未支持的函数)）。
 
-## 语法图
+## 创建 JSON 值的函数
 
-**AlterTableStmt:**
+| 函数及语法糖                                                                                                                             | 功能描述                     |
+| ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
+| [JSON_ARRAY([val[, val] ...])](https://dev.mysql.com/doc/refman/5.7/en/json-creation-functions.html#function_json-array)           | 根据一系列元素创建一个 JSON 文档      |
+| [JSON_OBJECT(key, val[, key, val] ...)](https://dev.mysql.com/doc/refman/5.7/en/json-creation-functions.html#function_json-object) | 根据一系列 K/V 对创建一个 JSON 文档  |
+| [JSON_QUOTE(string)](https://dev.mysql.com/doc/refman/5.7/en/json-creation-functions.html#function_json-quote)                     | 返回一个字符串，该字符串为带引号的 JSON 值 |
 
-![AlterTableStmt](/media/sqlgram/AlterTableStmt.png)
+## 搜索 JSON 值的函数
 
-**AlterTableSpec:**
+| 函数及语法糖                                                                                                                                                           | 功能描述                                                                            |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| [JSON_CONTAINS(target, candidate[, path])](https://dev.mysql.com/doc/refman/5.7/en/json-search-functions.html#function_json-contains)                            | 通过返回 1 或 0 来表示目标 JSON 文档中是否包含给定的 candidate JSON 文档                              |
+| [JSON_CONTAINS_PATH(json_doc, one_or_all, path[, path] ...)](https://dev.mysql.com/doc/refman/5.7/en/json-search-functions.html#function_json-contains-path) | 通过返回 0 或 1 来表示一个 JSON 文档在给定路径是否包含数据                                             |
+| [JSON_EXTRACT(json_doc, path[, path] ...)](https://dev.mysql.com/doc/refman/5.7/en/json-search-functions.html#function_json-extract)                           | 从 JSON 文档中解出某一路径对应的子文档                                                          |
+| [->](https://dev.mysql.com/doc/refman/5.7/en/json-search-functions.html#operator_json-column-path)                                                               | 返回执行路径后面的 JSON 列的值；`JSON_EXTRACT(doc, path_literal)` 的语法糖                       |
+| [->>](https://dev.mysql.com/doc/refman/5.7/en/json-search-functions.html#operator_json-inline-path)                                                              | 返回执行路径后面的 JSON 列的值和转义后的结果； `JSON_UNQUOTE(JSON_EXTRACT(doc, path_literal))` 的语法糖 |
+| [JSON_KEYS(json_doc[, path])](https://dev.mysql.com/doc/refman/5.7/en/json-search-functions.html#function_json-keys)                                           | 返回从 JSON 对象的顶级值作为 JSON array 的键，如果给定了路径参数，则从选定路径中获取顶级键                          |
 
-![AlterTableSpec](/media/sqlgram/AlterTableSpec.png)
+## 修改 JSON 值的函数
 
-**ColumnKeywordOpt:**
+| 函数及语法糖                                                                                                                                                               | 功能描述                          |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
+| [JSON_INSERT(json_doc, path, val[, path, val] ...)](https://dev.mysql.com/doc/refman/5.7/en/json-modification-functions.html#function_json-insert)                 | 在 JSON 文档中在某一路径下插入子文档         |
+| [JSON_MERGE(json_doc, json_doc[, json_doc] ...)](https://dev.mysql.com/doc/refman/5.7/en/json-modification-functions.html#function_json-merge)                   | 已废弃的 `JSON_MERGE_PRESERVE` 别名 |
+| [JSON_MERGE_PRESERVE(json_doc, json_doc[, json_doc] ...)](https://dev.mysql.com/doc/refman/5.7/en/json-modification-functions.html#function_json-merge-preserve) | 将两个或多个 JSON 文档合并成一个文档，并返回合并结果 |
+| [JSON_REMOVE(json_doc, path[, path] ...)](https://dev.mysql.com/doc/refman/5.7/en/json-modification-functions.html#function_json-remove)                           | 移除 JSON 文档中某一路径下的子文档          |
+| [JSON_REPLACE(json_doc, path, val[, path, val] ...)](https://dev.mysql.com/doc/refman/5.7/en/json-modification-functions.html#function_json-replace)               | 替换 JSON 文档中的某一路径下的子文档         |
+| [JSON_SET(json_doc, path, val[, path, val] ...)](https://dev.mysql.com/doc/refman/5.7/en/json-modification-functions.html#function_json-set)                       | 在 JSON 文档中为某一路径设置子文档          |
+| [JSON_UNQUOTE(json_val)](https://dev.mysql.com/doc/refman/5.7/en/json-modification-functions.html#function_json-unquote)                                           | 去掉 JSON 值外面的引号，返回结果为字符串       |
 
-![ColumnKeywordOpt](/media/sqlgram/ColumnKeywordOpt.png)
+## 返回 JSON 值属性的函数
 
-**ColumnDef:**
+| 函数及语法糖                                                                                                                        | 功能描述                               |
+| ----------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| [JSON_DEPTH(json_doc)](https://dev.mysql.com/doc/refman/5.7/en/json-attribute-functions.html#function_json-depth)           | 返回 JSON 文档的最大深度                    |
+| [JSON_LENGTH(json_doc[, path])](https://dev.mysql.com/doc/refman/5.7/en/json-attribute-functions.html#function_json-length) | 返回 JSON 文档的长度；如果路径参数已定，则返回该路径下值的长度 |
+| [JSON_TYPE(json_val)](https://dev.mysql.com/doc/refman/5.7/en/json-attribute-functions.html#function_json-type)             | 检查某 JSON 文档内部内容的类型                 |
 
-![ColumnDef](/media/sqlgram/ColumnDef.png)
+## 未支持的函数
 
-**ColumnPosition:**
+TiDB 暂未支持以下 JSON 函数。相关进展参见 [TiDB #7546](https://github.com/pingcap/tidb/issues/7546):
 
-![ColumnPosition](/media/sqlgram/ColumnPosition.png)
-
-## 示例
-
-```sql
-mysql> CREATE TABLE t1 (id INT NOT NULL PRIMARY KEY auto_increment, c1 INT NOT NULL);
-Query OK, 0 rows affected (0.11 sec)
-
-mysql> INSERT INTO t1 (c1) VALUES (1),(2),(3),(4),(5);
-Query OK, 5 rows affected (0.03 sec)
-Records: 5  Duplicates: 0  Warnings: 0
-
-mysql> EXPLAIN SELECT * FROM t1 WHERE c1 = 3;
-+---------------------+----------+------+-------------------------------------------------------------+
-| id                  | count    | task | operator info                                               |
-+---------------------+----------+------+-------------------------------------------------------------+
-| TableReader_7       | 10.00    | root | data:Selection_6                                            |
-| └─Selection_6       | 10.00    | cop  | eq(test.t1.c1, 3)                                           |
-|   └─TableScan_5     | 10000.00 | cop  | table:t1, range:[-inf,+inf], keep order:false, stats:pseudo |
-+---------------------+----------+------+-------------------------------------------------------------+
-3 rows in set (0.00 sec)
-
-mysql> ALTER TABLE t1 ADD INDEX (c1);
-Query OK, 0 rows affected (0.30 sec)
-
-mysql> EXPLAIN SELECT * FROM t1 WHERE c1 = 3;
-+-------------------+-------+------+-----------------------------------------------------------------+
-| id                | count | task | operator info                                                   |
-+-------------------+-------+------+-----------------------------------------------------------------+
-| IndexReader_6     | 10.00 | root | index:IndexScan_5                                               |
-| └─IndexScan_5     | 10.00 | cop  | table:t1, index:c1, range:[3,3], keep order:false, stats:pseudo |
-+-------------------+-------+------+-----------------------------------------------------------------+
-2 rows in set (0.00 sec)
-```
-
-## MySQL 兼容性
-
-* 不支持 `FULLTEXT`，`HASH` 和 `SPATIAL` 索引。
-* 不支持降序索引（类似于 MySQL 5.7）。
-* 目前尚不支持同时添加多个索引。
-* 无法向表中添加 `PRIMARY KEY`。
-
-## 另请参阅
-
-* [CREATE INDEX](/v2.1/reference/sql/statements/create-index.md)
-* [DROP INDEX](/v2.1/reference/sql/statements/drop-index.md)
-* [RENAME INDEX](/v2.1/reference/sql/statements/rename-index.md)
-* [ADD COLUMN](/v2.1/reference/sql/statements/add-column.md)
-* [CREATE TABLE](/v2.1/reference/sql/statements/create-table.md)
-* [EXPLAIN](/v2.1/reference/sql/statements/explain.md)
+* `JSON_APPEND` 及其别名 `JSON_ARRAY_APPEND`
+* `JSON_ARRAY_INSERT`
+* `JSON_DEPTH`
+* `JSON_MERGE_PATCH`
+* `JSON_PRETTY`
+* `JSON_SEARCH`
+* `JSON_STORAGE_SIZE`
+* `JSON_VALID`
+* `JSON_ARRAYAGG`
+* `JSON_OBJECTAGG`
