@@ -1,107 +1,109 @@
 ---
-title: TiDB Binlog 集群监控
+title: Reparo 使用文档
 category: reference
-aliases:
-  - '/docs-cn/v2.1/how-to/monitor/tidb-binlog/'
 ---
 
-# TiDB Binlog 集群监控
+# Reparo 使用文档
 
-使用 Ansible 成功部署 TiDB Binlog 集群后，可以进入 Grafana Web 界面（默认地址: <http://grafana_ip:3000>，默认账号：admin，密码：admin）查看 Pump 和 Drainer 的运行状态。
+Reparo 是 TiDB Binlog 的一个配套工具，用于增量的恢复。使用 TiDB Binlog 中的 Drainer 将 binlog 按照 protobuf 格式输出到文件，通过这种方式来备份增量数据。当需要恢复增量数据时，使用 Reparo 解析文件中的 binlog，并将其应用到 TiDB／MySQL 中。
 
-## 监控指标
+下载链接：[tidb-binlog-cluster-latest-linux-amd64.tar.gz](http://download.pingcap.org/tidb-binlog-cluster-latest-linux-amd64.tar.gz)
 
-### Pump
+## Reparo 使用
 
-| metric 名称                    | 说明                                                                                      |
-|:---------------------------- |:--------------------------------------------------------------------------------------- |
-| Storage Size                 | 记录磁盘的总空间大小 (capacity)，以及可用磁盘空间大小 (available)                                            |
-| Metadata                     | 记录每个 Pump 的可删除 binlog 的最大 tso (gc_tso)，以及保存的 binlog 的最大的 commit tso (max_commit_tso)。 |
-| Write Binlog QPS by Instance | 每个 Pump 接收到的写 binlog 请求的 QPS                                                            |
-| Write Binlog Latency         | 记录每个 Pump 写 binlog 的延迟时间                                                                |
-| Storage Write Binlog Size    | Pump 写 binlog 数据的大小                                                                     |
-| Storage Write Binlog Latency | Pump 中的 storage 模块写 binlog 数据的延迟                                                        |
-| Pump Storage Error By Type   | Pump 遇到的 error 数量，按照 error 的类型进行统计                                                      |
-| Query TiKV                   | Pump 通过 TiKV 查询事务状态的次数                                                                  |
+### 命令行参数说明
 
-### Drainer
+```
+Usage of Reparo:
+-L string
+    日志输出信息等级设置：debug, info, warn, error, fatal（默认值：info）。
+-V 打印版本信息。
+-c int
+    同步下游的并发数，该值设置越高同步的吞吐性能越好（默认 16）。
+-config string
+    配置文件路径，如果指定了配置文件，Reparo 会首先读取配置文件的配置；如果对应的配置在命令行参数里面也存在，Reparo 就会使用命令行参数的配置来覆盖配置文件里面的。
+-data-dir string
+    Drainer 输出的 protobuf 格式 binlog 文件的存储路径 (默认值： data.drainer)。
+-dest-type string
+    下游服务类型。 取值为 print, mysql（默认值：print）。当值为 print 时，只做解析打印到标准输出，不执行 SQL；如果为 mysql，则需要在配置文件内配置 host、port、user、password 等信息。
+-log-file string
+    log 文件路径。
+-log-rotate string
+    log 文件切换频率，取值为 hour、day。
+-start-datetime string
+    用于指定开始恢复的时间点，格式为 “2006-01-02 15:04:05”。如果不设置该参数则从最早的 binlog 文件开始恢复。
+-stop-datetime string
+    用于指定结束恢复的时间点，格式同上。如果不设置该参数则恢复到最后一个 binlog 文件。
+-safe-mode bool
+    指定是否开启安全模式，开启后可支持反复同步。
+-txn-batch int
+    输出到下游数据库一个事务的 SQL 语句数量（默认 20）。
 
-| metric 名称                         | 说明                                                                                                                  |
-|:--------------------------------- |:------------------------------------------------------------------------------------------------------------------- |
-| Checkpoint TSO                    | Drainer 已经同步到下游的 binlog 的最大 TSO 对应的时间。可以通过该指标估算同步延迟时间                                                               |
-| Pump Handle TSO                   | 记录 Drainer 从各个 Pump 获取到的 binlog 的最大 TSO 对应的时间 | | Pull Binlog QPS by Pump NodeID | Drainer 从每个 Pump 获取 binlog 的 QPS |
-| 95% Binlog Reach Duration By Pump | 记录 binlog 从写入 Pump 到被 Drainer 获取到这个过程的延迟时间                                                                          |
-| Error By Type                     | Drainer 遇到的 error 数量，按照 error 的类型进行统计                                                                               |
-| SQL Query Time                    | Drainer 在下游执行 SQL 的耗时                                                                                               |
-| Drainer Event                     | 各种类型 event 的数量，event 包括 ddl、insert、delete、update、flush、savepoint                                                    |
-| Execute Time                      | 写入 binlog 到同步下游模块所消耗的时间                                                                                             |
-| 95% Binlog Size                   | Drainer 从各个 Pump 获取到 binlog 数据的大小                                                                                   |
-| DL Job Count                      | Drainer 处理的 DDL 的数量                                                                                                 |
-| Queue Size                        | Drainer 内部工作队列大小                                                                                                    |
+```
 
-## 监控告警规则
+### 配置文件说明
 
-### Emergency
+```toml
+# Drainer 输出的 protobuf 格式 binlog 文件的存储路径。
+data-dir = "./data.drainer"
 
-#### binlog_pump_storage_error_count
+# 使用索引文件来搜索 ts 的位置，当设置了 `start-ts` 时设置该参数，文件的路径为 {data-dir}/{index-name}。
+# index-name = "binlog.index"
+# log-file = ""
+# log-rotate = "hour"
 
-- 含义：Pump 写 binlog 到本地存储时失败
-- 监控规则：changes(binlog_pump_storage_error_count[1m]) > 0
-- 处理方法：先确认 pump_storage_error 监控是否存在错误，查看 Pump 日志确认原因
+# 日志输出信息等级设置：debug, info, warn, error, fatal (默认值：info)。
+log-level = "info"
 
-### Critical
+# 使用 start-datetime 和 stop-datetime 来选择恢复指定时间范围内的 binlog，格式为 “2006-01-02 15:04:05”。
+# start-datetime = ""
+# stop-datetime = ""
 
-#### binlog_drainer_checkpoint_high_delay
+# start-tso、stop-tso 分别对应 start-datetime 和 stop-datetime，也是用于恢复指定时间范围内的 binlog，用 tso 的值来设置。如果已经设置了 start-datetime 和 stop-datetime，就不需要再设置 start-tso 和 stop-tso。
+# start-tso = 0
+# stop-tso = 0
 
-- 含义：Drainer 同步落后延迟超过 1 个小时
-- 监控规则：(time() - binlog_drainer_checkpoint_tso / 1000) > 3600
-- 处理方法：
+# 下游服务类型。 取值为 print, mysql（默认值：print）。当值为 print 时，只做解析打印到标准输出，不执行 SQL；如果为 mysql，则需要在 [dest-db] 中配置 host、port、user、password 等信息。
+dest-type = "mysql"
 
-    - 判断从 Pump 获取数据是否太慢：
+# 输出到下游数据库一个事务的 SQL 语句数量（默认 20）。
+txn-batch = 20
 
-        监控 Pump handle tso 可以看每个 Pump 最近一条消息的时间，是不是有延迟特别大的 Pump，确认对应 Pump 正常运行
+# 同步下游的并发数，该值设置越高同步的吞吐性能越好（默认 16）。
+worker-count = 16
 
-    - 根据 Drainer event 和 Drainer execute latency 来判断是否下游同步太慢：
+# 安全模式配置。取值为 true 或 false（默认值：false）。当值为 true 时，Reparo 会将 update 语句拆分为 delete + replace 语句。
+safe-mode = false
 
-        - 如果 Drainer execute time 过大，则检查到目标库网络带宽和延迟，以及目标库状态
-        - 如果 Drainer execute time 不大，Drainer event 过小，则增加 work count 和 batch 进行重试
+# replicate-do-db 和 replicate-do-table 用于指定恢复的库和表，replicate-do-db 的优先级高于 replicate-do-table。支持使用正则表达式来配置，需要以 '~' 开始声明使用正则表达式。
+# 注：replicate-do-db 和 replicate-do-table 使用方式与 Drainer 的使用方式一致。
+# replicate-do-db = ["~^b.*","s1"]
+# [[replicate-do-table]]
+# db-name ="test"
+# tbl-name = "log"
+# [[replicate-do-table]]
+# db-name ="test"
+# tbl-name = "~^a.*"
 
-    - 上面都不满足或者操作后没有改观，则报备开发 support@pingcap.com 进行处理
+# 如果 dest-type 设置为 mysql, 需要配置 dest-db。
+[dest-db]
+host = "127.0.0.1"
+port = 3309
+user = "root"
+password = ""
+```
 
-### Warning
+### 启动示例
 
-#### binlog_pump_write_binlog_rpc_duration_seconds_bucket
+```
+./bin/reparo -config reparo.toml
+```
 
-- 含义：Pump 处理 TiDB 写 Binlog 请求耗时过大
-- 监控规则：histogram_quantile(0.9, rate(binlog_pump_rpc_duration_seconds_bucket{method="WriteBinlog"}[5m])) > 1
-- 处理方法：
-
-    - 确认磁盘性能压力，通过 node exported 查看 disk performance 监控
-    - 如果 disk latency 和 util 都很低，那么报备研发 support@pingcap.com 处理
-
-#### binlog_pump_storage_write_binlog_duration_time_bucket
-
-- 含义：Pump 写本地 binlog 到本地盘的耗时
-- 监控规则：histogram_quantile(0.9, rate(binlog_pump_storage_write_binlog_duration_time_bucket{type="batch"}[5m])) > 1
-- 处理方法：确认 Pump 本地盘情况，进行修复
-
-#### binlog_pump_storage_available_size_less_than_20G
-
-- 含义：Pump 剩余可用磁盘空间不足 20G
-- 监控规则：binlog_pump_storage_storage_size_bytes{type="available"} < 20 \* 1024 \* 1024 \* 1024
-- 处理方法：监控确认 Pump gc_tso 正常，需要的话调整 Pump gc 时间配置或者下线对应 Pump
-
-#### binlog_drainer_checkpoint_tso_no_change_for_1m
-
-- 含义：Drainer checkpoint 一分钟没有更新
-- 监控规则：changes(binlog_drainer_checkpoint_tso[1m]) < 1
-- 处理方法：确认是否所有非下线 Pump 正常运行
-
-#### binlog_drainer_execute_duration_time_more_than_10s
-
-- 含义：Drainer 同步到 TiDB 的 transaction 耗时，如果过大则影响 Drainer 同步
-- 监控规则：histogram_quantile(0.9, rate(binlog_drainer_execute_duration_time_bucket[1m])) > 10
-- 处理方法：
-
-    - 查看 TiDB cluster 状态情况
-    - 查看 Drainer 日志或监控，如果是 DDL 则忽略
+> **注意：**
+> 
+> - data-dir 用于指定 Drainer 输出的 binlog 文件目录。
+> - start-datatime 和 start-tso 效果一样，只是时间格式上的区别，用于指定开始恢复的时间点；如果不指定，则默认在第一个 binlog 文件开始恢复。
+> - stop-datetime 和 stop-tso 效果一样，只是时间格式上的区别，用于指定结束恢复的时间点；如果不指定，则恢复到最后一个 binlog 文件的结尾。
+> - dest-type 指定目标类型，取值为 `mysql`、`print`。 当值为 `mysql` 时，可以恢复到 MySQL/TiDB 等使用或兼容 MySQL 协议的数据库，需要在配置下面的 [dest-db] 填写数据库信息；当取值为 `print` 的时候，只是打印 binlog 信息，通常用于 debug，以及查看 binlog 的内容，此时不需要填写 `[dest-db]`。
+> - replicate-do-db 用于指定恢复的库，不指定的话，则全部都恢复。
+> - replicate-do-table 用于指定要恢复的表，不指定的话，则全部都恢复。
