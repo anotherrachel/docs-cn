@@ -1,23 +1,62 @@
 ---
-title: 其他函数
+title: 时区支持
 category: user guide
 ---
 
-# 其他函数
+TiDB 使用的时区由 `time_zone` 全局变量和 session 变量决定。`time_zone` 的初始值是机器当前的系统时区 'SYSTEM' 。
 
-| 函数名                                                                                                                | 功能描述                                                |
-|:------------------------------------------------------------------------------------------------------------------ |:--------------------------------------------------- |
-| [`ANY_VALUE()`](https://dev.mysql.com/doc/refman/5.7/en/miscellaneous-functions.html#function_any-value)           | 在 `ONLY_FULL_GROUP_BY` 模式下，防止带有 `GROUP BY` 的语句报错    |
-| [`SLEEP()`](https://dev.mysql.com/doc/refman/5.7/en/miscellaneous-functions.html#function_sleep)                   | 休眠指定秒数                                              |
-| [`UUID()`](https://dev.mysql.com/doc/refman/5.7/en/miscellaneous-functions.html#function_uuid)                     | 返回通用唯一识别码 (UUID)                                    |
-| [`VALUES()`](https://dev.mysql.com/doc/refman/5.7/en/miscellaneous-functions.html#function_values)                 | 定义 `INSERT` 过程中要用到的值                                |
-| [`INET_ATON()`](https://dev.mysql.com/doc/refman/5.7/en/miscellaneous-functions.html#function_inet-aton)           | 将 IP 地址转换为数值                                        |
-| [`INET_NTOA()`](https://dev.mysql.com/doc/refman/5.7/en/miscellaneous-functions.html#function_inet-ntoa)           | 将数值转换为 IP 地址                                        |
-| [`INET6_ATON()`](https://dev.mysql.com/doc/refman/5.7/en/miscellaneous-functions.html#function_inet6-aton)         | 将 IPv6 地址转换为数值                                      |
-| [`INET6_NTOA()`](https://dev.mysql.com/doc/refman/5.7/en/miscellaneous-functions.html#function_inet6-ntoa)         | 将数值转换为 IPv6 地址                                      |
-| [`IS_IPV4()`](https://dev.mysql.com/doc/refman/5.7/en/miscellaneous-functions.html#function_is-ipv4)               | 判断参数是否为 IPv4 地址                                     |
-| [`IS_IPV4_COMPAT()`](https://dev.mysql.com/doc/refman/5.7/en/miscellaneous-functions.html#function_is-ipv4-compat) | 判断参数是否为兼容 IPv4 的地址                                  |
-| [`IS_IPV4_MAPPED()`](https://dev.mysql.com/doc/refman/5.7/en/miscellaneous-functions.html#function_is-ipv4-mapped) | 判断参数是否为 IPv4 映射的地址                                  |
-| [`IS_IPV6()`](https://dev.mysql.com/doc/refman/5.7/en/miscellaneous-functions.html#function_is-ipv6)               | 判断参数是否为 IPv6 地址                                     |
-| [`GET_LOCK()`](https://dev.mysql.com/doc/refman/5.7/en/miscellaneous-functions.html#function_get-lock)             | 获取命名锁，TiDB     出于兼容性支持这个函数，实际上不会做任何操作，这点和 MySQL 有区别 |
-| [`RELEASE_LOCK()`](https://dev.mysql.com/doc/refman/5.7/en/miscellaneous-functions.html#function_release-lock)     | 释放命名锁                                               |
+在运行过程中可以修改全局时区：
+
+```sql
+mysql> SET GLOBAL time_zone = timezone;
+```
+
+TiDB 还可以通过设置 session 变量 `time_zone` 为每个连接维护各自的时区。默认条件下，这个值取的是全局变量 `time_zone` 的值。修改 session 使用的时区：
+
+```sql
+mysql> SET time_zone = timezone;
+```
+
+查看当前使用的时区的值：
+
+```sql
+mysql> SELECT @@global.time_zone, @@session.time_zone;
+```
+
+设置 `time_zone` 的值的格式：
+
+* 'SYSTEM' 表明使用系统时间
+* 相对于 UTC 时间的偏移，比如 '+10:00' 或者 '-6:00'
+* 某个时区的名字，比如 'Europe/Helsinki'， 'US/Eastern' 或 'MET'
+
+`NOW()` 和 `CURTIME()` 的返回值都受到时区设置的影响。
+
+注意，只有 Timestamp 数据类型的值是受时区影响的。可以理解为， Timestamp 数据类型的实际表示使用的是 (字面值 + 时区信息)。其它时间和日期类型，比如 Datetime/Date/Time 是不包含时区信息的，所以也不受到时区变化的影响。
+
+```sql
+mysql> create table t (ts timestamp, dt datetime);
+Query OK, 0 rows affected (0.02 sec)
+
+mysql> set @@time_zone = 'UTC';
+Query OK, 0 rows affected (0.00 sec)
+
+mysql> insert into t values ('2017-09-30 11:11:11', '2017-09-30 11:11:11');
+Query OK, 1 row affected (0.00 sec)
+
+mysql> set @@time_zone = '+8:00';
+Query OK, 0 rows affected (0.00 sec)
+
+mysql> select * from t;
++---------------------|---------------------+
+| ts                  | dt                  |
++---------------------|---------------------+
+| 2017-09-30 19:11:11 | 2017-09-30 11:11:11 |
++---------------------|---------------------+
+1 row in set (0.00 sec)
+```
+
+上面的例子中，无论怎么调整时区的值， Datetime 类型字段的值是不受影响的，而 Timestamp 则随着时区改变，显示的值会发生变化。其实 Timestamp 持久化到存储的值始终没有变化过，只是根据时区的不同显示值不同。
+
+Timestamp 类型和 Datetime 等类型的值，两者相互转换的过程中，会涉及到时区。这种情况一律基于 session 的当前 `time_zone` 时区处理。
+
+另外，用户在导数据的过程中，也要需注意主库和从库之间的时区设定是否一致。
