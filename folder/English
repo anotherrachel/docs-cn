@@ -1,247 +1,111 @@
 ---
-title: 用户自定义变量
+title: Schema Object Names
 category: reference
 aliases:
-  - '/docs-cn/sql/user-defined-variables/'
+  - '/docs-cn/sql/schema-object-names/'
 ---
 
-# 用户自定义变量
+# Schema Object Names
 
-用户自定义变量格式为 `@var_name`。`var_name` 目前只支持字母，数字，`_$`组成。用户自定义变量是大小写不敏感的。
+在 TiDB 中，包括 database，table，index，column，alias 等等都被认为是 identifier (标识符，之后阐述用英文).
 
-用户自定义变量是跟 session 绑定的，也就是说只有当前连接可以看见设置的用户变量，其他客户端连接无法查看到。
-
-用 `SET` 语句可以设置用户自定义变量：
+在 TiDB 中，identifier可以被反引号 (\`) 包裹，为了阐述方便，我们叫这种情况为 `被引用`。identifier 也可以不被 \` 包裹。但是如果一个 identifier 存在一个特殊符号或者是一个保留关键字，那么你必须要 `引用` 它。
 
 {{< copyable "sql" >}}
 
 ```sql
-SET @var_name = expr [, @var_name = expr] ...;
+SELECT * FROM `table` WHERE `table`.id = 20;
 ```
 
-或
+如果`ANSI_QUOTES` sql mode 被设置了，那么我们认为被双引号 `"` 包裹的字符串为 identifier。
 
 {{< copyable "sql" >}}
 
 ```sql
-SET @var_name := expr;
+CREATE TABLE "test" (a varchar(10));
 ```
 
-对于 `SET` 语句，赋值操作符可以是 `=` 也可以是 `:=`
-
-例：
-
-{{< copyable "sql" >}}
-
-```sql
-SET @a1=1, @a2=2, @a3:=4;
+```
+ERROR 1105 (HY000): line 0 column 19 near " (a varchar(10))" (total length 35)
 ```
 
 {{< copyable "sql" >}}
 
 ```sql
-SELECT @a1, @a2, @t3, @a4 := @a1+@a2+@a3;
+SET SESSION sql_mode='ANSI_QUOTES';
 ```
 
 ```
-+------+------+------+--------------------+
-| @a1  | @a2  | @a3  | @a4 := @a1+@a2+@a3 |
-+------+------+------+--------------------+
-|    1 |    2 |    4 |                  7 |
-+------+------+------+--------------------+
+Query OK, 0 rows affected (0.00 sec)
 ```
-
-如果设置用户变量用了 `HEX` 或者 `BIT` 值，TiDB会把它当成二进制字符串。如果你要将其设置成数字，那么需要手动加上 `CAST转换`: `CAST(.. AS UNSIGNED)`：
 
 {{< copyable "sql" >}}
 
 ```sql
-SELECT @v1, @v2, @v3;
+CREATE TABLE "test" (a varchar(10));
 ```
 
 ```
-+------+------+------+
-| @v1  | @v2  | @v3  |
-+------+------+------+
-| A    | 65   | 65   |
-+------+------+------+
+Query OK, 0 rows affected (0.09 sec)
+```
+
+如果你需要在被引用的 identifier 中使用反引号这个字符，那你需要重复两次，例如你需要创建一个表为 a`b：
+
+{{< copyable "sql" >}}
+
+```sql
+CREATE TABLE `a``b` (a int);
+```
+
+在 select 语句中，alias 语句可以用 identifier 或者字符串：
+
+{{< copyable "sql" >}}
+
+```sql
+SELECT 1 AS `identifier`, 2 AS 'string';
+```
+
+```
++------------+--------+
+| identifier | string |
++------------+--------+
+|          1 |      2 |
++------------+--------+
 1 row in set (0.00 sec)
 ```
 
-{{< copyable "sql" >}}
+更多[细节](https://dev.mysql.com/doc/refman/5.7/en/identifiers.html)
 
-```sql
-SET @v1 = b'1000001';
-```
+## Identifier Qualifiers
 
-```
-Query OK, 0 rows affected (0.00 sec)
-```
+Object Names (对象名字) 可以被限定也可以不用。例如你可以在创建表的时候不指定 database names：
 
 {{< copyable "sql" >}}
 
 ```sql
-SET @v2 = b'1000001'+0;
+CREATE TABLE t (i int);
 ```
 
-```
-Query OK, 0 rows affected (0.00 sec)
-```
+但是如果你之前没有设定过默认的数据库，会报 `ERROR 1046 (3D000): No database selected` 错误。当然你也可以指定数据库限定名：
 
 {{< copyable "sql" >}}
 
 ```sql
-SET @v3 = CAST(b'1000001' AS UNSIGNED);
+CREATE TABLE test.t (i int);
 ```
 
-```
-Query OK, 0 rows affected (0.00 sec)
-```
+对于 `.` 左右两端可以出现空格，`table_name.col_name` 等于 `table_name . col_name`。
 
-{{< copyable "sql" >}}
-
-```sql
-SELECT @v1, @v2, @v3;
-```
+如果你要引用这个 identifier，那么请使用：
 
 ```
-+------+------+------+
-| @v1  | @v2  | @v3  |
-+------+------+------+
-| A    | 65   | 65   |
-+------+------+------+
-1 row in set (0.00 sec)
+`table_name`.`col_name`
 ```
 
-如果获取一个没有设置过的变量，会返回一个 NULL：
-
-{{< copyable "sql" >}}
-
-```sql
-select @not_exist;
-```
+而不是：
 
 ```
-+------------+
-| @not_exist |
-+------------+
-| NULL       |
-+------------+
-1 row in set (0.00 sec)
+`table_name.col_name`
 ```
 
-用户自定义变量不能直接在 SQL 语句中被当成 identifier，例：
-
-{{< copyable "sql" >}}
-
-```sql
-select * from t;
-```
-
-```
-+------+
-| a    |
-+------+
-|    1 |
-+------+
-1 row in set (0.00 sec)
-```
-
-{{< copyable "sql" >}}
-
-```sql
-SET @col = "a";
-```
-
-```
-Query OK, 0 rows affected (0.00 sec)
-```
-
-{{< copyable "sql" >}}
-
-```sql
-SELECT @col FROM t;
-```
-
-```
-+------+
-| @col |
-+------+
-| a    |
-+------+
-1 row in set (0.00 sec)
-```
-
-{{< copyable "sql" >}}
-
-```sql
-SELECT `@col` FROM t;
-```
-
-```
-ERROR 1054 (42S22): Unknown column '@col' in 'field list'
-```
-
-{{< copyable "sql" >}}
-
-```sql
-SET @col = "`a`";
-```
-
-```
-Query OK, 0 rows affected (0.00 sec)
-```
-
-{{< copyable "sql" >}}
-
-```sql
-SELECT @col FROM t;
-```
-
-```
-+------+
-| @col |
-+------+
-| `a`  |
-+------+
-1 row in set (0.01 sec)
-```
-
-但是有一个例外是如果你在 PREPARE 语句中使用它，是可以的：
-
-{{< copyable "sql" >}}
-
-```sql
-PREPARE stmt FROM "SELECT @c FROM t";
-```
-
-```
-Query OK, 0 rows affected (0.00 sec)
-```
-
-{{< copyable "sql" >}}
-
-```sql
-EXECUTE stmt;
-```
-
-```
-+------+
-| @c   |
-+------+
-| a    |
-+------+
-1 row in set (0.01 sec)
-```
-
-{{< copyable "sql" >}}
-
-```sql
-DEALLOCATE PREPARE stmt;
-```
-
-```
-Query OK, 0 rows affected (0.00 sec)
-```
-
-更多[细节](https://dev.mysql.com/doc/refman/5.7/en/user-variables.html)。
+更多[细节](https://dev.mysql.com/doc/refman/5.7/en/identifier-qualifiers.html)
